@@ -1,8 +1,8 @@
 ---
 name: 기타
 about: 리팩토링 / 문서화 / 인프라 등
-title: ""
-labels: ''
+title: "[작업 분류] "
+labels: ["refactor"]
 assignees: ''
 ---
 
