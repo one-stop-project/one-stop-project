@@ -1,0 +1,28 @@
+jwt:
+  secret:
+    key: your_secret_key
+
+spring:
+  application:
+    name: one_stop
+
+  datasource:
+    url: jdbc:mysql://localhost:3306/one_stop_db
+    username: root
+    password: your_password
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+
+    show-sql: true
+
+    properties:
+      hibernate:
+        format_sql: true
+
+  data:
+    redis:
+      host: localhost
+      port: 6379
