@@ -1,0 +1,45 @@
+name: Code Review Bot
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  ai-review:
+    if: github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: AI Code Review
+        uses: anc95/ChatGPT-CodeReview@v1.0.23
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_API_ENDPOINT: https://api.openai.com/v1
+          MODEL: gpt-4.1-mini
+          LANGUAGE: Korean
+          MAX_PATCH_LENGTH: 5000
+          PROMPT: |
+            당신은 Spring Boot(Java 17) 백엔드 코드리뷰 봇입니다.
+            아래 기준을 우선순위로 확인하고, 중요한 문제부터 간결하게 제안하세요.
+            1) 보안(인증/인가, 민감정보 노출, SQL/명령어 인젝션 가능성)
+            2) 트랜잭션/동시성 문제(락, 경쟁상태, 원자성)
+            3) 예외 처리 및 장애 대응(복구 가능성, 누락된 핸들링)
+            4) 성능(N+1, 불필요한 DB/네트워크 호출)
+            5) 유지보수성(가독성, 테스트 필요 포인트)
+
+            코멘트 형식:
+            - [심각도: 높음/중간/낮음]
+            - 문제 요약
+            - 근거
+            - 제안 코드 또는 수정 방향
