@@ -1,5 +1,5 @@
 ---
-name: 기타
+name: 리팩토링 및 기타 작업
 about: 리팩토링 / 문서화 / 인프라 등
 title: "[refactor] "
 labels: ["refactor"]
