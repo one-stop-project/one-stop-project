@@ -22,7 +22,7 @@ jobs:
 
       - name: AI Code Review
         uses: anc95/ChatGPT-CodeReview@v1.0.23
-        with:
+        env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           OPENAI_API_ENDPOINT: https://api.openai.com/v1
