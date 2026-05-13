@@ -1,0 +1,40 @@
+# 현재 파일을 최상위 EditorConfig로 설정
+# 상위 디렉토리의 .editorconfig 설정을 더 이상 탐색하지 않음
+root = true
+
+# 모든 파일에 공통 적용
+[*]
+
+# 문자 인코딩 UTF-8 사용
+charset = utf-8
+
+# 줄바꿈 방식 LF 사용 (Linux/macOS 표준)
+# Windows의 CRLF 충돌 방지
+end_of_line = lf
+
+# 파일 마지막에 개행 추가
+# Git diff 및 Unix 환경 호환성 향상
+insert_final_newline = true
+
+# 줄 끝의 불필요한 공백 제거
+# 의미 없는 변경(diff) 방지
+trim_trailing_whitespace = true
+
+# Java 파일에만 적용
+[*.java]
+
+# 들여쓰기 시 Tab 대신 Space 사용
+indent_style = space
+
+# 들여쓰기 크기 4칸
+# Java/Spring 실무에서 가장 일반적인 스타일
+indent_size = 4
+tab_width = 4
+
+# 한 줄 최대 길이 기준
+# 너무 긴 코드로 인한 가독성 저하 방지
+max_line_length = 120
+
+# wildcard import 사용 금지 (IntelliJ만 인식)
+ij_java_class_count_to_use_import_on_demand = 999
+ij_java_names_count_to_use_import_on_demand = 999
