@@ -6,10 +6,10 @@ import lombok.Getter;
 /**
  * 공통 API 응답 형식
  * 성공: { "success": true, "data": {} }
- * 실패: { "success": false, "message": "에러 메시지" }
+ * 실패: { "success": false, "status": 400, "code": "ERROR_CODE", "message": "에러 메시지" }
  */
 @Getter
-@JsonInclude(JsonInclude.Include.NON_NULL) // null 필드는 응답에서 제외
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class ApiResponse<T> {
 
     private final boolean success;
