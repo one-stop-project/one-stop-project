@@ -1,4 +1,4 @@
-package com.spartafarmer.one_stop;
+package com.sparta.one_stop;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;

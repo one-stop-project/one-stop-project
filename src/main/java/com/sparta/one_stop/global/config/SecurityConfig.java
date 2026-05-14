@@ -1,4 +1,4 @@
-package com.spartafarmer.one_stop.global.config;
+package com.sparta.one_stop.global.config;
 
 import com.spartafarmer.one_stop.global.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
