@@ -23,6 +23,11 @@ configurations {
     }
 }
 
+// build.gradle에 추가
+bootJar {
+    archiveFileName = 'app.jar'
+}
+
 dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
 	implementation 'org.springframework.boot:spring-boot-starter-data-redis'

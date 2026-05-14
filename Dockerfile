@@ -8,8 +8,10 @@ RUN gradle bootJar --no-daemon
 FROM openjdk:17-jdk-slim
 WORKDIR /app
 
-# 빌드 스테이지에서 생성된 jar 파일 복사
-COPY --from=build /app/build/libs/*.jar app.jar
+RUN useradd --create-home --shell /usr/sbin/nologin appuser
+
+COPY --from=build /app/build/libs/app.jar app.jar
 
 EXPOSE 8080
+USER appuser
 ENTRYPOINT ["java", "-jar", "app.jar"]
