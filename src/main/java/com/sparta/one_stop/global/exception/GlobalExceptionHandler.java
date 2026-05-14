@@ -1,4 +1,4 @@
-package com.spartafarmer.one_stop.global.exception;
+package com.sparta.one_stop.global.exception;
 
 import com.spartafarmer.one_stop.global.response.ErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;

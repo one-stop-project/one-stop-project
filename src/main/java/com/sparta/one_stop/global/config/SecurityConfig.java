@@ -1,6 +1,6 @@
-package com.spartafarmer.one_stop.global.config;
+package com.sparta.one_stop.global.config;
 
-import com.spartafarmer.one_stop.global.security.JwtTokenProvider;
+import com.sparta.one_stop.global.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -22,6 +22,7 @@ import org.springframework.security.web.SecurityFilterChain;
  * - Session 비활성화 (JWT 사용이므로)
  *
  */
+
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity

@@ -1,4 +1,4 @@
-package com.spartafarmer.one_stop;
+package com.sparta.one_stop;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;

@@ -1,4 +1,4 @@
-package com.spartafarmer.one_stop.global.security;
+package com.sparta.one_stop.global.security;
 
 import com.spartafarmer.one_stop.global.exception.CustomException;
 import com.spartafarmer.one_stop.global.exception.ErrorCode;

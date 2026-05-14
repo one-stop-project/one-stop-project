@@ -1,4 +1,4 @@
-package com.spartafarmer.one_stop.global.response;
+package com.sparta.one_stop.global.response;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import lombok.Getter;
