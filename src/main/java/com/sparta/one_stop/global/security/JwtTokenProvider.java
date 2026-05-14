@@ -1,7 +1,7 @@
 package com.sparta.one_stop.global.security;
 
-import com.spartafarmer.one_stop.global.exception.CustomException;
-import com.spartafarmer.one_stop.global.exception.ErrorCode;
+import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;

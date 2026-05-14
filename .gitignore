@@ -15,7 +15,6 @@ out/
 
 # Environment
 .env
-.env.*
 
 # Eclipse
 .apt_generated

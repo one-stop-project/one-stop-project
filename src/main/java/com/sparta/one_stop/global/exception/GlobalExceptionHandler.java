@@ -1,6 +1,6 @@
 package com.sparta.one_stop.global.exception;
 
-import com.spartafarmer.one_stop.global.response.ErrorResponse;
+import com.sparta.one_stop.global.response.ErrorResponse;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
