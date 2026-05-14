@@ -1,28 +1,35 @@
-jwt:
-  secret:
-    key: your_secret_key
-
 spring:
   application:
     name: one_stop
 
   datasource:
-    url: jdbc:mysql://localhost:3306/one_stop_db
-    username: root
-    password: your_password
+    url: jdbc:mysql://localhost:3306/one_stop_db?useSSL=false&allowPublicKeyRetrieval=true&characterEncoding=UTF-8
+    username: {DB_USERNAME}
+    password: {DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   jpa:
     hibernate:
       ddl-auto: update
-
     show-sql: true
-
     properties:
       hibernate:
         format_sql: true
+        dialect: org.hibernate.dialect.MySQLDialect
 
   data:
     redis:
       host: localhost
       port: 6379
+
+jwt:
+  secret:
+    key: {JWT_SECRET_KEY}
+    # Base64 인코딩된 32자 이상의 랜덤 문자열
+    # 생성 방법: echo -n "your-secret-key-here" | base64
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
