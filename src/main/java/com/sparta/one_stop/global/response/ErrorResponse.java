@@ -1,7 +1,7 @@
 package com.sparta.one_stop.global.response;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.spartafarmer.one_stop.global.exception.ErrorCode;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import lombok.Builder;
 import lombok.Getter;
 import org.springframework.validation.BindingResult;
