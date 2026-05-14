@@ -13,6 +13,10 @@ src/main/generated/
 *.ipr
 out/
 
+# Environment
+.env
+.env.*
+
 # Eclipse
 .apt_generated
 .classpath
