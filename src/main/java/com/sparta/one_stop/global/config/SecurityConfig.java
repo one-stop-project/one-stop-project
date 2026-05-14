@@ -22,6 +22,7 @@ import org.springframework.security.web.SecurityFilterChain;
  * - Session 비활성화 (JWT 사용이므로)
  *
  */
+
 @Configuration
 @EnableWebSecurity
 @EnableMethodSecurity
