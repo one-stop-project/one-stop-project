@@ -1,6 +1,6 @@
 package com.sparta.one_stop.global.config;
 
-import com.spartafarmer.one_stop.global.security.JwtTokenProvider;
+import com.sparta.one_stop.global.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
