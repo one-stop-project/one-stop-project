@@ -1,4 +1,4 @@
 package com.sparta.one_stop.global.exception;
 
-public class Errorresponse {
+public class ErrorResponse {
 }

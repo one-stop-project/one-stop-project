@@ -34,7 +34,7 @@ public class JwtTokenProvider {
 
     private static final int MINIMUM_KEY_LENGTH_BYTES = 32; // H256 = 256bit = 32bytes
 
-    @Value("${jwt.secret}")
+    @Value("${jwt.secret.key}")
     private String secretKeyBase64;
 
     @Value("${jwt.access-token-expiry}")

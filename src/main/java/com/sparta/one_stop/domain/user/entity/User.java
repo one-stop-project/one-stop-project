@@ -70,10 +70,6 @@ public class User {
         if (address != null) this.address = address;
     }
 
-    public void changePassword(String encodedPassword) {
-        this.password = encodedPassword;
-    }
-
     public void withdraw() {
         this.status = UserStatus.WITHDRAWN;
     }
