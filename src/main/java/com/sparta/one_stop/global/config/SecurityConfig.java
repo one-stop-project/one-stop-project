@@ -1,5 +1,7 @@
 package com.sparta.one_stop.global.config;
 
+import com.sparta.one_stop.global.security.JwtAuthenticationEntryPoint;
+import com.sparta.one_stop.global.security.JwtExceptionFilter;
 import com.sparta.one_stop.global.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
@@ -30,6 +32,11 @@ import org.springframework.security.web.SecurityFilterChain;
 public class SecurityConfig {
 
     private final JwtTokenProvider jwtTokenProvider;
+    private final JwtExceptionFilter jwtExceptionFilter;
+    private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
+
+
+
 
     @Bean
     public PasswordEncoder passwordEncoder() {
