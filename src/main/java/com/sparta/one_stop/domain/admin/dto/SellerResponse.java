@@ -12,6 +12,11 @@ public record SellerResponse(
     SellerStatus status
 ) {
     public static SellerResponse from(Seller seller) {
+        // 사업자등록번호 마스킹
+        String businessNumber = seller.getBusinessNumber();
+        String masked = businessNumber.substring(0, 3) + "-****-"
+            + businessNumber.substring(businessNumber.length() - 2);
+
         return new SellerResponse(
             seller.getId(),
             seller.getUser().getId(),
