@@ -1,0 +1,16 @@
+package com.sparta.one_stop.domain.delivery.repository;
+
+import com.sparta.one_stop.domain.delivery.entity.Delivery;
+import com.sparta.one_stop.domain.order.entity.OrderItem;
+import org.springframework.data.jpa.repository.JpaRepository;
+
+import java.util.List;
+import java.util.Optional;
+
+public interface DeliveryRepository extends JpaRepository<Delivery, Long> {
+
+    Optional<Delivery> findByOrderItem(OrderItem orderItem);
+
+    // orderId로 배송 목록 조회
+    List<Delivery> findAllByOrderItem_Order_Id(Long orderId);
+}
