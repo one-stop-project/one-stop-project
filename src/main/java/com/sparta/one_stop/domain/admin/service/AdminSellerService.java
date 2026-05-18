@@ -1,9 +1,9 @@
 package com.sparta.one_stop.domain.admin.service;
 
-import com.sparta.one_stop.domain.product.entity.Product;
 import com.sparta.one_stop.domain.product.repository.ProductRepository;
 import com.sparta.one_stop.domain.user.entity.Seller;
 import com.sparta.one_stop.domain.user.repository.SellerRepository;
+import com.sparta.one_stop.global.enums.product.ProductStatus;
 import com.sparta.one_stop.global.enums.user.SellerStatus;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
@@ -62,11 +62,9 @@ public class AdminSellerService {
             throw new CustomException(ErrorCode.ADMIN_004);
         }
 
-        // 판매자 계정 정지
         seller.getUser().suspend();
 
-        // 판매자 소속 상품 전체 FORCE_INACTIVE 처리
-        productRepository.findAllBySellerId(seller.getId())
-            .forEach(Product::forceInactive);
+        // 배치 업데이트로 N+1 해소
+        productRepository.updateStatusBySellerId(seller.getId(), ProductStatus.FORCE_INACTIVE);
     }
 }
