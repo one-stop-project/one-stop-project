@@ -6,10 +6,10 @@ import com.sparta.one_stop.global.enums.product.ProductStatus;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -18,19 +18,18 @@ public class AdminProductService {
 
     private final ProductRepository productRepository;
 
-    // 승인 요청된 상품 목록 조회
-    public List<Product> getPendingProducts() {
-        return productRepository.findAllByStatus(ProductStatus.APPROVE_REQUESTED);
+    // 승인 요청된 상품 목록 조회 (페이징)
+    public Page<Product> getPendingProducts(Pageable pageable) {
+        return productRepository.findAllByStatus(ProductStatus.APPROVE_REQUESTED, pageable);
     }
 
     // 상품 승인
     @Transactional
     public void approveProduct(Long productId) {
-        Product product = productRepository.findById(productId)
-            .orElseThrow(() -> new CustomException(ErrorCode.PRODUCT_001));
+        Product product = findProductOrThrow(productId);
 
         if (product.getStatus() == ProductStatus.APPROVED) {
-            throw new CustomException(ErrorCode.ADMIN_002);
+            throw new CustomException(ErrorCode.ADMIN_008);
         }
 
         product.approve();
@@ -39,11 +38,10 @@ public class AdminProductService {
     // 상품 반려
     @Transactional
     public void rejectProduct(Long productId) {
-        Product product = productRepository.findById(productId)
-            .orElseThrow(() -> new CustomException(ErrorCode.PRODUCT_001));
+        Product product = findProductOrThrow(productId);
 
         if (product.getStatus() == ProductStatus.REJECTED) {
-            throw new CustomException(ErrorCode.ADMIN_003);
+            throw new CustomException(ErrorCode.ADMIN_009);
         }
 
         product.reject();
@@ -52,13 +50,18 @@ public class AdminProductService {
     // 상품 강제 비활성화
     @Transactional
     public void forceInactiveProduct(Long productId) {
-        Product product = productRepository.findById(productId)
-            .orElseThrow(() -> new CustomException(ErrorCode.PRODUCT_001));
+        Product product = findProductOrThrow(productId);
 
         if (product.getStatus() == ProductStatus.FORCE_INACTIVE) {
-            throw new CustomException(ErrorCode.ADMIN_003);
+            throw new CustomException(ErrorCode.ADMIN_007);
         }
 
         product.forceInactive();
+    }
+
+    // 상품 조회 공통 메서드
+    private Product findProductOrThrow(Long productId) {
+        return productRepository.findById(productId)
+            .orElseThrow(() -> new CustomException(ErrorCode.PRODUCT_001));
     }
 }

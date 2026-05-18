@@ -133,7 +133,10 @@ public enum ErrorCode {
     ADMIN_003(HttpStatus.BAD_REQUEST, "ADMIN_003", "이미 거절된 판매자입니다"),
     ADMIN_004(HttpStatus.BAD_REQUEST, "ADMIN_004", "관리자 계정은 정지할 수 없습니다"),
     ADMIN_005(HttpStatus.BAD_REQUEST, "ADMIN_005", "하위 카테고리가 존재하여 삭제할 수 없습니다"),
-    ADMIN_006(HttpStatus.BAD_REQUEST, "ADMIN_006", "상품이 등록된 카테고리는 삭제할 수 없습니다");
+    ADMIN_006(HttpStatus.BAD_REQUEST, "ADMIN_006", "상품이 등록된 카테고리는 삭제할 수 없습니다"),
+    ADMIN_007(HttpStatus.BAD_REQUEST, "ADMIN_007", "이미 강제 비활성화된 상품입니다"),
+    ADMIN_008(HttpStatus.BAD_REQUEST, "ADMIN_008", "이미 승인된 상품입니다"),             // 추가
+    ADMIN_009(HttpStatus.BAD_REQUEST, "ADMIN_009", "이미 반려된 상품입니다");
 
     private final HttpStatus status;
     private final String code;
