@@ -1,0 +1,66 @@
+package com.sparta.one_stop.global.security;
+
+
+import com.sparta.one_stop.domain.user.entity.User;
+import com.sparta.one_stop.global.enums.user.UserRole;
+import lombok.Getter;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
+
+import java.util.Collection;
+import java.util.List;
+
+@Getter
+public class CustomUserDetails implements UserDetails {
+
+    private final Long userId;
+    private final String email;   // DB에서만 Setting, JWT 생성자에서는 null
+    private final String password;
+    private final UserRole role;
+    private final boolean active;
+    private final Collection<? extends GrantedAuthority> authorities;
+
+    public CustomUserDetails(User user) {
+        this.userId = user.getId();
+        this.email = user.getEmail();
+        this.password = user.getPassword();
+        this.role = user.getRole();
+        this.active = user.isActive();
+        this.authorities = List.of(new SimpleGrantedAuthority("ROLE_" + user.getRole().name()));
+    }
+
+    // JWT 토큰 기반 생성 - Filter에서 매 요청마다 사용(DB조회 없음)
+    // AccessToken payload에 userId + role만으로 생성
+    // email 필요시 userId로 DB or 캐시 조회
+
+    public CustomUserDetails(Long userId, UserRole role) {
+        this.userId = userId;
+        this.email = null;
+        this.password = "";
+        this.role = role;
+        this.active = true;
+        this.authorities = List.of(new SimpleGrantedAuthority("ROLE_" + role.name()));
+
+    }
+
+    public AuthUser getAuthUser() {
+        return new AuthUser(this.userId, this.role);
+    }
+
+    @Override
+    public String getUsername() {
+        return String.valueOf(userId);
+    }
+
+    @Override
+    public boolean isAccountNonLocked() {
+        return active;
+    }
+
+    @Override
+    public boolean isEnabled() {
+        return active;
+    }
+
+}
