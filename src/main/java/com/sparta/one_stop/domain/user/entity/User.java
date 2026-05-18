@@ -81,4 +81,9 @@ public class User {
     public boolean isSuspended() {
         return this.status.isSuspended();
     }
+
+    // 판매자 강제 비활성화 시 사용
+    public void suspend() {
+        this.status = UserStatus.SUSPENDED;
+    }
 }

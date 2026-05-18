@@ -15,4 +15,7 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 
     // 상태별 상품 목록 조회 - 페이징 (관리자 승인 대기 목록용)
     Page<Product> findAllByStatus(ProductStatus status, Pageable pageable);
+
+    // 판매자 ID로 상품 목록 조회
+    List<Product> findAllBySellerId(Long sellerId);
 }
