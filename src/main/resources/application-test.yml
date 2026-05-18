@@ -20,6 +20,6 @@ spring:
 
 jwt:
   secret:
-    key: ${JWT_SECRET_KEY:abcdefghijklmnopqrstuvwxyz1234567890abcdefgh}
+    key: dGVzdC1zZWNyZXQta2V5LWZvci1qd3QtdG9rZW4tZ2VuZXJhdGlvbi1taW5pbXVtLTI1Ni1iaXRzLWxlbmd0aA==
     access-token-expiry: 15m
     refresh-token-expiry: 14d
