@@ -1,5 +1,6 @@
 package com.sparta.one_stop.domain.order.entity;
 
+import com.sparta.one_stop.domain.product.entity.ProductItem;
 import com.sparta.one_stop.domain.user.entity.Seller;
 import com.sparta.one_stop.global.enums.OrderItemStatus;
 import jakarta.persistence.Column;
