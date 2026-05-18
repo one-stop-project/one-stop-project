@@ -58,7 +58,7 @@ public class SecurityConfig {
                 .requestMatchers("/actuator/**").permitAll()
 
                 // 관리자만 접근 가능
-                .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                .requestMatchers("/api/admin/**").hasAnyRole("ADMIN", "SUPER_ADMIN")
 
                 // 판매자만 접근 가능
                 .requestMatchers("/api/seller/**").hasRole("SELLER")
