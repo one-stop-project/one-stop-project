@@ -21,5 +21,5 @@ spring:
 jwt:
   secret:
     key: dGVzdC1zZWNyZXQta2V5LWZvci1jaS10ZXN0LW9ubHkxMjM0NQ==
-  access-token-expiry: 15m
-  refresh-token-expiry: 14d
+    access-token-expiry: 15m
+    refresh-token-expiry: 14d
