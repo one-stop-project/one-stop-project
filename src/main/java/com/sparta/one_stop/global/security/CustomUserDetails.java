@@ -41,6 +41,11 @@ public class CustomUserDetails implements UserDetails {
         this.role = role;
         this.active = true;
         this.authorities = List.of(new SimpleGrantedAuthority("ROLE_" + role.name()));
+
+    }
+
+    public AuthUser getAuthUser() {
+        return new AuthUser(this.userId, this.role);
     }
 
     @Override
