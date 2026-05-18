@@ -23,7 +23,7 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     List<Product> findAllBySellerId(Long sellerId);
 
     // 판매자 ID로 상품 상태 일괄 변경
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Query("update Product p set p.status = :status where p.seller.id = :sellerId")
     int updateStatusBySellerId(@Param("sellerId") Long sellerId, @Param("status") ProductStatus status);
 
