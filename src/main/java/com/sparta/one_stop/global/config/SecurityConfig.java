@@ -1,6 +1,7 @@
 package com.sparta.one_stop.global.config;
 
 import com.sparta.one_stop.global.security.JwtAuthenticationEntryPoint;
+import com.sparta.one_stop.global.security.JwtAuthenticationFilter;
 import com.sparta.one_stop.global.security.JwtExceptionFilter;
 import com.sparta.one_stop.global.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +16,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 /**
  * Spring Security 설정
@@ -32,6 +34,7 @@ import org.springframework.security.web.SecurityFilterChain;
 public class SecurityConfig {
 
     private final JwtTokenProvider jwtTokenProvider;
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final JwtExceptionFilter jwtExceptionFilter;
     private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
 
@@ -73,6 +76,10 @@ public class SecurityConfig {
                 // 나머지는 로그인 필요
                 .anyRequest().authenticated()
             )
+
+            // JWT 필터 등록
+            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+            .addFilterBefore(jwtExceptionFilter, JwtAuthenticationFilter.class)
 
             // 미인증 요청 처리 (401)
             .exceptionHandling(exception -> exception
