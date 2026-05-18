@@ -63,6 +63,10 @@ public class CartItem {
             throw new IllegalArgumentException("수량은 1 이상이어야 합니다.");
         }
 
+        if (quantity > 99) {
+            throw new IllegalArgumentException("장바구니 최대 수량은 99개입니다.");
+        }
+
         this.cart = cart;
         this.productItem = productItem;
         this.quantity = quantity;
@@ -78,10 +82,28 @@ public class CartItem {
             throw new IllegalArgumentException("수량은 1 이상이어야 합니다.");
         }
 
+        if (this.quantity + quantity > 99) {
+            throw new IllegalArgumentException("장바구니 최대 수량은 99개입니다.");
+        }
+
         this.quantity += quantity;
     }
 
-    // 수량 감소(0 되면 삭제? / 예외?) - 정책 정해져야 함
-    public void decreaseQuantity(int quantity) {}
+    // 수량 감소
+    // 감소 후 수량이 0이면 true 반환(삭제 대상)
+    public boolean decreaseQuantity(int quantity) {
+
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("수량은 1 이상이어야 합니다.");
+        }
+
+        if (quantity > this.quantity) {
+            throw new IllegalArgumentException("현재 수량보다 많이 감소시킬 수 없습니다.");
+        }
+
+        this.quantity -= quantity;
+
+        return this.quantity == 0;
+    }
 
 }
