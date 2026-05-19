@@ -1,12 +1,16 @@
 package com.sparta.one_stop.global.config;
 
+import com.sparta.one_stop.global.security.JwtAccessDeniedHandler;
 import com.sparta.one_stop.global.security.JwtAuthenticationEntryPoint;
+import com.sparta.one_stop.global.security.JwtAuthenticationFilter;
 import com.sparta.one_stop.global.security.JwtExceptionFilter;
 import com.sparta.one_stop.global.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -15,6 +19,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 /**
  * Spring Security 설정
@@ -31,10 +36,10 @@ import org.springframework.security.web.SecurityFilterChain;
 @RequiredArgsConstructor
 public class SecurityConfig {
 
-    private final JwtTokenProvider jwtTokenProvider;
+    private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final JwtExceptionFilter jwtExceptionFilter;
     private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
-
+    private final JwtAccessDeniedHandler jwtAccessDeniedHandler;
 
 
 
@@ -50,19 +55,42 @@ public class SecurityConfig {
             // CSRF 비활성화 (REST API + JWT 사용)
             .csrf(AbstractHttpConfigurer::disable)
 
+            // 기본 로그인 비활성화
+            .formLogin(AbstractHttpConfigurer::disable)
+
+            // HttpBasic 비활성화 only JWT
+            .httpBasic(AbstractHttpConfigurer::disable)
+
             // Session 비활성화 (JWT Stateless 방식)
             .sessionManagement(session ->
                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
+            //
+            .exceptionHandling(exception -> exception
+                .authenticationEntryPoint(jwtAuthenticationEntryPoint)
+                .accessDeniedHandler(jwtAccessDeniedHandler))
+
             // URL별 접근 권한 설정
             .authorizeHttpRequests(auth -> auth
 
+                // logout 별도 구성 / 인증 반드시 필요
+                .requestMatchers(HttpMethod.POST,"/api/auth/logout").authenticated()
+
                 // 인증 없이 접근 가능
-                .requestMatchers("/api/auth/**").permitAll()
+                // AUTH부분은 정책 변경 소요 대비 분리 작성
+                .requestMatchers("/api/auth/signup", "/api/auth/login", "/api/auth/refresh").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/categories/**").permitAll()
+                .requestMatchers("/api/cart/**").permitAll()
+                .requestMatchers(HttpMethod.GET, "/api/subscriptions/plans").permitAll()
                 .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
                 .requestMatchers("/actuator/**").permitAll()
+
+                // 구매자만 접근가능
+                .requestMatchers("/api/orders/**").hasRole("BUYER")
+                .requestMatchers("/api/reviews/**").hasRole("BUYER")
+                .requestMatchers("/api/subscriptions/**").hasRole("BUYER")
+                .requestMatchers("/api/coupons/**").hasRole("BUYER")
 
                 // 관리자만 접근 가능
                 .requestMatchers("/api/admin/**").hasAnyRole("ADMIN", "SUPER_ADMIN")
@@ -74,25 +102,18 @@ public class SecurityConfig {
                 .anyRequest().authenticated()
             )
 
-            // 미인증 요청 처리 (401)
-            .exceptionHandling(exception -> exception
-                .authenticationEntryPoint((request, response, authException) -> {
-                    response.setStatus(401);
-                    response.setContentType("application/json;charset=UTF-8");
-                    response.getWriter().write(
-                        "{\"success\":false,\"status\":401,\"code\":\"AUTH_007\",\"message\":\"로그인이 필요합니다\"}"
-                    );
-                })
-                // 권한 없음 처리 (403)
-                .accessDeniedHandler((request, response, accessDeniedException) -> {
-                    response.setStatus(403);
-                    response.setContentType("application/json;charset=UTF-8");
-                    response.getWriter().write(
-                        "{\"success\":false,\"status\":403,\"code\":\"AUTH_011\",\"message\":\"접근 권한이 없습니다\"}"
-                    );
-                })
-            );
+            // ── 필터 체인 등록 ── 미인증, 권한처리
+            // 순서: JwtExceptionFilter → JwtAuthenticationFilter → UPAF
+            // JwtExceptionFilter가 JwtAuthenticationFilter의 예외를 catch
+            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
+            .addFilterBefore(jwtExceptionFilter, JwtAuthenticationFilter.class);
 
         return http.build();
+    }
+
+    @Bean
+    public AuthenticationManager authenticationManager(
+        AuthenticationConfiguration config) throws Exception {
+        return config.getAuthenticationManager();
     }
 }
