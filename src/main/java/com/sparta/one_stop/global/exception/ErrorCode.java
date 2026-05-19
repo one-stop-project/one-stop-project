@@ -61,6 +61,7 @@ public enum ErrorCode {
     CART_003(HttpStatus.BAD_REQUEST, "CART_003", "장바구니에 담을 수 있는 상품은 최대 50개입니다"),
     CART_004(HttpStatus.NOT_FOUND, "CART_004", "장바구니에 해당 상품이 없습니다"),
     CART_005(HttpStatus.BAD_REQUEST, "CART_005", "본인의 상품은 장바구니에 담을 수 없습니다"),
+    CART_006(HttpStatus.FORBIDDEN, "CART_006", "본인의 장바구니만 접근할 수 있습니다"),
 
     // ===== ORDER - 주문 =====
     ORDER_001(HttpStatus.BAD_REQUEST, "ORDER_001", "주문할 상품이 없습니다"),

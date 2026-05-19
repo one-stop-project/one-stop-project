@@ -20,8 +20,10 @@ public class CustomUserDetails implements UserDetails {
     private final UserRole role;
     private final boolean active;
     private final Collection<? extends GrantedAuthority> authorities;
+    private final AuthUser authUser;
 
     public CustomUserDetails(User user) {
+        this.authUser = new AuthUser(user.getId(), user.getRole());
         this.userId = user.getId();
         this.email = user.getEmail();
         this.password = user.getPassword();
@@ -35,6 +37,7 @@ public class CustomUserDetails implements UserDetails {
     // email 필요시 userId로 DB or 캐시 조회
 
     public CustomUserDetails(Long userId, UserRole role) {
+        this.authUser = new AuthUser(userId, role);
         this.userId = userId;
         this.email = null;
         this.password = "";
@@ -44,9 +47,7 @@ public class CustomUserDetails implements UserDetails {
 
     }
 
-    public AuthUser getAuthUser() {
-        return new AuthUser(this.userId, this.role);
-    }
+    public AuthUser getAuthUser() { return authUser; }
 
     @Override
     public String getUsername() {
@@ -54,13 +55,29 @@ public class CustomUserDetails implements UserDetails {
     }
 
     @Override
+    public String getPassword() {return password;}
+
+    @Override
+    public boolean isAccountNonExpired() {return true;}
+
+    @Override
     public boolean isAccountNonLocked() {
         return active;
     }
 
     @Override
+    public boolean isCredentialsNonExpired() {return true;}
+
+    @Override
     public boolean isEnabled() {
         return active;
     }
+
+    @Override
+    public Collection<? extends GrantedAuthority> getAuthorities() {
+        return authorities;
+    }
+
+
 
 }

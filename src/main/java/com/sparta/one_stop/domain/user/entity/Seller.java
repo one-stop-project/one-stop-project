@@ -65,4 +65,8 @@ public class Seller {
     public boolean isPending() {
         return this.status == SellerStatus.PENDING;
     }
+
+    public boolean isApproved() {
+        return this.status == SellerStatus.APPROVED;
+    }
 }
