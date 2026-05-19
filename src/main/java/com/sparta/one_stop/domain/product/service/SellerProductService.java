@@ -66,8 +66,7 @@ public class SellerProductService {
         return ProductCreateResponse.from(saved);
     }
 
-    // ── GET /api/seller/products ────────────────────────────────────────────
-
+    // 상품 목록 조회 (판매자 본인)
     public Page<SellerProductListResponse> getMyProducts(Long userId, Pageable pageable) {
         Seller seller = sellerRepository.findByUserId(userId)
             .orElseThrow(() -> new CustomException(ErrorCode.SELLER_001));
@@ -76,8 +75,7 @@ public class SellerProductService {
         return SellerProductListResponse.from(products);
     }
 
-    // ── PATCH /api/seller/products/{productId} ──────────────────────────────
-
+    // 상품 수정
     @Transactional
     public ProductDetailResponse update(Long userId, Long productId, ProductUpdateRequest request) {
         Seller seller = findApprovedSeller(userId);
@@ -112,8 +110,7 @@ public class SellerProductService {
         return ProductDetailResponse.from(product);
     }
 
-    // ── DELETE /api/seller/products/{productId} ─────────────────────────────
-
+    // 상품 삭제
     @Transactional
     public ProductDeleteResponse delete(Long userId, Long productId) {
         Seller seller = findApprovedSeller(userId);
@@ -125,15 +122,12 @@ public class SellerProductService {
             throw new CustomException(ErrorCode.PRODUCT_008);
         }
 
-        // TODO: 진행 중 주문 존재 시 PRODUCT_009 차단
-        // 의존: OrderItemRepository (정지훈님 주문 도메인 작업 완료 후 후속 이슈로 연동)
         product.discontinue();
 
         return ProductDeleteResponse.from(product);
     }
 
-    // ── 내부 헬퍼 ────────────────────────────────────────────────────────────
-
+    // 승인된 판매자 검증
     private Seller findApprovedSeller(Long userId) {
         Seller seller = sellerRepository.findByUserId(userId)
             .orElseThrow(() -> new CustomException(ErrorCode.SELLER_001));
@@ -144,6 +138,7 @@ public class SellerProductService {
         return seller;
     }
 
+    // 카테고리 조회 + 존재 검증
     private List<Category> findAndValidateCategories(List<Long> categoryIds) {
         List<Category> categories = categoryRepository.findAllByIdIn(categoryIds);
 
@@ -153,6 +148,7 @@ public class SellerProductService {
         return categories;
     }
 
+    // 옵션값 조합 중복 검증
     private void validateOptionCombinations(List<ProductItemCreateRequest> items) {
         Set<String> keys = new HashSet<>();
         for (ProductItemCreateRequest item : items) {
@@ -165,7 +161,7 @@ public class SellerProductService {
         }
     }
 
-
+    // Product 엔티티 빌드
     private Product buildProduct(Seller seller, ProductCreateRequest request) {
         return Product.builder()
             .seller(seller)
@@ -180,6 +176,7 @@ public class SellerProductService {
             .build();
     }
 
+    // 카테고리 매핑 자식 엔티티
     private void attachCategoryMappings(Product product, List<Category> categories) {
         for (Category category : categories) {
             ProductCategoryMapping mapping = ProductCategoryMapping.builder()
@@ -190,6 +187,7 @@ public class SellerProductService {
         }
     }
 
+    // 이미지 자식 엔티티
     private void attachImages(Product product, List<String> imageUrls) {
         for (int i = 0; i < imageUrls.size(); i++) {
             ProductImage image = ProductImage.builder()
@@ -201,6 +199,7 @@ public class SellerProductService {
         }
     }
 
+    // 옵션 자식 엔티티
     private void attachItems(Product product, List<ProductItemCreateRequest> itemRequests) {
         for (ProductItemCreateRequest req : itemRequests) {
             ProductItem item = ProductItem.builder()

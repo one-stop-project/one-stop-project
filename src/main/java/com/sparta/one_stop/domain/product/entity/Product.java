@@ -97,53 +97,65 @@ public class Product {
         this.salesCount = 0L;
     }
 
+    // 기본 정보 수정 (null이면 기존 값 유지)
     public void update(String name, String description, String thumbnailUrl) {
         if (name != null) this.name = name;
         if (description != null) this.description = description;
         if (thumbnailUrl != null) this.thumbnailUrl = thumbnailUrl;
     }
 
+    // 관리자 승인 처리
     public void approve() {
         this.status = ProductStatus.APPROVED;
     }
 
+    // 관리자 반려 처리
     public void reject() {
         this.status = ProductStatus.REJECTED;
     }
 
+    // 판매자 Soft Delete
     public void discontinue() {
         this.status = ProductStatus.DISCONTINUED;
         this.deletedAt = LocalDateTime.now();
     }
 
+    // 관리자 강제 비활성, 판매자 정지 일괄 처리
     public void forceInactive() {
         this.status = ProductStatus.FORCE_INACTIVE;
     }
 
+    // 조회수 동기화
     public void syncViewCount(long count) {
         this.viewCount += count;
     }
 
+    // 판매수 증가
     public void increaseSalesCount(long count) {
         this.salesCount += count;
     }
 
+    // 승인 완료 상태 여부
     public boolean isApproved() {
         return this.status.isApproved();
     }
 
+    // 수정 가능 상태 여부
     public boolean isEditable() {
         return this.status.isEditable();
     }
 
+    // 옵션 자식 엔티티 추가
     public void addProductItem(ProductItem item) {
         this.productItems.add(item);
     }
 
+    // 이미지 자식 엔티티 추가
     public void addProductImage(ProductImage image) {
         this.productImages.add(image);
     }
 
+    // 카테고리 매핑 자식 추가
     public void addCategoryMapping(ProductCategoryMapping mapping) {
         this.categoryMappings.add(mapping);
     }

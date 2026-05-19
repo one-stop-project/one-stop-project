@@ -34,6 +34,7 @@ public class SellerProductController {
 
     private final SellerProductService sellerProductService;
 
+    // 상품 등록
     @PostMapping
     public ResponseEntity<ApiResponse<ProductCreateResponse>> create(
         @AuthenticationPrincipal CustomUserDetails userDetails,
@@ -45,6 +46,7 @@ public class SellerProductController {
             .body(ApiResponse.success(response));
     }
 
+    // 상품 목록 조회 (판매자 본인의 상품)
     @GetMapping
     public ResponseEntity<ApiResponse<Page<SellerProductListResponse>>> getMyProducts(
         @AuthenticationPrincipal CustomUserDetails userDetails,
@@ -55,6 +57,7 @@ public class SellerProductController {
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
+    // 상품 수정
     @PatchMapping("/{productId}")
     public ResponseEntity<ApiResponse<ProductDetailResponse>> update(
         @AuthenticationPrincipal CustomUserDetails userDetails,
@@ -66,6 +69,7 @@ public class SellerProductController {
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
+    // 상품 삭제 (Soft Delete)
     @DeleteMapping("/{productId}")
     public ResponseEntity<ApiResponse<ProductDeleteResponse>> delete(
         @AuthenticationPrincipal CustomUserDetails userDetails,

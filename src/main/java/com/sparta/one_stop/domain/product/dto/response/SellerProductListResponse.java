@@ -21,6 +21,7 @@ public class SellerProductListResponse {
     private long salesCount;
     private List<String> categoryNames;
 
+    // Product -> DTO 변환 단건
     public static SellerProductListResponse from(Product product) {
         long minPrice = product.getProductItems().stream()
             .filter(ProductItem::isOnSale)
@@ -43,6 +44,7 @@ public class SellerProductListResponse {
             .build();
     }
 
+    // Page<Product> -> Page<DTO> 변환
     public static Page<SellerProductListResponse> from(Page<Product> products) {
         return products.map(SellerProductListResponse::from);
     }
