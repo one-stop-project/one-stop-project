@@ -54,6 +54,7 @@ public enum ErrorCode {
     PRODUCT_007(HttpStatus.NOT_FOUND, "PRODUCT_007", "카테고리를 찾을 수 없습니다"),
     PRODUCT_008(HttpStatus.FORBIDDEN, "PRODUCT_008", "다른 판매자의 상품은 수정할 수 없습니다"),
     PRODUCT_009(HttpStatus.BAD_REQUEST, "PRODUCT_009", "주문 진행 중인 상품은 삭제할 수 없습니다"),
+    PRODUCT_010(HttpStatus.BAD_REQUEST, "PRODUCT_010", "현재 상태에서는 수정할 수 없습니다"),
 
     // ===== CART - 장바구니 =====
     CART_001(HttpStatus.BAD_REQUEST, "CART_001", "장바구니에 담을 수 없는 상품입니다"),

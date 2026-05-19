@@ -25,6 +25,9 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     // 판매자 ID로 상품 목록 조회
     List<Product> findAllBySellerId(Long sellerId);
 
+    // 판매자 내 상품 목록 (페이징) - GET /api/seller/products
+    Page<Product> findAllBySellerId(Long sellerId, Pageable pageable);
+
     // 판매자 ID로 상품 상태 일괄 변경
     @Modifying(clearAutomatically = true)
     @Query("update Product p set p.status = :status where p.seller.id = :sellerId")
