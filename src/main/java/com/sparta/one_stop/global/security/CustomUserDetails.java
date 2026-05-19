@@ -36,17 +36,6 @@ public class CustomUserDetails implements UserDetails {
     // AccessToken payload에 userId + role만으로 생성
     // email 필요시 userId로 DB or 캐시 조회
 
-    public CustomUserDetails(Long userId, UserRole role) {
-        this.authUser = new AuthUser(userId, role);
-        this.userId = userId;
-        this.email = null;
-        this.password = "";
-        this.role = role;
-        this.active = true;
-        this.authorities = List.of(new SimpleGrantedAuthority("ROLE_" + role.name()));
-
-    }
-
     public AuthUser getAuthUser() { return authUser; }
 
     @Override

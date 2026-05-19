@@ -1,7 +1,10 @@
 package com.sparta.one_stop.global.security;
 
 
+import com.sparta.one_stop.domain.auth.service.RedisTokenService;
 import com.sparta.one_stop.global.enums.user.UserRole;
+import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import io.jsonwebtoken.Claims;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -10,70 +13,65 @@ import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.WebAuthenticationDetailsSource;
 import org.springframework.stereotype.Component;
-import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
-import java.util.List;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
-    private static final String AUTHORIZATION_HEADER = "Authorization";
-    private static final String BEARER_PREFIX = "Bearer ";
-
     private final JwtTokenProvider jwtTokenProvider;
-
-    // JWT 인증 필터
-    // 1. Bearer 토큰 추출 -> Claims 파싱 -> SecurityContext 세팅
-    // 2. JWT 예외(만료/변조)는 JwtExceptionFilter에서 catch하여 분리 응답
-    // 3. email 없이 userId + role만으로 인증 정보 구성
+    private final RedisTokenService redisTokenService;
 
     @Override
-    protected void doFilterInternal(HttpServletRequest request,
-                                    HttpServletResponse response,
-                                    FilterChain filterChain) throws ServletException, IOException
-    {
-        String token = resolveToken(request);
+    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
+        throws ServletException, IOException {
 
-        if (StringUtils.hasText(token)) {
-            //예외 발생 시 JwtExceptionFilter가 catch
-            Claims claims = jwtTokenProvider.parseClaims(token);
+            String accessToken = jwtTokenProvider.resolveToken(request.getHeader("Authorization"));
 
-            Long userId = jwtTokenProvider.getUserId(claims);
-            UserRole role = jwtTokenProvider.getRole(claims);
+            //  SecurityContext 중복 인증 방지 (필터 재진입, 포워딩 시 안전장치)
+            if (accessToken != null && SecurityContextHolder.getContext().getAuthentication() == null) {
 
-            //AuthUser
-            AuthUser authUser = new AuthUser(userId, role);
+                // 토큰 유효성 검증 및 Claims 파싱
+                Claims claims = jwtTokenProvider.parseClaims(accessToken);
 
-            UsernamePasswordAuthenticationToken authentication =
-                new UsernamePasswordAuthenticationToken(
-                    authUser,
-                    null,
-                    authUser.authorities());
+                // [개선 2] 라이브러리 예외 대신 CustomException 사용
+                String jti = claims.getId();
+                if (redisTokenService.isBlacklisted(jti)) {
+                    log.debug("블랙리스트 처리된 토큰 접근 차단: jti={}", jti); // [개선 8] warn -> debug로 낮춰 로그 폭발 방지
+                    throw new CustomException(ErrorCode.AUTH_009, "이미 로그아웃 처리된 토큰입니다.");
+                }
 
-            authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                // 인증 객체 셋팅
+                setAuthentication(claims, request);
+            }
 
-            SecurityContextHolder.getContext().setAuthentication(authentication);
-            log.debug("인증 완료 : userId={}, role={}", userId, role);
-        }
-
+        // 예외가 발생했든 안 했든 필터 체인은 무조건 타도록 보장
         filterChain.doFilter(request, response);
     }
 
+    private void setAuthentication(Claims claims, HttpServletRequest request) {
+        Long userId = jwtTokenProvider.getUserId(claims);
+        UserRole role = jwtTokenProvider.getRole(claims);
 
-    private String resolveToken(HttpServletRequest request) {
-        String bearer = request.getHeader(AUTHORIZATION_HEADER);
-        if (StringUtils.hasText(bearer) && bearer.startsWith(BEARER_PREFIX)) {
-            return bearer.substring(BEARER_PREFIX.length());
-        }
-        return null;
+        AuthUser authUser = new AuthUser(userId, role);
+
+        UsernamePasswordAuthenticationToken authentication =
+            new UsernamePasswordAuthenticationToken(
+                authUser,
+                null,
+                authUser.authorities()
+            );
+
+        // IP, Session 정보 등 Audit Log에 디테일 셋팅
+        authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+
+        SecurityContextHolder.getContext().setAuthentication(authentication);
+        log.debug("인증 완료: userId={}, role={}", userId, role);
     }
-
 }
