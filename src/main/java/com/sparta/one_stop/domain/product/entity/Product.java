@@ -135,4 +135,16 @@ public class Product {
     public boolean isEditable() {
         return this.status.isEditable();
     }
+
+    public void addProductItem(ProductItem item) {
+        this.productItems.add(item);
+    }
+
+    public void addProductImage(ProductImage image) {
+        this.productImages.add(image);
+    }
+
+    public void addCategoryMapping(ProductCategoryMapping mapping) {
+        this.categoryMappings.add(mapping);
+    }
 }
