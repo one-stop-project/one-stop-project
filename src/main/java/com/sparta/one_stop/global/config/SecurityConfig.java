@@ -43,7 +43,6 @@ public class SecurityConfig {
     private final JwtAccessDeniedHandler jwtAccessDeniedHandler;
 
 
-
     // @Component 필터의 서블릿 자동 등록 비활성화 (Security 체인에서만 실행되도록)
     @Bean
     public FilterRegistrationBean<JwtAuthenticationFilter> jwtAuthFilterRegistration(JwtAuthenticationFilter filter) {
