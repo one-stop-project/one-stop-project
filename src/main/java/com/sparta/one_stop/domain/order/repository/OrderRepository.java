@@ -38,8 +38,9 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     long countByCreatedAtBetween(LocalDateTime start, LocalDateTime end);
 
     // 오늘 총 매출 조회 (취소 제외, null 안전)
+    // 변경 후
     @Query("select coalesce(sum(o.finalPrice), 0) from Order o " +
         "where o.createdAt between :start and :end " +
-        "and o.status = 'PAID'")
-    Long sumFinalPriceByCreatedAtBetween(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
+        "and o.status = :status")
+    Long sumFinalPriceByCreatedAtBetween(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end, @Param("status") OrderStatus status);
 }

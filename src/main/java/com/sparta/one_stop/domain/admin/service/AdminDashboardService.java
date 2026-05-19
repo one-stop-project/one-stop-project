@@ -41,7 +41,7 @@ public class AdminDashboardService {
 
         // 오늘 총 매출 (null 안전 처리)
         long todayRevenue = Optional.ofNullable(
-            orderRepository.sumFinalPriceByCreatedAtBetween(startOfDay, endOfDay)
+            orderRepository.sumFinalPriceByCreatedAtBetween(startOfDay, endOfDay, OrderStatus.PAID)
         ).orElse(0L);
 
         // 배송 현황
