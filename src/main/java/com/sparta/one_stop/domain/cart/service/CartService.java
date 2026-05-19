@@ -15,10 +15,10 @@ import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.UserRepository;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -54,6 +54,26 @@ public class CartService {
             )
             .orElseThrow(() -> new CustomException(ErrorCode.PRODUCT_001));
 
+        // 판매 중 여부 검증
+        if (!productItem.isOnSale()) {
+            throw new CustomException(ErrorCode.CART_001);
+        }
+
+        // 재고 초과 검증
+        if (request.quantity() > productItem.getStock()) {
+            throw new CustomException(ErrorCode.CART_002);
+        }
+
+        // 본인 상품 장바구니 금지
+        if (productItem.getProduct()
+            .getSeller()
+            .getUser()
+            .getId()
+            .equals(userId)) {
+
+            throw new CustomException(ErrorCode.CART_005);
+        }
+
         // 장바구니 조회 (없으면 생성)
         Cart cart = cartRepository.findByUserId(userId)
             .orElseGet(() -> cartRepository.save(new Cart(user)));
@@ -65,8 +85,25 @@ public class CartService {
             )
             .orElse(null);
 
+        // 새 상품 옵션 추가 시 장바구니 최대 50종 검증
+        if (cartItem == null) {
+            long cartItemCount = cartItemRepository.countByCartId(cart.getId());
+
+            if (cartItemCount >= 50) {
+                throw new CustomException(ErrorCode.CART_003);
+            }
+        }
+
         // 이미 존재하면 수량 증가
         if (cartItem != null) {
+
+            long nextQuantity =
+                cartItem.getQuantity() + request.quantity();
+
+            // 재고 초과 검증
+            if (nextQuantity > productItem.getStock()) {
+                throw new CustomException(ErrorCode.CART_002);
+            }
 
             cartItem.increaseQuantity(request.quantity());
 
@@ -88,7 +125,7 @@ public class CartService {
     /**
      * 장바구니 조회
      */
-    @Transactional
+    @Transactional(readOnly = true)
     public CartResponse getCart(Long userId) {
 
         Cart cart = cartRepository.findByUserId(userId)

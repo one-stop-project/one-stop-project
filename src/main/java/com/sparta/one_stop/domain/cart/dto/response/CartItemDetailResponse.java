@@ -40,7 +40,7 @@ public record CartItemDetailResponse(
             cartItem.getQuantity(),
             productItem.getProduct().getThumbnailUrl(),
             productItem.getStock(),
-            productItem.getStock() > 0
+            productItem.getStock() > 0 && productItem.isOnSale()
         );
     }
 }
