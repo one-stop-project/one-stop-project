@@ -29,7 +29,7 @@ public class JwtAccessDeniedHandler implements AccessDeniedHandler {
             response.setCharacterEncoding("UTF-8");
             response.getWriter().write(objectMapper.writeValueAsString(
                 ErrorResponse.of(
-                    ErrorCode.AUTH_009,
+                    ErrorCode.AUTH_011,
                     accessDeniedException.getMessage(),
                     request.getRequestURI()
                 )
