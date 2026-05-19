@@ -5,8 +5,8 @@ import com.sparta.one_stop.global.enums.product.ProductStatus;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 
 // idx_product_name_fulltext: FULLTEXT(name, description) — DB 마이그레이션으로 별도 관리
 //BaseEntity 추가 필요
@@ -71,13 +71,13 @@ public class Product {
     private LocalDateTime deletedAt;
 
     @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<ProductItem> productItems = new ArrayList<>();
+    private Set<ProductItem> productItems = new HashSet<>();
 
     @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<ProductImage> productImages = new ArrayList<>();
+    private Set<ProductImage> productImages = new HashSet<>();
 
     @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<ProductCategoryMapping> categoryMappings = new ArrayList<>();
+    private Set<ProductCategoryMapping> categoryMappings = new HashSet<>();
 
     @Builder
     private Product(Seller seller, String name, String description, String thumbnailUrl,

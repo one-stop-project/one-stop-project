@@ -58,21 +58,6 @@ public class SecurityConfig {
         return bean;
     }
 
-    // @Component 필터의 서블릿 자동 등록 비활성화 (Security 체인에서만 실행되도록)
-    @Bean
-    public FilterRegistrationBean<JwtAuthenticationFilter> jwtAuthFilterRegistration(JwtAuthenticationFilter filter) {
-        FilterRegistrationBean<JwtAuthenticationFilter> bean = new FilterRegistrationBean<>(filter);
-        bean.setEnabled(false);
-        return bean;
-    }
-
-    @Bean
-    public FilterRegistrationBean<JwtExceptionFilter> jwtExceptionFilterRegistration(JwtExceptionFilter filter) {
-        FilterRegistrationBean<JwtExceptionFilter> bean = new FilterRegistrationBean<>(filter);
-        bean.setEnabled(false);
-        return bean;
-    }
-
     @Bean
     public PasswordEncoder passwordEncoder() {
         // BCrypt: 단방향 해시, 자동 솔트 생성으로 레인보우 테이블 공격 방지

@@ -8,7 +8,7 @@ import com.sparta.one_stop.domain.product.dto.response.ProductDetailResponse;
 import com.sparta.one_stop.domain.product.dto.response.SellerProductListResponse;
 import com.sparta.one_stop.domain.product.service.SellerProductService;
 import com.sparta.one_stop.global.response.ApiResponse;
-import com.sparta.one_stop.global.security.CustomUserDetails;
+import com.sparta.one_stop.global.security.AuthUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -41,10 +41,10 @@ public class SellerProductController {
     @Operation(summary = "상품 등록")
     @PostMapping
     public ResponseEntity<ApiResponse<ProductCreateResponse>> create(
-        @AuthenticationPrincipal CustomUserDetails userDetails,
+        @AuthenticationPrincipal AuthUser authUser,
         @Valid @RequestBody ProductCreateRequest request
     ) {
-        ProductCreateResponse response = sellerProductService.create(userDetails.getUserId(), request);
+        ProductCreateResponse response = sellerProductService.create(authUser.userId(), request);
         return ResponseEntity
             .status(HttpStatus.CREATED)
             .body(ApiResponse.success(response));
@@ -54,11 +54,11 @@ public class SellerProductController {
     @Operation(summary = "내 상품 목록 조회")
     @GetMapping
     public ResponseEntity<ApiResponse<Page<SellerProductListResponse>>> getMyProducts(
-        @AuthenticationPrincipal CustomUserDetails userDetails,
+        @AuthenticationPrincipal AuthUser authUser,
         @PageableDefault(size = 10, sort = "id", direction = Sort.Direction.DESC) Pageable pageable
     ) {
         Page<SellerProductListResponse> response =
-            sellerProductService.getMyProducts(userDetails.getUserId(), pageable);
+            sellerProductService.getMyProducts(authUser.userId(), pageable);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
@@ -66,12 +66,12 @@ public class SellerProductController {
     @Operation(summary = "상품 수정")
     @PatchMapping("/{productId}")
     public ResponseEntity<ApiResponse<ProductDetailResponse>> update(
-        @AuthenticationPrincipal CustomUserDetails userDetails,
+        @AuthenticationPrincipal AuthUser authUser,
         @PathVariable Long productId,
         @Valid @RequestBody ProductUpdateRequest request
     ) {
         ProductDetailResponse response =
-            sellerProductService.update(userDetails.getUserId(), productId, request);
+            sellerProductService.update(authUser.userId(), productId, request);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
@@ -79,10 +79,10 @@ public class SellerProductController {
     @Operation(summary = "상품 삭제 (Soft Delete)")
     @DeleteMapping("/{productId}")
     public ResponseEntity<ApiResponse<ProductDeleteResponse>> delete(
-        @AuthenticationPrincipal CustomUserDetails userDetails,
+        @AuthenticationPrincipal AuthUser authUser,
         @PathVariable Long productId
     ) {
-        ProductDeleteResponse response = sellerProductService.delete(userDetails.getUserId(), productId);
+        ProductDeleteResponse response = sellerProductService.delete(authUser.userId(), productId);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 }
