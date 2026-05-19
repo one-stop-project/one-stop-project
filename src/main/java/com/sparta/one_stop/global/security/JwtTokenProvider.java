@@ -111,7 +111,6 @@ public class JwtTokenProvider {
                 .getPayload();
         }
 
-
     /**
      * 토큰에서 userId 추출
      */

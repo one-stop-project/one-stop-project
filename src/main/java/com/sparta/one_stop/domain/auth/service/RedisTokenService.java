@@ -106,12 +106,10 @@ public class RedisTokenService {
         try {
             return Boolean.TRUE.equals(redisTemplate.hasKey(BLACKLIST_PREFIX + jti));
         } catch (Exception e) {
-            // [개선 6] 정책 결정 명문화
+            // 정책 결정 명문화
             log.error("Redis 장애로 블랙리스트 검증 실패 (Fail-Open 동작): jti={}", jti, e);
             return false; // Redis가 죽으면 차단하지 않고 그냥 통과시킴 (서비스 가용성 우선)
 
-            // 만약 금융권/어드민 서비스라서 보안이 우선(Fail-Closed)이라면 아래처럼 던져야 합니다.
-            // throw new CustomException(ErrorCode.REDIS_UNAVAILABLE);
         }
     }
 }

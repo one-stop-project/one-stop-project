@@ -51,7 +51,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 setAuthentication(claims, request);
             }
 
-
         // 예외가 발생했든 안 했든 필터 체인은 무조건 타도록 보장
         filterChain.doFilter(request, response);
     }
@@ -69,7 +68,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 authUser.authorities()
             );
 
-        // IP, Session 정보 등 Audit Log에 유용한 디테일 셋팅
+        // IP, Session 정보 등 Audit Log에 디테일 셋팅
         authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
 
         SecurityContextHolder.getContext().setAuthentication(authentication);

@@ -64,7 +64,6 @@ public class AuthController {
             "device_id", deviceId, jwtTokenProvider.getRefreshTokenExpirySeconds(),
             "/api/auth"
         );
-
         // ※ 주의: 프론트엔드 보안 강화를 위해 클라이언트에 내려가는 LoginResponse JSON에서
         // RefreshToken 필드는 null로 비우거나 아예 DTO에서 제거하는 것이 정석
         // 현재는 쿠키를 통해 안전하게 전달
@@ -82,7 +81,6 @@ public class AuthController {
         // 1. 쿠키에서 읽은 값으로 TokenRefreshRequest DTO 생성 (또는 Service 파라미터 직접 전달)
         TokenRefreshRequest request = new TokenRefreshRequest(refreshToken);
 
-        // ★ RefreshResult로 받음
         RefreshResult result = authService.refresh(request, deviceId);
 
         // 2. RTR(Rotation) 정책에 따라 발급된 새 RT를 쿠키에 덮어쓰기
