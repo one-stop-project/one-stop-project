@@ -49,4 +49,12 @@ public class AdminSellerController {
         adminSellerService.rejectSeller(sellerId);
         return ResponseEntity.ok(ApiResponse.success());
     }
+
+    // 판매자 강제 비활성화
+    @Operation(summary = "판매자 강제 비활성화")
+    @PostMapping("/{sellerId}/force-inactive")
+    public ResponseEntity<ApiResponse<Void>> forceInactiveSeller(@PathVariable Long sellerId) {
+        adminSellerService.forceInactiveSeller(sellerId);
+        return ResponseEntity.ok(ApiResponse.success());
+    }
 }
