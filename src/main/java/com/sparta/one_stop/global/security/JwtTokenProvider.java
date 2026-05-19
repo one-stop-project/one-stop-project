@@ -6,11 +6,9 @@ import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
-import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import jakarta.annotation.PostConstruct;
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.convert.DurationUnit;
@@ -67,7 +65,7 @@ public class JwtTokenProvider {
     /**
      * Access Token 생성
      * Payload: userId + role (email 등 PII 제거)
-     * [2-2] JTI(고유 ID)포함
+     * JTI(고유 ID)포함
      */
     public String createAccessToken(Long userId, UserRole role) {
         Date now = new Date();
@@ -79,7 +77,7 @@ public class JwtTokenProvider {
             .claim("role", role.name())            // role
             .issuedAt(now)
             .expiration(expire)
-            .signWith(secretKey, Jwts.SIG.HS256)         // [2-1] 알고리즘 명시
+            .signWith(secretKey, Jwts.SIG.HS256)         //  알고리즘 명시
             .compact();
     }
 
@@ -87,13 +85,14 @@ public class JwtTokenProvider {
      * Refresh Token 생성
      * Payload: userId + JTI만
      */
-    public String createRefreshToken(Long userId) {
+    public String createRefreshToken(Long userId, String deviceId) {
         Date now = new Date();
         Date expire = new Date(now.getTime() + refreshTokenExpiry.toMillis());
 
         return Jwts.builder()
             .id(UUID.randomUUID().toString())
             .subject(String.valueOf(userId))
+            .claim("deviceId", deviceId)  // ← 추가
             .issuedAt(now)
             .expiration(expire)
             .signWith(secretKey, Jwts.SIG.HS256)
@@ -121,17 +120,15 @@ public class JwtTokenProvider {
     }
 
     /**
-     * 토큰에서 role 추출
+     * 토큰에서 role 추출 시 Enum 예외 방어
      */
     public UserRole getRole(Claims claims) {
-        return UserRole.valueOf(claims.get("role", String.class));
-    }
-
-    /**
-     * 토큰에서 JTI 추출
-     */
-    public String getJti(Claims claims) {
-        return claims.getId();
+        try {
+            return UserRole.valueOf(claims.get("role", String.class));
+        } catch (IllegalArgumentException | NullPointerException e) {
+            // [개선 9] Enum 매칭 실패 시 500 에러가 나지 않도록 커스텀 예외로 변환
+            throw new CustomException(ErrorCode.AUTH_010, "유효하지 않은 권한 정보입니다.");
+        }
     }
 
     /**
@@ -154,4 +151,65 @@ public class JwtTokenProvider {
     public long getRefreshTokenExpirySeconds() {
         return refreshTokenExpiry.toSeconds();
     }
+
+    /**
+     * 토큰의 남은 만료 시간(초)을 계산합니다. (블랙리스트 저장용 TTL)
+     */
+    public long getExpiration(String token) {
+        try {
+            // 버전 0.12.x 문법에 맞게 수정 및 key -> secretKey 변경
+            Date expiration = Jwts.parser()
+                .verifyWith(secretKey)
+                .build()
+                .parseSignedClaims(token)
+                .getPayload()
+                .getExpiration();
+
+            long now = new Date().getTime();
+            long remainTime = expiration.getTime() - now;
+
+            return remainTime > 0 ? remainTime / 1000 : 0; // 남은 시간을 초(Seconds) 단위로 반환
+        } catch (ExpiredJwtException e) {
+            return 0; // 이미 만료된 토큰은 0을 반환 (블랙리스트에 넣을 필요 없음)
+        } catch (Exception e) {
+            return 0; // 파싱 실패 시 예외 처리
+        }
+    }
+
+    /**
+     * 토큰에서 고유 식별자(JTI)를 추출합니다. (String 타입의 토큰을 받을 때 사용)
+     */
+    public String getJti(String token) {
+        try {
+            return parseClaims(token).getId();
+        } catch (ExpiredJwtException e) {
+            return e.getClaims().getId();  // 만료된 토큰의 JTI도 추출 가능
+        }
+    }
+
+    public long getExpirationSeconds(String token) {
+        try {
+            Date expiration = parseClaims(token).getExpiration();
+            long remain = expiration.getTime() - System.currentTimeMillis();
+            return remain > 0 ? remain / 1000 : 0;
+        } catch (ExpiredJwtException e) {
+            return 0;
+        }
+    }
+
+    public static final String BEARER_PREFIX = "Bearer ";
+
+    /**
+     * 헤더에서 순수 토큰만 추출합니다.
+     */
+    public String resolveToken(String bearerToken) {
+        // [개선 7] trim() 적용하여 안전성 극대화
+        if (bearerToken != null && bearerToken.trim().startsWith(BEARER_PREFIX)) {
+            return bearerToken.trim().substring(BEARER_PREFIX.length()).trim();
+        }
+        return null;
+    }
+
 }
+
+
