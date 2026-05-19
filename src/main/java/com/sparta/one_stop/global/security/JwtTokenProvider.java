@@ -105,18 +105,13 @@ public class JwtTokenProvider {
      * Filter에서 catch 후 AUTH 008 / AUTH 009 분리
      */
     public Claims parseClaims(String token) {
-        try{
             return Jwts.parser()
                 .verifyWith(secretKey)
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();
-        } catch (ExpiredJwtException e) {
-            throw new CustomException(ErrorCode.AUTH_008);
-        } catch (JwtException | IllegalArgumentException e) {
-            throw new CustomException(ErrorCode.AUTH_009);
         }
-    }
+
 
     /**
      * 토큰에서 userId 추출
