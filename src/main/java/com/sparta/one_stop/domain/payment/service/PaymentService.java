@@ -57,6 +57,11 @@ public class PaymentService {
             throw new CustomException(ErrorCode.ORDER_008);
         }
 
+        // 이미 결제 데이터가 존재하는지 검증
+        if (paymentRepository.existsByOrderId(order.getId())) {
+            throw new CustomException(ErrorCode.PAYMENT_002);
+        }
+
         // 결제 금액 검증
         if (!order.getFinalPrice().equals(request.amount())) {
             throw new CustomException(ErrorCode.PAYMENT_001);
