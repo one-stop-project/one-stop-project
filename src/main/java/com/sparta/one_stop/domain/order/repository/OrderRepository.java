@@ -6,6 +6,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
 
@@ -29,4 +30,16 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
         LocalDateTime to,
         Pageable pageable
     );
+
+    // 상태별 주문 수 조회
+    long countByStatus(OrderStatus status);
+
+    // 오늘 주문 수 조회
+    long countByCreatedAtBetween(LocalDateTime start, LocalDateTime end);
+
+    // 오늘 총 매출 조회 (취소 제외, null 안전)
+    @Query("select coalesce(sum(o.finalPrice), 0) from Order o " +
+        "where o.createdAt between :start and :end " +
+        "and o.status = 'PAID'")
+    Long sumFinalPriceByCreatedAtBetween(@Param("start") LocalDateTime start, @Param("end") LocalDateTime end);
 }
