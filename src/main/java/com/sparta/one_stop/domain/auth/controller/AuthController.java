@@ -12,6 +12,10 @@ import com.sparta.one_stop.global.response.ApiResponse;
 import com.sparta.one_stop.global.security.AuthUser;
 import com.sparta.one_stop.global.security.JwtTokenProvider;
 import com.sparta.one_stop.global.util.CookieUtil;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.enums.ParameterIn;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
@@ -27,6 +31,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
 
+@Tag(name = "Auth", description = "인증/인가 관리 API (회원가입, 로그인, 토큰 재발급, 로그아웃)")
 @RestController
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
@@ -36,6 +41,7 @@ public class AuthController {
     private final JwtTokenProvider jwtTokenProvider;
     private final CookieUtil cookieUtil;
 
+    @Operation(summary = "회원가입", description = "일반 구매자(BUYER) 및 판매자(SELLER) 회원가입을 처리합니다. 판매자 가입 시 상호명과 사업자번호가 필수입니다.")
     @PostMapping("/signup")
     public ResponseEntity<ApiResponse<SignUpResponse>> signup(
         @Valid @RequestBody SignUpRequest request) {
@@ -43,9 +49,14 @@ public class AuthController {
             .body(ApiResponse.success(authService.signup(request)));
     }
 
+    @Operation(
+        summary = "로그인 (토큰 및 Device ID 발급)",
+        description = "이메일과 비밀번호로 로그인합니다. 성공 시 Access Token은 JSON 응답으로 반환되며, refresh_token과 device_id는 HttpOnly 보안 쿠키로 설정됩니다."
+    )
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<LoginResponse>> login(
         @Valid @RequestBody LoginRequest request,
+        @Parameter(in = ParameterIn.COOKIE, name = "device_id", description = "기존에 발급받은 기기 식별자 (없는 경우 서버에서 자동 생성)")
         @CookieValue(value = "device_id", required = false) String existingDeviceId) {
 
         // 1. 서버 기반 Device ID 발급 (최초 로그인 시)
@@ -73,9 +84,16 @@ public class AuthController {
             .body(ApiResponse.success(responseDto));
     }
 
+
+    @Operation(
+        summary = "토큰 재발급 (Refresh)",
+        description = "브라우저 쿠키에 저장된 refresh_token과 device_id를 검증하여 새로운 Access Token을 발급하고, RTR(Rotation) 정책에 따라 Refresh Token을 갱신합니다."
+    )
     @PostMapping("/refresh")
     public ResponseEntity<ApiResponse<TokenRefreshResponse>> refresh(
+        @Parameter(in = ParameterIn.COOKIE, name = "refresh_token", required = true, description = "인증을 위한 리프레시 토큰")
         @CookieValue(value = "refresh_token") String refreshToken,
+        @Parameter(in = ParameterIn.COOKIE, name = "device_id", required = true, description = "다중 기기 검증을 위한 기기 식별자")
         @CookieValue(value = "device_id") String deviceId) {
 
         // 1. 쿠키에서 읽은 값으로 TokenRefreshRequest DTO 생성 (또는 Service 파라미터 직접 전달)
@@ -97,10 +115,16 @@ public class AuthController {
             .body(ApiResponse.success(result.response()));
     }
 
+    @Operation(
+        summary = "로그아웃",
+        description = "현재 사용자의 Access Token을 블랙리스트에 등록하여 세션을 무효화하고, 브라우저의 refresh_token 및 device_id 쿠키를 강제 만료시킵니다."
+    )
     @PostMapping("/logout")
     public ResponseEntity<ApiResponse<Void>> logout(
-        @AuthenticationPrincipal AuthUser authUser,
+        @Parameter(hidden = true) @AuthenticationPrincipal AuthUser authUser,
+        @Parameter(in = ParameterIn.COOKIE, name = "device_id", description = "로그아웃할 기기의 식별자")
         @CookieValue(value = "device_id", required = false) String deviceId,
+        @Parameter(in = ParameterIn.HEADER, name = "Authorization", description = "Bearer {Access_Token} 형태의 인증 헤더")
         @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authHeader) {
 
         // 1. 토큰 추출 위임 (캡슐화)
