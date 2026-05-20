@@ -1,6 +1,7 @@
 package com.sparta.one_stop.domain.cart.entity;
 
 import com.sparta.one_stop.domain.product.entity.ProductItem;
+import com.sparta.one_stop.global.entity.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -15,8 +16,6 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
-
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -29,7 +28,7 @@ import java.time.LocalDateTime;
         )
     }
 )
-public class CartItem {
+public class CartItem extends BaseEntity {
 
     // 카트 아이템 ID
     @Id
@@ -51,11 +50,6 @@ public class CartItem {
     @Column(name = "quantity", nullable = false)
     private Integer quantity;
 
-    // 장바구니 담은 시간
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
-
-
     // == 생성자 ==
     public CartItem(Cart cart, ProductItem productItem, int quantity) {
 
@@ -70,7 +64,6 @@ public class CartItem {
         this.cart = cart;
         this.productItem = productItem;
         this.quantity = quantity;
-        this.createdAt = LocalDateTime.now();
     }
 
 
@@ -90,20 +83,17 @@ public class CartItem {
     }
 
     // 수량 감소
-    // 감소 후 수량이 0이면 true 반환(삭제 대상)
-    public boolean decreaseQuantity(int quantity) {
+    public void decreaseQuantity(int quantity) {
 
         if (quantity <= 0) {
             throw new IllegalArgumentException("수량은 1 이상이어야 합니다.");
         }
 
-        if (quantity > this.quantity) {
-            throw new IllegalArgumentException("현재 수량보다 많이 감소시킬 수 없습니다.");
+        if (quantity >= this.quantity) {
+            throw new IllegalArgumentException("수량은 1 미만이 될 수 없습니다.");
         }
 
         this.quantity -= quantity;
-
-        return this.quantity == 0;
     }
 
 }
