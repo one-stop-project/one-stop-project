@@ -66,7 +66,7 @@ public class UserService {
         user.changePassword(passwordEncoder.encode(request.newPassword()));
 
         // 4. [보안 정책] 모든 기기 강제 로그아웃 — 변경 사실을 다른 기기에서 강제 인지시킴
-        redisTokenService.deletedAllRefreshTokensByUserId(userId);
+        redisTokenService.deletedAllRefreshTokenByUserId(userId);
 
         log.info("비밀번호 변경 (전체 세션 무효화): userId={}", userId);
     }
