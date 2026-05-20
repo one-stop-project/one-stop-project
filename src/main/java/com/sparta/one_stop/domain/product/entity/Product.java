@@ -5,8 +5,8 @@ import com.sparta.one_stop.global.enums.product.ProductStatus;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 
 // idx_product_name_fulltext: FULLTEXT(name, description) — DB 마이그레이션으로 별도 관리
 //BaseEntity 추가 필요
@@ -71,13 +71,13 @@ public class Product {
     private LocalDateTime deletedAt;
 
     @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<ProductItem> productItems = new ArrayList<>();
+    private Set<ProductItem> productItems = new HashSet<>();
 
     @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<ProductImage> productImages = new ArrayList<>();
+    private Set<ProductImage> productImages = new HashSet<>();
 
     @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
-    private List<ProductCategoryMapping> categoryMappings = new ArrayList<>();
+    private Set<ProductCategoryMapping> categoryMappings = new HashSet<>();
 
     @Builder
     private Product(Seller seller, String name, String description, String thumbnailUrl,
@@ -97,54 +97,71 @@ public class Product {
         this.salesCount = 0L;
     }
 
+    // 기본 정보 수정 (null이면 기존 값 유지)
     public void update(String name, String description, String thumbnailUrl) {
         if (name != null) this.name = name;
         if (description != null) this.description = description;
         if (thumbnailUrl != null) this.thumbnailUrl = thumbnailUrl;
     }
 
+    // 관리자 승인 처리
     public void approve() {
         this.status = ProductStatus.APPROVED;
     }
 
+    // 관리자 반려 처리
     public void reject() {
         this.status = ProductStatus.REJECTED;
     }
 
+    // 판매자 Soft Delete
     public void discontinue() {
         this.status = ProductStatus.DISCONTINUED;
         this.deletedAt = LocalDateTime.now();
     }
 
+    // 관리자 강제 비활성, 판매자 정지 일괄 처리
     public void forceInactive() {
         this.status = ProductStatus.FORCE_INACTIVE;
     }
 
+    // 조회수 동기화
     public void syncViewCount(long count) {
         this.viewCount += count;
     }
 
+    // 판매수 증가
     public void increaseSalesCount(long count) {
         this.salesCount += count;
     }
 
+    // 승인 완료 상태 여부
     public boolean isApproved() {
         return this.status.isApproved();
     }
 
+    // 수정 가능 상태 여부
     public boolean isEditable() {
         return this.status.isEditable();
     }
 
+    // 옵션 자식 엔티티 추가
     public void addProductItem(ProductItem item) {
         this.productItems.add(item);
     }
 
+    // 이미지 자식 엔티티 추가
     public void addProductImage(ProductImage image) {
         this.productImages.add(image);
     }
 
+    // 카테고리 매핑 자식 추가
     public void addCategoryMapping(ProductCategoryMapping mapping) {
         this.categoryMappings.add(mapping);
+    }
+
+    // 정책: REJECTED 상품 수정 시 APPROVE_REQUESTED로 변경 후 재승인 요청
+    public void resubmit() {
+        this.status = ProductStatus.APPROVE_REQUESTED;
     }
 }
