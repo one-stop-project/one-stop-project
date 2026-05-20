@@ -2,6 +2,7 @@ package com.sparta.one_stop.domain.delivery.repository;
 
 import com.sparta.one_stop.domain.delivery.entity.Delivery;
 import com.sparta.one_stop.domain.order.entity.OrderItem;
+import com.sparta.one_stop.global.enums.delivery.DeliveryStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -13,4 +14,7 @@ public interface DeliveryRepository extends JpaRepository<Delivery, Long> {
 
     // orderId로 배송 목록 조회
     List<Delivery> findAllByOrderItem_Order_Id(Long orderId);
+
+    // 상태별 배송 수 조회
+    long countByStatus(DeliveryStatus status);
 }
