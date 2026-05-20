@@ -222,9 +222,10 @@ public class CartService {
             throw new CustomException(ErrorCode.CART_001);
         }
 
-        if (quantity > productItem.getStock()) {
-            throw new CustomException(ErrorCode.CART_002);
-        }
+        validateStockLimit(
+            productItem,
+            quantity
+        );
 
         if (productItem.getProduct()
             .getSeller()
@@ -257,7 +258,7 @@ public class CartService {
     ) {
 
         if (quantity > productItem.getStock()) {
-            throw new CustomException(ErrorCode.CART_002);
+            throw new CustomException(ErrorCode.INVENTORY_001);
         }
     }
 
