@@ -1,9 +1,12 @@
 package com.sparta.one_stop.domain.product.entity;
 
 import com.sparta.one_stop.domain.user.entity.Seller;
+import com.sparta.one_stop.global.entity.BaseEntity;
 import com.sparta.one_stop.global.enums.product.ProductStatus;
 import jakarta.persistence.*;
 import lombok.*;
+import org.springframework.data.annotation.CreatedDate;
+
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
@@ -18,7 +21,7 @@ import java.util.Set;
         })
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class Product {
+public class Product extends BaseEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

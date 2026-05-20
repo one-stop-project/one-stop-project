@@ -1,4 +1,4 @@
-package com.sparta.one_stop.domain.auth.dto;
+package com.sparta.one_stop.domain.auth.dto.response;
 
 import lombok.Builder;
 

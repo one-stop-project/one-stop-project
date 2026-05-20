@@ -1,5 +1,6 @@
 package com.sparta.one_stop.domain.user.entity;
 
+import com.sparta.one_stop.global.entity.BaseEntity;
 import com.sparta.one_stop.global.enums.user.UserRole;
 import com.sparta.one_stop.global.enums.user.UserStatus;
 import jakarta.persistence.Column;
@@ -16,11 +17,10 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 @Entity
-@Table(name = "user")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-//BaseEntity 추가 필요
-public class User {
+@Table(name = "users")
+public class User extends BaseEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -70,9 +70,23 @@ public class User {
         if (address != null) this.address = address;
     }
 
+
+    // 비밀번호 변경
+    public void changePassword(String encodedPassword) {
+        this.password = encodedPassword;
+    }
+
+    // 회원 탈퇴(Soft Delete) */
     public void withdraw() {
         this.status = UserStatus.WITHDRAWN;
     }
+
+    // 판매자 강제 비활성화 시 사용
+    public void suspend() {
+        this.status = UserStatus.SUSPENDED;
+    }
+
+    // ----- 상태 조회 -----
 
     public boolean isActive() {
         return this.status.isActive();
@@ -80,10 +94,5 @@ public class User {
 
     public boolean isSuspended() {
         return this.status.isSuspended();
-    }
-
-    // 판매자 강제 비활성화 시 사용
-    public void suspend() {
-        this.status = UserStatus.SUSPENDED;
     }
 }

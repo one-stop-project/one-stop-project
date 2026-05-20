@@ -1,4 +1,4 @@
-package com.sparta.one_stop.domain.auth.dto;
+package com.sparta.one_stop.domain.auth.dto.request;
 
 import com.sparta.one_stop.global.enums.user.UserRole;
 import jakarta.validation.constraints.Email;

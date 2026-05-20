@@ -1,4 +1,4 @@
-package com.sparta.one_stop.domain.auth.dto;
+package com.sparta.one_stop.domain.auth.dto.response;
 
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.global.enums.user.UserRole;
