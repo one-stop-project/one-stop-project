@@ -70,9 +70,23 @@ public class User {
         if (address != null) this.address = address;
     }
 
+
+    // 비밀번호 변경
+    public void changePassword(String encodedPassword) {
+        this.password = encodedPassword;
+    }
+
+    // 회원 탈퇴(Soft Delete) */
     public void withdraw() {
         this.status = UserStatus.WITHDRAWN;
     }
+
+    // 판매자 강제 비활성화 시 사용
+    public void suspend() {
+        this.status = UserStatus.SUSPENDED;
+    }
+
+    // ----- 상태 조회 -----
 
     public boolean isActive() {
         return this.status.isActive();
@@ -80,10 +94,5 @@ public class User {
 
     public boolean isSuspended() {
         return this.status.isSuspended();
-    }
-
-    // 판매자 강제 비활성화 시 사용
-    public void suspend() {
-        this.status = UserStatus.SUSPENDED;
     }
 }

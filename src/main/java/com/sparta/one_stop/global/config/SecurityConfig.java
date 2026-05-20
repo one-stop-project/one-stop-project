@@ -80,7 +80,7 @@ public class SecurityConfig {
             .sessionManagement(session ->
                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
-            //
+            // 인증/권한 실패 처리
             .exceptionHandling(exception -> exception
                 .authenticationEntryPoint(jwtAuthenticationEntryPoint)
                 .accessDeniedHandler(jwtAccessDeniedHandler))
@@ -100,6 +100,10 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/subscriptions/plans").permitAll()
                 .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
                 .requestMatchers("/actuator/**").permitAll()
+
+                // User 공통(BUYER + SELLER 모두 접근 가능)
+                // 마이페이지는 모두 조회
+                .requestMatchers("/api/users/me/**").authenticated()
 
                 // 구매자만 접근가능
                 .requestMatchers("/api/orders/**").hasRole("BUYER")
