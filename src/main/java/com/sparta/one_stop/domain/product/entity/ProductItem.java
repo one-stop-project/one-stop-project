@@ -1,6 +1,8 @@
 package com.sparta.one_stop.domain.product.entity;
 
 import com.sparta.one_stop.global.enums.product.ProductItemStatus;
+import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -95,9 +97,16 @@ public class ProductItem {
 
     public void decreaseStock(long quantity) {
         if (this.stock < quantity) {
-            throw new IllegalArgumentException("재고가 부족합니다.");
+            throw new CustomException(ErrorCode.INVENTORY_001);
         }
         this.stock -= quantity;
+    }
+
+    // 옵션 보정: 가격/상태/재고(절대값) 중 null이 아닌 필드만 업데이트
+    public void updateForAdjustment(Long price, ProductItemStatus status, Long newStock) {
+        if (price != null) this.price = price;
+        if (status != null) this.status = status;
+        if (newStock != null) this.stock = newStock;
     }
 
     public void stop() {

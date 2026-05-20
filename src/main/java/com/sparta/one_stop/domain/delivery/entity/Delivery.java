@@ -2,6 +2,8 @@ package com.sparta.one_stop.domain.delivery.entity;
 
 import com.sparta.one_stop.domain.order.entity.OrderItem;
 import com.sparta.one_stop.global.enums.delivery.DeliveryStatus;
+import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -79,9 +81,7 @@ public class Delivery {
             case FINAL_DELIVERY -> false;
         };
         if (!valid) {
-            throw new IllegalStateException(
-                String.format("'%s' → '%s' 전이는 허용되지 않습니다.", this.status, next)
-            );
+            throw new CustomException(ErrorCode.SHIPPING_002);
         }
     }
 }
