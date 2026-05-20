@@ -1,4 +1,4 @@
-package com.sparta.one_stop.domain.user.dto;
+package com.sparta.one_stop.domain.user.dto.response;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.sparta.one_stop.domain.user.entity.User;

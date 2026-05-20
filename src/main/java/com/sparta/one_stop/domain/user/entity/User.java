@@ -1,5 +1,6 @@
 package com.sparta.one_stop.domain.user.entity;
 
+import com.sparta.one_stop.global.entity.BaseEntity;
 import com.sparta.one_stop.global.enums.user.UserRole;
 import com.sparta.one_stop.global.enums.user.UserStatus;
 import jakarta.persistence.Column;
@@ -20,7 +21,7 @@ import lombok.NoArgsConstructor;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 //BaseEntity 추가 필요
-public class User {
+public class User extends BaseEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

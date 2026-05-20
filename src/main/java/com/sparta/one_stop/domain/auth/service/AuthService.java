@@ -1,13 +1,13 @@
 package com.sparta.one_stop.domain.auth.service;
 
-import com.sparta.one_stop.domain.auth.dto.LoginRequest;
-import com.sparta.one_stop.domain.auth.dto.LoginResponse;
+import com.sparta.one_stop.domain.auth.dto.request.LoginRequest;
+import com.sparta.one_stop.domain.auth.dto.response.LoginResponse;
 
-import com.sparta.one_stop.domain.auth.dto.RefreshResult;
-import com.sparta.one_stop.domain.auth.dto.SignUpRequest;
-import com.sparta.one_stop.domain.auth.dto.SignUpResponse;
-import com.sparta.one_stop.domain.auth.dto.TokenRefreshRequest;
-import com.sparta.one_stop.domain.auth.dto.TokenRefreshResponse;
+import com.sparta.one_stop.domain.auth.dto.result.RefreshResult;
+import com.sparta.one_stop.domain.auth.dto.request.SignUpRequest;
+import com.sparta.one_stop.domain.auth.dto.response.SignUpResponse;
+import com.sparta.one_stop.domain.auth.dto.request.TokenRefreshRequest;
+import com.sparta.one_stop.domain.auth.dto.response.TokenRefreshResponse;
 import com.sparta.one_stop.domain.user.entity.Seller;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.SellerRepository;
