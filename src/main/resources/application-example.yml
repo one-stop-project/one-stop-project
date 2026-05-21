@@ -26,12 +26,23 @@ jwt:
   secret:
     key: ${JWT_SECRET_KEY}
     # Base64 인코딩된 32자 이상의 랜덤 문자열
-    # 생성 방법: echo -n "your-secret-key-here" | base64
-  access-token-expiry: 15m      # Duration 타입 — 15분
-  refresh-token-expiry: 14d     # Duration 타입 — 14일
+    # 생성 방법: echo -n "your-secret-key" | base64
+  access-token-expiry: 15m
+  refresh-token-expiry: 14d
 
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
   api-docs:
     path: /v3/api-docs
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics, prometheus
+  endpoint:
+    prometheus:
+      enabled: true
+    health:
+      show-details: always
