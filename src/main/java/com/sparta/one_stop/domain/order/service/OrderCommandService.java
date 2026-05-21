@@ -2,6 +2,8 @@ package com.sparta.one_stop.domain.order.service;
 
 import com.sparta.one_stop.domain.cart.entity.CartItem;
 import com.sparta.one_stop.domain.cart.repository.CartItemRepository;
+import com.sparta.one_stop.domain.delivery.entity.Delivery;
+import com.sparta.one_stop.domain.delivery.repository.DeliveryRepository;
 import com.sparta.one_stop.domain.order.dto.request.CancelOrderRequest;
 import com.sparta.one_stop.domain.order.dto.request.CreateOrderItemRequest;
 import com.sparta.one_stop.domain.order.dto.request.CreateOrderRequest;
@@ -17,8 +19,8 @@ import com.sparta.one_stop.domain.product.entity.ProductItem;
 import com.sparta.one_stop.domain.product.repository.ProductItemRepository;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.UserRepository;
-import com.sparta.one_stop.global.enums.OrderStatus;
-import com.sparta.one_stop.global.enums.OrderType;
+import com.sparta.one_stop.global.enums.order.OrderStatus;
+import com.sparta.one_stop.global.enums.order.OrderType;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -43,6 +45,7 @@ public class OrderCommandService {
     private final CartItemRepository cartItemRepository;
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
+    private final DeliveryRepository deliveryRepository;
 
     /**
      * 주문 생성 1단계
@@ -118,6 +121,7 @@ public class OrderCommandService {
      * 주문 취소
      * - 본인 주문 검증
      * - 이미 취소된 주문 중복 취소 방지
+     * - 배송 상태 기준 취소 가능 여부 검증
      * - 재고 복구
      * - 포인트/쿠폰은 MVP 이후 연동
      */
@@ -127,7 +131,7 @@ public class OrderCommandService {
         CancelOrderRequest request
     ) {
         Order order = orderRepository.findById(orderId)
-            .orElseThrow(() -> new CustomException(ErrorCode.ORDER_007));
+            .orElseThrow(() -> new CustomException(ErrorCode.ORDER_006));
 
         validateOrderOwner(
             userId,
@@ -139,6 +143,11 @@ public class OrderCommandService {
         }
 
         List<OrderItem> orderItems = orderItemRepository.findAllByOrderId(orderId);
+
+        validateCancelableDeliveryStatus(
+            order,
+            orderItems
+        );
 
         // 재고 복구
         for (OrderItem orderItem : orderItems) {
@@ -271,21 +280,21 @@ public class OrderCommandService {
         Integer quantity
     ) {
         if (!productItem.isOnSale()) {
-            throw new CustomException(ErrorCode.ORDER_002);
-        }
-
-        if (productItem.getStock() < quantity) {
             throw new CustomException(ErrorCode.ORDER_003);
         }
 
+        if (productItem.getStock() < quantity) {
+            throw new CustomException(ErrorCode.INVENTORY_001);
+        }
+
         if (!productItem.getProduct().isApproved()) {
-            throw new CustomException(ErrorCode.ORDER_004);
+            throw new CustomException(ErrorCode.PRODUCT_002);
         }
 
         if (!productItem.getProduct()
             .getSeller()
             .isApproved()) {
-            throw new CustomException(ErrorCode.ORDER_005);
+            throw new CustomException(ErrorCode.ORDER_011);
         }
     }
 
@@ -294,7 +303,7 @@ public class OrderCommandService {
      */
     private void validateMinimumOrderPrice(Long totalPrice) {
         if (totalPrice < MIN_ORDER_PRICE) {
-            throw new CustomException(ErrorCode.ORDER_006);
+            throw new CustomException(ErrorCode.ORDER_010);
         }
     }
 
@@ -364,6 +373,44 @@ public class OrderCommandService {
             .getId()
             .equals(userId)) {
             throw new CustomException(ErrorCode.ORDER_007);
+        }
+    }
+
+    /**
+     * 배송 상태 기준 주문 취소 가능 여부 검증
+     * - 결제 전(PENDING_PAYMENT)에는 배송 정보가 없어도 취소 가능
+     * - 결제 후 배송 정보가 있다면 ACCEPT, INSTRUCT 상태에서만 취소 가능
+     * - DEPARTURE 이후 상태에서는 취소 불가
+     */
+    private void validateCancelableDeliveryStatus(
+        Order order,
+        List<OrderItem> orderItems
+    ) {
+        List<Long> orderItemIds = orderItems.stream()
+            .map(OrderItem::getId)
+            .toList();
+
+        List<Delivery> deliveries = deliveryRepository.findAllByOrderItemIdIn(
+            orderItemIds
+        );
+
+        if (deliveries.isEmpty()) {
+            if (order.getStatus() == OrderStatus.PENDING_PAYMENT) {
+                return;
+            }
+
+            throw new CustomException(ErrorCode.SHIPPING_005);
+        }
+
+        if (deliveries.size() != orderItems.size()) {
+            throw new CustomException(ErrorCode.SHIPPING_005);
+        }
+
+        boolean hasNotCancelableDelivery = deliveries.stream()
+            .anyMatch(delivery -> !delivery.isCancelable());
+
+        if (hasNotCancelableDelivery) {
+            throw new CustomException(ErrorCode.ORDER_008);
         }
     }
 

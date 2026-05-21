@@ -2,7 +2,8 @@ package com.sparta.one_stop.domain.order.entity;
 
 import com.sparta.one_stop.domain.product.entity.ProductItem;
 import com.sparta.one_stop.domain.user.entity.Seller;
-import com.sparta.one_stop.global.enums.OrderItemStatus;
+import com.sparta.one_stop.global.entity.BaseEntity;
+import com.sparta.one_stop.global.enums.order.OrderItemStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -19,8 +20,6 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
-
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -31,7 +30,7 @@ import java.time.LocalDateTime;
         @Index(name = "idx_oi_seller", columnList = "seller_id, status")
     }
 )
-public class OrderItem {
+public class OrderItem extends BaseEntity {
 
     // 주문 상품 ID
     @Id
@@ -71,11 +70,6 @@ public class OrderItem {
     @Column(name = "status", nullable = false, length = 20)
     private OrderItemStatus status;
 
-    // 주문 상품 생성 시간
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
-
-
     // == 생성자 ==
     public OrderItem(
         Order order,
@@ -105,9 +99,7 @@ public class OrderItem {
         this.quantity = quantity;
         this.price = price;
         this.status = OrderItemStatus.ORDERED;
-        this.createdAt = LocalDateTime.now();
     }
-
 
     // == 비즈니스 메서드 ==
     // 주문 확정
@@ -149,4 +141,5 @@ public class OrderItem {
 
         this.status = OrderItemStatus.REJECTED;
     }
+
 }
