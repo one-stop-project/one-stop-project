@@ -4,9 +4,21 @@ import com.sparta.one_stop.domain.order.entity.OrderItem;
 import com.sparta.one_stop.global.enums.delivery.DeliveryStatus;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
-import jakarta.persistence.*;
-import lombok.*;
-
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.OneToOne;
+import jakarta.persistence.Table;
+import lombok.AccessLevel;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 
@@ -84,4 +96,11 @@ public class Delivery {
             throw new CustomException(ErrorCode.SHIPPING_002);
         }
     }
+
+    // 주문 취소 가능 배송 상태 여부
+    public boolean isCancelable() {
+        return this.status == DeliveryStatus.ACCEPT
+            || this.status == DeliveryStatus.INSTRUCT;
+    }
+    
 }

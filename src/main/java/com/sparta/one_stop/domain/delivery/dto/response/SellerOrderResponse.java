@@ -2,8 +2,8 @@ package com.sparta.one_stop.domain.delivery.dto.response;
 
 import com.sparta.one_stop.domain.delivery.entity.Delivery;
 import com.sparta.one_stop.domain.order.entity.OrderItem;
-import com.sparta.one_stop.global.enums.OrderItemStatus;
 import com.sparta.one_stop.global.enums.delivery.DeliveryStatus;
+import com.sparta.one_stop.global.enums.order.OrderItemStatus;
 
 import java.time.LocalDateTime;
 

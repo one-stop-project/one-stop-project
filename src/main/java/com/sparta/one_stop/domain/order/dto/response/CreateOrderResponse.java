@@ -1,7 +1,7 @@
 package com.sparta.one_stop.domain.order.dto.response;
 
 import com.sparta.one_stop.domain.order.entity.Order;
-import com.sparta.one_stop.global.enums.OrderStatus;
+import com.sparta.one_stop.global.enums.order.OrderStatus;
 
 import java.time.LocalDateTime;
 import java.util.List;

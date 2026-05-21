@@ -1,4 +1,4 @@
-package com.sparta.one_stop.global.enums;
+package com.sparta.one_stop.global.enums.order;
 
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;

@@ -1,10 +1,10 @@
 package com.sparta.one_stop.domain.order.repository;
 
 import com.sparta.one_stop.domain.order.entity.OrderItem;
-import org.springframework.data.jpa.repository.JpaRepository;
-import com.sparta.one_stop.global.enums.OrderItemStatus;
+import com.sparta.one_stop.global.enums.order.OrderItemStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
 

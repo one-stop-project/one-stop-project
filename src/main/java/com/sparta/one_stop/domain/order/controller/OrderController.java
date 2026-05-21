@@ -7,7 +7,7 @@ import com.sparta.one_stop.domain.order.dto.response.CreateOrderResponse;
 import com.sparta.one_stop.domain.order.dto.response.OrderDetailResponse;
 import com.sparta.one_stop.domain.order.dto.response.OrderPageResponse;
 import com.sparta.one_stop.domain.order.service.OrderService;
-import com.sparta.one_stop.global.enums.OrderStatus;
+import com.sparta.one_stop.global.enums.order.OrderStatus;
 import com.sparta.one_stop.global.response.ApiResponse;
 import com.sparta.one_stop.global.security.AuthUser;
 import jakarta.validation.Valid;

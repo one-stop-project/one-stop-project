@@ -6,7 +6,7 @@ import com.sparta.one_stop.domain.order.dto.response.CancelOrderResponse;
 import com.sparta.one_stop.domain.order.dto.response.CreateOrderResponse;
 import com.sparta.one_stop.domain.order.dto.response.OrderDetailResponse;
 import com.sparta.one_stop.domain.order.dto.response.OrderPageResponse;
-import com.sparta.one_stop.global.enums.OrderStatus;
+import com.sparta.one_stop.global.enums.order.OrderStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 

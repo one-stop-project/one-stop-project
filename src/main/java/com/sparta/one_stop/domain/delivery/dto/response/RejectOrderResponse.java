@@ -1,6 +1,6 @@
 package com.sparta.one_stop.domain.delivery.dto.response;
 
-import com.sparta.one_stop.global.enums.OrderItemStatus;
+import com.sparta.one_stop.global.enums.order.OrderItemStatus;
 
 public record RejectOrderResponse(
     Long orderItemId,
