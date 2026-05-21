@@ -98,10 +98,21 @@ public class OrderItem extends BaseEntity {
         this.itemName = itemName;
         this.quantity = quantity;
         this.price = price;
-        this.status = OrderItemStatus.ORDERED;
+        this.status = OrderItemStatus.PENDING_PAYMENT;
     }
 
     // == 비즈니스 메서드 ==
+
+    // 결제 완료 후 주문 접수 처리
+    public void markOrdered() {
+
+        if (this.status != OrderItemStatus.PENDING_PAYMENT) {
+            throw new IllegalStateException("결제 대기 상태에서만 주문 접수 처리할 수 있습니다.");
+        }
+
+        this.status = OrderItemStatus.ORDERED;
+    }
+
     // 주문 확정
     public void confirm() {
 

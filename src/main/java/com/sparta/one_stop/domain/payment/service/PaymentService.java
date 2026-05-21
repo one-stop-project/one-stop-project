@@ -140,9 +140,13 @@ public class PaymentService {
         }
 
         List<Delivery> deliveries = orderItems.stream()
-            .map(orderItem -> Delivery.builder()
-                .orderItem(orderItem)
-                .build())
+            .map(orderItem -> {
+                orderItem.markOrdered();
+
+                return Delivery.builder()
+                    .orderItem(orderItem)
+                    .build();
+            })
             .toList();
 
         List<Delivery> savedDeliveries = deliveryRepository.saveAll(deliveries);
