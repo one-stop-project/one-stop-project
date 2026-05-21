@@ -1,5 +1,6 @@
 package com.sparta.one_stop.domain.product.entity;
 
+import com.sparta.one_stop.global.entity.BaseEntity;
 import com.sparta.one_stop.global.enums.product.ProductImageStatus;
 import jakarta.persistence.*;
 import lombok.*;
@@ -8,7 +9,7 @@ import lombok.*;
 @Table(name = "product_image")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class ProductImage {
+public class ProductImage extends BaseEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
