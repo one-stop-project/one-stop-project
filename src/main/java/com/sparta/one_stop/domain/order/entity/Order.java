@@ -1,8 +1,9 @@
 package com.sparta.one_stop.domain.order.entity;
 
 import com.sparta.one_stop.domain.user.entity.User;
-import com.sparta.one_stop.global.enums.OrderStatus;
-import com.sparta.one_stop.global.enums.OrderType;
+import com.sparta.one_stop.global.entity.BaseEntity;
+import com.sparta.one_stop.global.enums.order.OrderStatus;
+import com.sparta.one_stop.global.enums.order.OrderType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -19,8 +20,6 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
-
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -31,7 +30,7 @@ import java.time.LocalDateTime;
         @Index(name = "idx_orders_status", columnList = "status, created_at")
     }
 )
-public class Order {
+public class Order extends BaseEntity {
 
     // 주문 id
     @Id
@@ -101,14 +100,6 @@ public class Order {
     @Column(name = "order_type", nullable = false, length = 20)
     private OrderType orderType;
 
-    // 주문 생성 시간
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
-
-    // 주문 수정 시간
-    @Column(name = "updated_at", nullable = false)
-    private LocalDateTime updatedAt;
-
     // == 생성자 ==
     public Order(
         User user,
@@ -135,22 +126,26 @@ public class Order {
         this.deliveryFee = deliveryFee;
         this.orderType = orderType;
         this.status = OrderStatus.PENDING_PAYMENT;
-        this.createdAt = LocalDateTime.now();
-        this.updatedAt = LocalDateTime.now();
     }
 
     // == 비즈니스 메서드 ==
 
     // 결제 완료
     public void completePayment() {
+        if (this.status != OrderStatus.PENDING_PAYMENT) {
+            throw new IllegalStateException("결제 대기 상태에서만 결제 완료 처리할 수 있습니다.");
+        }
+
         this.status = OrderStatus.PAID;
-        this.updatedAt = LocalDateTime.now();
     }
 
     // 주문 취소
     public void cancel() {
+        if (this.status == OrderStatus.CANCELLED) {
+            throw new IllegalStateException("이미 취소된 주문입니다.");
+        }
+
         this.status = OrderStatus.CANCELLED;
-        this.updatedAt = LocalDateTime.now();
     }
 
 }

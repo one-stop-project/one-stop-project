@@ -1,7 +1,7 @@
 package com.sparta.one_stop.domain.admin.dto;
 
-import com.sparta.one_stop.global.enums.OrderStatus;
 import com.sparta.one_stop.global.enums.delivery.DeliveryStatus;
+import com.sparta.one_stop.global.enums.order.OrderStatus;
 
 import java.util.Map;
 

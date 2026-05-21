@@ -56,6 +56,12 @@ public enum ErrorCode {
     PRODUCT_009(HttpStatus.BAD_REQUEST, "PRODUCT_009", "주문 진행 중인 상품은 삭제할 수 없습니다"),
     PRODUCT_010(HttpStatus.BAD_REQUEST, "PRODUCT_010", "현재 상태에서는 수정할 수 없습니다"),
 
+    // ===== CATEGORY - 카테고리 =====
+    CATEGORY_001(HttpStatus.NOT_FOUND, "CATEGORY_001", "카테고리를 찾을 수 없습니다"),
+    CATEGORY_002(HttpStatus.CONFLICT, "CATEGORY_002", "동일 부모 아래 중복된 카테고리명입니다"),
+    CATEGORY_003(HttpStatus.BAD_REQUEST, "CATEGORY_003", "카테고리 깊이는 최대 3단계입니다"),
+    CATEGORY_004(HttpStatus.BAD_REQUEST, "CATEGORY_004", "상품이 매핑된 카테고리는 삭제할 수 없습니다"),
+
     // ===== CART - 장바구니 =====
     CART_001(HttpStatus.BAD_REQUEST, "CART_001", "장바구니에 담을 수 없는 상품입니다"),
     CART_002(HttpStatus.BAD_REQUEST, "CART_002", "수량은 1개 이상 99개 이하여야 합니다"),
@@ -85,6 +91,7 @@ public enum ErrorCode {
     PAYMENT_005(HttpStatus.BAD_REQUEST, "PAYMENT_005", "취소할 수 없는 결제입니다"),
     PAYMENT_006(HttpStatus.BAD_REQUEST, "PAYMENT_006", "결제 대기 시간이 초과되었습니다"),
     PAYMENT_007(HttpStatus.BAD_REQUEST, "PAYMENT_007", "지원하지 않는 결제 수단입니다"),
+    PAYMENT_008(HttpStatus.BAD_REQUEST, "PAYMENT_008", "취소된 주문은 결제할 수 없습니다"),
 
     // ===== SHIPPING - 배송 =====
     SHIPPING_001(HttpStatus.BAD_REQUEST, "SHIPPING_001", "주문 확인 전에는 배송을 시작할 수 없습니다"),
