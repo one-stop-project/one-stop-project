@@ -6,6 +6,7 @@ import com.sparta.one_stop.domain.product.dto.request.ProductUpdateRequest;
 import com.sparta.one_stop.domain.product.dto.response.ProductCreateResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductDeleteResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductDetailResponse;
+import com.sparta.one_stop.domain.product.dto.response.ProductImageDeleteResponse;
 import com.sparta.one_stop.domain.product.dto.response.SellerProductListResponse;
 import com.sparta.one_stop.domain.product.entity.Category;
 import com.sparta.one_stop.domain.product.entity.Product;
@@ -13,9 +14,11 @@ import com.sparta.one_stop.domain.product.entity.ProductCategoryMapping;
 import com.sparta.one_stop.domain.product.entity.ProductImage;
 import com.sparta.one_stop.domain.product.entity.ProductItem;
 import com.sparta.one_stop.domain.product.repository.CategoryRepository;
+import com.sparta.one_stop.domain.product.repository.ProductImageRepository;
 import com.sparta.one_stop.domain.product.repository.ProductRepository;
 import com.sparta.one_stop.domain.user.entity.Seller;
 import com.sparta.one_stop.domain.user.repository.SellerRepository;
+import com.sparta.one_stop.global.enums.product.ProductImageStatus;
 import com.sparta.one_stop.global.enums.product.ProductStatus;
 import com.sparta.one_stop.global.enums.user.SellerStatus;
 import com.sparta.one_stop.global.exception.CustomException;
@@ -36,6 +39,7 @@ import java.util.Set;
 public class SellerProductService {
 
     private final ProductRepository productRepository;
+    private final ProductImageRepository productImageRepository;
     private final CategoryRepository categoryRepository;
     private final SellerRepository sellerRepository;
 
@@ -125,6 +129,57 @@ public class SellerProductService {
         product.discontinue();
 
         return ProductDeleteResponse.from(product);
+    }
+
+    // 상품 이미지 삭제 (Soft Delete + display_order 재정렬 + 썸네일 동기화)
+    @Transactional
+    public ProductImageDeleteResponse deleteImage(Long userId, Long productId, Long imageId) {
+        Seller seller = findApprovedSeller(userId);
+
+        // 낙관적 락 강제 증가 -> 같은 상품 이미지 동시 변경 직렬화
+        Product product = productRepository.findByIdForImageUpdate(productId)
+            .orElseThrow(() -> new CustomException(ErrorCode.PRODUCT_001));
+
+        if (!product.getSeller().getId().equals(seller.getId())) {
+            throw new CustomException(ErrorCode.PRODUCT_008);
+        }
+
+        // DISCONTINUED 상태는 수정 불가 (FORCE_INACTIVE는 허용)
+        if (!product.isEditable()) {
+            throw new CustomException(ErrorCode.PRODUCT_010);
+        }
+
+        List<ProductImage> activeImages = productImageRepository
+            .findByProductIdAndStatusOrderByDisplayOrderAsc(productId, ProductImageStatus.ACTIVE);
+
+        ProductImage target = activeImages.stream()
+            .filter(image -> image.getId().equals(imageId))
+            .findFirst()
+            .orElseThrow(() -> new CustomException(ErrorCode.PRODUCT_011));
+
+        // 상품 이미지는 최소 1장 유지
+        if (activeImages.size() <= 1) {
+            throw new CustomException(ErrorCode.PRODUCT_005);
+        }
+
+        target.delete();
+
+        // 남은 이미지 재정렬
+        List<ProductImage> remaining = activeImages.stream()
+            .filter(image -> !image.getId().equals(imageId))
+            .toList();
+        for (int i = 0; i < remaining.size(); i++) {
+            remaining.get(i).updateDisplayOrder(i + 1);
+        }
+
+        // 대표 이미지(display_order=1) URL을 상품 썸네일에 동기화
+        product.changeThumbnailUrl(remaining.get(0).getImageUrl());
+
+        return ProductImageDeleteResponse.builder()
+            .deletedImageId(imageId)
+            .remainingImageCount(remaining.size())
+            .thumbnailUrl(product.getThumbnailUrl())
+            .build();
     }
 
     // 승인된 판매자 검증

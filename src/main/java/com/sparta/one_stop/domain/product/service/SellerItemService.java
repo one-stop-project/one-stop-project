@@ -9,7 +9,6 @@ import com.sparta.one_stop.domain.product.entity.ProductItem;
 import com.sparta.one_stop.domain.product.repository.InventoryHistoryRepository;
 import com.sparta.one_stop.domain.product.repository.ProductItemRepository;
 import com.sparta.one_stop.global.enums.product.InventoryHistoryType;
-import com.sparta.one_stop.global.enums.product.ProductStatus;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -104,10 +103,9 @@ public class SellerItemService {
         }
     }
 
-    // 부모 상품 상태 검증 (DISCONTINUED / FORCE_INACTIVE 는 수정 불가)
+    // 부모 상품 상태 검증 (DISCONTINUED만 수정 불가, FORCE_INACTIVE는 허용)
     private void validateParentStatus(ProductItem item) {
-        ProductStatus status = item.getProduct().getStatus();
-        if (status == ProductStatus.DISCONTINUED || status == ProductStatus.FORCE_INACTIVE) {
+        if (!item.getProduct().isEditable()) {
             throw new CustomException(ErrorCode.PRODUCT_010);
         }
     }

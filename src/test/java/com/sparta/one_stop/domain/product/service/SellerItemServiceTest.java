@@ -236,19 +236,20 @@ class SellerItemServiceTest {
         }
 
         @Test
-        @DisplayName("부모 상품이 FORCE_INACTIVE 상태면 PRODUCT_010 예외가 발생한다")
-        void updateItem_parentForceInactive_throwsProduct010() {
+        @DisplayName("부모 상품이 FORCE_INACTIVE 상태면 소명/재승인을 위해 수정이 허용된다")
+        void updateItem_parentForceInactive_succeeds() {
             // given
             ProductItem item =
                     createItem(SELLER_USER_ID, ProductStatus.FORCE_INACTIVE, 1000L, 50L);
             given(productItemRepository.findById(ITEM_ID)).willReturn(Optional.of(item));
             ItemUpdateRequest request = new ItemUpdateRequest(2000L, null, null);
 
-            // when & then
-            assertThatThrownBy(
-                    () -> sellerItemService.updateItem(SELLER_USER_ID, ITEM_ID, request))
-                    .isInstanceOf(CustomException.class)
-                    .extracting("errorCode").isEqualTo(ErrorCode.PRODUCT_010);
+            // when
+            ItemUpdateResponse response =
+                    sellerItemService.updateItem(SELLER_USER_ID, ITEM_ID, request);
+
+            // then
+            assertThat(response.price()).isEqualTo(2000L);
         }
 
         @Test
