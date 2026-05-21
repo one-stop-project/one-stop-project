@@ -3,6 +3,7 @@ package com.sparta.one_stop.domain.auth.service;
 import com.sparta.one_stop.domain.auth.dto.request.LoginRequest;
 import com.sparta.one_stop.domain.auth.dto.response.LoginResponse;
 
+import com.sparta.one_stop.domain.auth.dto.result.LoginResult;
 import com.sparta.one_stop.domain.auth.dto.result.RefreshResult;
 import com.sparta.one_stop.domain.auth.dto.request.SignUpRequest;
 import com.sparta.one_stop.domain.auth.dto.response.SignUpResponse;
@@ -85,8 +86,12 @@ public class AuthService {
         }
 
         if (request.role() == UserRole.SELLER) {
-            Seller seller = Seller.builder().user(user) /* ... */ .build();
-            //  향후 user.registerSeller(seller) 형태로 도메인 주도 설계(Aggregate) 적용 고려
+            Seller seller = Seller.builder()
+                .user(user)
+                .shopName(request.shopName())
+                .businessNumber(request.businessNumber())
+                .bankAccount(request.bankAccount())
+                .build();
             sellerRepository.save(seller);
         }
 
@@ -97,7 +102,7 @@ public class AuthService {
     //  POST /api/auth/login — 로그인
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     @Transactional(readOnly = true)
-    public LoginResponse login(LoginRequest request, String deviceId) {
+    public LoginResult login(LoginRequest request, String deviceId) {
         User user = userRepository.findByEmail(request.email()).orElse(null);
 
         if (user == null) {
@@ -117,9 +122,17 @@ public class AuthService {
         String refreshToken = jwtTokenProvider.createRefreshToken(user.getId(), deviceId);
 
         // 다중 기기(deviceId) 식별자를 포함하여 저장
-        redisTokenService.saveRefreshToken(user.getId(), deviceId, refreshToken, jwtTokenProvider.getRefreshTokenExpirySeconds());
+        redisTokenService.saveRefreshToken(
+            user.getId(), deviceId, refreshToken,
+            jwtTokenProvider.getRefreshTokenExpirySeconds());
 
-        return LoginResponse.of(accessToken, refreshToken, jwtTokenProvider.getAccessTokenExpirySeconds(), user);
+        LoginResponse response = LoginResponse.of(
+            accessToken,
+            jwtTokenProvider.getAccessTokenExpirySeconds(),
+            user
+        );
+
+        return new LoginResult(response, refreshToken);
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

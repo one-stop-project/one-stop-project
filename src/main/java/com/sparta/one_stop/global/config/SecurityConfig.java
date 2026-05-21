@@ -4,7 +4,6 @@ import com.sparta.one_stop.global.security.JwtAccessDeniedHandler;
 import com.sparta.one_stop.global.security.JwtAuthenticationEntryPoint;
 import com.sparta.one_stop.global.security.JwtAuthenticationFilter;
 import com.sparta.one_stop.global.security.JwtExceptionFilter;
-import com.sparta.one_stop.global.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

@@ -10,7 +10,7 @@ import org.springframework.security.core.userdetails.UserDetails;
 
 import java.util.Collection;
 import java.util.List;
-
+// 현재는 dead코드이나 추후 OAuth2랑 연계 예정
 @Getter
 public class CustomUserDetails implements UserDetails {
 

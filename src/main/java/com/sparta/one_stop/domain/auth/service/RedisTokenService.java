@@ -99,7 +99,7 @@ public class RedisTokenService {
     //      2. SCAN은 커서 기반 점진적 탐색 -> 운영 안정
     // 키 패턴 : RT:{userId}: * {모든 deviceId 매칭}
 
-    public void deletedAllRefreshTokenByUserId(Long userId) {
+    public void deleteAllRefreshTokensByUserId(Long userId) {
         String pattern = REFRESH_TOKEN_PREFIX + userId + ":*";
         Set<String> keysToDelete = new HashSet<>();
 
