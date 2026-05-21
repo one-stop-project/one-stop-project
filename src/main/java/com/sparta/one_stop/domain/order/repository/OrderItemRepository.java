@@ -25,4 +25,12 @@ public interface OrderItemRepository extends JpaRepository<OrderItem, Long> {
         OrderItemStatus status,
         Pageable pageable
     );
+
+    // 배송 도메인 - 판매자 주문 목록 조회용
+    // 결제 전 상태(PENDING_PAYMENT)를 제외한 주문 상품 페이징 조회
+    Page<OrderItem> findBySeller_IdAndStatusNot(
+        Long sellerId,
+        OrderItemStatus status,
+        Pageable pageable
+    );
 }
