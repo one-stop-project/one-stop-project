@@ -19,7 +19,8 @@ public enum ProductStatus {
         return this == APPROVED;
     }
 
+    // 정책: DISCONTINUED만 수정 불가. FORCE_INACTIVE는 판매자 소명/재승인을 위해 수정 허용
     public boolean isEditable() {
-        return this == APPROVE_REQUESTED || this == APPROVED || this == REJECTED;
+        return this != DISCONTINUED;
     }
 }

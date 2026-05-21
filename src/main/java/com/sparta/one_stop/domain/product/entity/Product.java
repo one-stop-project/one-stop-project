@@ -107,6 +107,11 @@ public class Product extends BaseEntity {
         if (thumbnailUrl != null) this.thumbnailUrl = thumbnailUrl;
     }
 
+    // 대표 이미지(display_order=1) 변경 시 썸네일 URL 동기화
+    public void changeThumbnailUrl(String thumbnailUrl) {
+        this.thumbnailUrl = thumbnailUrl;
+    }
+
     // 관리자 승인 처리
     public void approve() {
         this.status = ProductStatus.APPROVED;
