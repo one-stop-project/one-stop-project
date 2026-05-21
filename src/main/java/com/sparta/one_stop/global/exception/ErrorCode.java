@@ -91,6 +91,7 @@ public enum ErrorCode {
     PAYMENT_005(HttpStatus.BAD_REQUEST, "PAYMENT_005", "취소할 수 없는 결제입니다"),
     PAYMENT_006(HttpStatus.BAD_REQUEST, "PAYMENT_006", "결제 대기 시간이 초과되었습니다"),
     PAYMENT_007(HttpStatus.BAD_REQUEST, "PAYMENT_007", "지원하지 않는 결제 수단입니다"),
+    PAYMENT_008(HttpStatus.BAD_REQUEST, "PAYMENT_008", "취소된 주문은 결제할 수 없습니다"),
 
     // ===== SHIPPING - 배송 =====
     SHIPPING_001(HttpStatus.BAD_REQUEST, "SHIPPING_001", "주문 확인 전에는 배송을 시작할 수 없습니다"),

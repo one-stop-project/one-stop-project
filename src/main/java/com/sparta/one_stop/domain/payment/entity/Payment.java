@@ -1,8 +1,9 @@
 package com.sparta.one_stop.domain.payment.entity;
 
 import com.sparta.one_stop.domain.order.entity.Order;
-import com.sparta.one_stop.global.enums.PaymentMethod;
-import com.sparta.one_stop.global.enums.PaymentStatus;
+import com.sparta.one_stop.global.entity.BaseEntity;
+import com.sparta.one_stop.global.enums.payment.PaymentMethod;
+import com.sparta.one_stop.global.enums.payment.PaymentStatus;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -24,7 +25,7 @@ import java.time.LocalDateTime;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Table(name = "payments")
-public class Payment {
+public class Payment extends BaseEntity {
 
     // 결제 ID
     @Id
@@ -63,11 +64,6 @@ public class Payment {
     @Column(name = "cancelled_at")
     private LocalDateTime cancelledAt;
 
-    // 결제 생성 시간
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
-
-
     // == 생성자 ==
     public Payment(
         Order order,
@@ -75,9 +71,20 @@ public class Payment {
         Long amount,
         PaymentMethod method
     ) {
+        if (order == null) {
+            throw new IllegalArgumentException("주문 정보는 필수입니다.");
+        }
 
-        if (amount < 0) {
+        if (paymentKey == null || paymentKey.isBlank()) {
+            throw new IllegalArgumentException("결제 키는 필수입니다.");
+        }
+
+        if (amount == null || amount < 0) {
             throw new IllegalArgumentException("결제 금액은 0원 이상이어야 합니다.");
+        }
+
+        if (method == null) {
+            throw new IllegalArgumentException("결제 수단은 필수입니다.");
         }
 
         this.order = order;
@@ -85,25 +92,39 @@ public class Payment {
         this.amount = amount;
         this.method = method;
         this.status = PaymentStatus.READY;
-        this.createdAt = LocalDateTime.now();
     }
-
 
     // == 비즈니스 메서드 ==
 
     // 결제 승인
     public void approve() {
+        if (this.status != PaymentStatus.READY) {
+            throw new IllegalStateException("결제 대기 상태에서만 승인할 수 있습니다.");
+        }
+
         this.status = PaymentStatus.PAID;
         this.approvedAt = LocalDateTime.now();
     }
 
     // 결제 실패
     public void fail() {
+        if (this.status != PaymentStatus.READY) {
+            throw new IllegalStateException("결제 대기 상태에서만 실패 처리할 수 있습니다.");
+        }
+
         this.status = PaymentStatus.FAILED;
     }
 
     // 결제 취소
     public void cancel() {
+        if (this.status == PaymentStatus.CANCELLED) {
+            throw new IllegalStateException("이미 취소된 결제입니다.");
+        }
+
+        if (this.status != PaymentStatus.PAID) {
+            throw new IllegalStateException("결제 완료 상태에서만 취소할 수 있습니다.");
+        }
+
         this.status = PaymentStatus.CANCELLED;
         this.cancelledAt = LocalDateTime.now();
     }
