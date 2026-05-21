@@ -2,6 +2,7 @@ package com.sparta.one_stop.domain.auth.controller;
 
 import com.sparta.one_stop.domain.auth.dto.request.LoginRequest;
 import com.sparta.one_stop.domain.auth.dto.response.LoginResponse;
+import com.sparta.one_stop.domain.auth.dto.result.LoginResult;
 import com.sparta.one_stop.domain.auth.dto.result.RefreshResult;
 import com.sparta.one_stop.domain.auth.dto.request.SignUpRequest;
 import com.sparta.one_stop.domain.auth.dto.response.SignUpResponse;
@@ -63,16 +64,19 @@ public class AuthController {
         String deviceId = (existingDeviceId != null) ? existingDeviceId : UUID.randomUUID().toString();
 
         // 2. 비즈니스 로직 처리
-        LoginResponse responseDto = authService.login(request, deviceId);
+        LoginResult result = authService.login(request, deviceId);
 
         // 3. 보안 쿠키 생성 (RT & Device ID)
         String rtCookie = cookieUtil.createHttpOnlyCookie(
-            "refresh_token", responseDto.refreshToken(), jwtTokenProvider.getRefreshTokenExpirySeconds(),
+            "refresh_token",
+            result.refreshToken(),
+            jwtTokenProvider.getRefreshTokenExpirySeconds(),
             "/api/auth"
         );
 
         String deviceIdCookie = cookieUtil.createHttpOnlyCookie(
-            "device_id", deviceId, jwtTokenProvider.getRefreshTokenExpirySeconds(),
+            "device_id", deviceId,
+            jwtTokenProvider.getRefreshTokenExpirySeconds(),
             "/api/auth"
         );
         // ※ 주의: 프론트엔드 보안 강화를 위해 클라이언트에 내려가는 LoginResponse JSON에서
@@ -81,7 +85,7 @@ public class AuthController {
         return ResponseEntity.ok()
             .header(HttpHeaders.SET_COOKIE, rtCookie)
             .header(HttpHeaders.SET_COOKIE, deviceIdCookie)
-            .body(ApiResponse.success(responseDto));
+            .body(ApiResponse.success(result.response()));
     }
 
 

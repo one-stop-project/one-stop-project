@@ -26,8 +26,6 @@ import java.io.IOException;
 public class JwtExceptionFilter extends OncePerRequestFilter {
 
     private final ObjectMapper objectMapper;
-    private final JwtTokenProvider jwtTokenProvider;
-    private final RedisTokenService redisTokenService;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,

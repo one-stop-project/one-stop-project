@@ -5,7 +5,6 @@ import com.sparta.one_stop.domain.user.entity.User;
 
 public record LoginResponse(
     String accessToken,
-    @JsonIgnore String refreshToken,
     long expiresIn,
     Long userId,
     String email,
@@ -13,7 +12,13 @@ public record LoginResponse(
     String role
 ) {
     // of 메서드 파라미터에서도 refreshToken 제거
-    public static LoginResponse of(String accessToken, String refreshToken, long expiresIn, User user) {
-        return new LoginResponse(accessToken, refreshToken, expiresIn, user.getId(), user.getEmail(), user.getName(), user.getRole().name());
+    public static LoginResponse of(String accessToken, long expiresIn, User user) {
+        return new LoginResponse(
+            accessToken,
+            expiresIn,
+            user.getId(),
+            user.getEmail(),
+            user.getName(),
+            user.getRole().name());
     }
 }

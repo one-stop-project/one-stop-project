@@ -22,6 +22,8 @@ import org.springframework.stereotype.Service;
  *
  * 비교: AuthUser는 매 요청마다 JWT 클레임에서 직접 생성됨 (DB 조회 X)
  */
+
+// 현재는 dead코드이나 추후 OAuth2랑 연계 예정
 @Service
 @RequiredArgsConstructor
 public class CustomUserDetailsService implements UserDetailsService {

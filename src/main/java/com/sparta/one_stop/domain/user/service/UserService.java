@@ -66,7 +66,7 @@ public class UserService {
         user.changePassword(passwordEncoder.encode(request.newPassword()));
 
         // 4. [보안 정책] 모든 기기 강제 로그아웃 — 변경 사실을 다른 기기에서 강제 인지시킴
-        redisTokenService.deletedAllRefreshTokenByUserId(userId);
+        redisTokenService.deleteAllRefreshTokensByUserId(userId);
 
         log.info("비밀번호 변경 (전체 세션 무효화): userId={}", userId);
     }
@@ -85,7 +85,7 @@ public class UserService {
         user.withdraw();
 
         // 3. 모든 기기 RT 일괄 삭제 (다중 기기 키 패턴: RT:{userId}:*)
-        redisTokenService.deletedAllRefreshTokenByUserId(userId);
+        redisTokenService.deleteAllRefreshTokensByUserId(userId);
 
         log.info("회원 탈퇴: userId={}", userId);
     }
