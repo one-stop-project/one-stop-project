@@ -56,6 +56,12 @@ public enum ErrorCode {
     PRODUCT_009(HttpStatus.BAD_REQUEST, "PRODUCT_009", "주문 진행 중인 상품은 삭제할 수 없습니다"),
     PRODUCT_010(HttpStatus.BAD_REQUEST, "PRODUCT_010", "현재 상태에서는 수정할 수 없습니다"),
 
+    // ===== CATEGORY - 카테고리 =====
+    CATEGORY_001(HttpStatus.NOT_FOUND, "CATEGORY_001", "카테고리를 찾을 수 없습니다"),
+    CATEGORY_002(HttpStatus.CONFLICT, "CATEGORY_002", "동일 부모 아래 중복된 카테고리명입니다"),
+    CATEGORY_003(HttpStatus.BAD_REQUEST, "CATEGORY_003", "카테고리 깊이는 최대 3단계입니다"),
+    CATEGORY_004(HttpStatus.BAD_REQUEST, "CATEGORY_004", "상품이 매핑된 카테고리는 삭제할 수 없습니다"),
+
     // ===== CART - 장바구니 =====
     CART_001(HttpStatus.BAD_REQUEST, "CART_001", "장바구니에 담을 수 없는 상품입니다"),
     CART_002(HttpStatus.BAD_REQUEST, "CART_002", "수량은 1개 이상 99개 이하여야 합니다"),
