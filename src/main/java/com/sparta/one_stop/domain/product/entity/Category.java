@@ -9,6 +9,7 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import com.sparta.one_stop.global.entity.BaseEntity;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -18,8 +19,7 @@ import lombok.NoArgsConstructor;
 @Table(name = "category")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-//BaseEntity 추가 필요
-public class Category {
+public class Category extends BaseEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
