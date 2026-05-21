@@ -1,6 +1,7 @@
 package com.sparta.one_stop.domain.cart.entity;
 
 import com.sparta.one_stop.domain.user.entity.User;
+import com.sparta.one_stop.global.entity.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -14,13 +15,11 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
-
 @Entity
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @Table(name = "carts")
-public class Cart {
+public class Cart  extends BaseEntity {
 
     // 장바구니 ID
     @Id
@@ -33,14 +32,9 @@ public class Cart {
     @JoinColumn(name = "user_id", nullable = false, unique = true)
     private User user;
 
-    // 장바구니 생성 시간
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
-
     // == 생성자 ==
     public Cart(User user) {
         this.user = user;
-        this.createdAt = LocalDateTime.now();
     }
 
 }

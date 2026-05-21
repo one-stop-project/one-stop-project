@@ -1,6 +1,6 @@
 package com.sparta.one_stop.domain.order.dto.request;
 
-import com.sparta.one_stop.global.enums.OrderType;
+import com.sparta.one_stop.global.enums.order.OrderType;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;

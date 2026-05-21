@@ -7,11 +7,14 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.RedisSystemException;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import static com.sparta.one_stop.global.common.RedisKeyConstants.BLACKLIST_PREFIX;
@@ -80,13 +83,53 @@ public class RedisTokenService {
         }
     }
 
-    // 예외 범위 축소 1
+    // 특정 기기의 RT만 삭제(로그아웃)
     public void deleteRefreshToken(Long userId, String deviceId) {
         try {
             redisTemplate.delete(rtKey(userId, deviceId));
         } catch (RedisConnectionFailureException | RedisSystemException e) {
             log.error("로그아웃 부분 실패 - RT 삭제 오류: userId={}, deviceId={}", userId, deviceId, e);
         }
+    }
+
+    // 특정 사용자의 모든 기기 RT 일괄 삭제
+    // 호출 시점 : 1. 비밀번호 변경 시(보안 정책: 모든 기기 강제 로그아웃), 2. 회원 탈퇴 시 3. 관리자 강제 정지 시(필요 시)
+    // 구현 방식 : SCAN 명령어 사용
+    //      1. KEYS 명령어는 O(N)으로 Redis 전체를 블로킹하여 운영 환경에서 위험
+    //      2. SCAN은 커서 기반 점진적 탐색 -> 운영 안정
+    // 키 패턴 : RT:{userId}: * {모든 deviceId 매칭}
+
+    public void deletedAllRefreshTokenByUserId(Long userId) {
+        String pattern = REFRESH_TOKEN_PREFIX + userId + ":*";
+        Set<String> keysToDelete = new HashSet<>();
+
+        try {
+            ScanOptions options = ScanOptions.scanOptions()
+                .match(pattern)
+                .count(100)
+                .build();
+
+            redisTemplate.execute((org.springframework.data.redis.core.RedisCallback<Void>) connection -> {
+                try (var cursor = connection.scan(options)) {
+                    while (cursor.hasNext()) {
+                        keysToDelete.add(new String(cursor.next()));
+                    }
+                }
+                return null;
+            });
+
+            if (!keysToDelete.isEmpty()) {
+                redisTemplate.delete(keysToDelete);
+                log.info("사용자 전체 기기 RT 삭제 완료 : userId={}, deletedCount={}",
+                    userId, keysToDelete.size());
+
+            }
+        } catch (RedisConnectionFailureException | RedisSystemException e) {
+            log.error("Redis 통신 장애 (사용자 전체 RT 삭제 실패): userId={}", userId, e);
+            // [정책] Fail-Open : 회원탈퇴, 비번변경 트랜잭션이 Redis 장애로 정지되지 않도록 하기 위함
+            // 만료된 RT는 14일 후 자동정리 -> 보안 영향 미미
+        }
+
     }
 
     // 예외 범위 축소 2
@@ -112,4 +155,5 @@ public class RedisTokenService {
 
         }
     }
+
 }
