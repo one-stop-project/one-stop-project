@@ -1,0 +1,7 @@
+# .coderabbit.yaml
+language: "ko-KR"
+reviews:
+  profile: "chill" # 조금 더 부드럽고 친근한 어조로 리뷰 (기본값은 assertive)
+  request_changes_workflow: false # 사소한 문제로 PR 보류(Request Changes) 지정을 방지
+chat:
+  auto_reply: true # 코드래빗이 남긴 리뷰 댓글에 개발자가 답글을 달면, AI가 실시간으로 대답하며 토론할 수 있게 합니다.
