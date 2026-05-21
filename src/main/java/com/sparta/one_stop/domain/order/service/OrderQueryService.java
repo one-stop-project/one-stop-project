@@ -1,5 +1,8 @@
 package com.sparta.one_stop.domain.order.service;
 
+import com.sparta.one_stop.domain.delivery.entity.Delivery;
+import com.sparta.one_stop.domain.delivery.repository.DeliveryRepository;
+import com.sparta.one_stop.domain.order.dto.response.DeliverySummaryResponse;
 import com.sparta.one_stop.domain.order.dto.response.OrderDetailItemResponse;
 import com.sparta.one_stop.domain.order.dto.response.OrderDetailResponse;
 import com.sparta.one_stop.domain.order.dto.response.OrderPageResponse;
@@ -22,6 +25,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -30,6 +35,7 @@ public class OrderQueryService {
 
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
+    private final DeliveryRepository deliveryRepository;
 
     /**
      * 내 주문 목록 조회
@@ -85,7 +91,7 @@ public class OrderQueryService {
         Long orderId
     ) {
         Order order = orderRepository.findById(orderId)
-            .orElseThrow(() -> new CustomException(ErrorCode.ORDER_007));
+            .orElseThrow(() -> new CustomException(ErrorCode.ORDER_006));
 
         validateOrderOwner(
             userId,
@@ -94,8 +100,22 @@ public class OrderQueryService {
 
         List<OrderItem> orderItems = orderItemRepository.findAllByOrderId(orderId);
 
+        // 주문 상품별 배송 정보를 한 번에 조회한 뒤 orderItemId 기준으로 매핑
+        // 상세 응답 생성 시 주문 상품마다 배송 정보를 개별 조회하는 것을 방지
+        List<Long> orderItemIds = orderItems.stream()
+            .map(OrderItem::getId)
+            .toList();
+
+        List<Delivery> deliveries = deliveryRepository.findAllByOrderItemIdIn(orderItemIds);
+
+        Map<Long, Delivery> deliveryMap = deliveries.stream()
+            .collect(Collectors.toMap(
+                delivery -> delivery.getOrderItem().getId(),
+                delivery -> delivery
+            ));
+
         List<OrderDetailItemResponse> itemResponses = orderItems.stream()
-            .map(this::toOrderDetailItemResponse)
+            .map(orderItem -> toOrderDetailItemResponse(orderItem, deliveryMap))
             .toList();
 
         ReceiverResponse receiver = new ReceiverResponse(
@@ -120,6 +140,8 @@ public class OrderQueryService {
 
     /**
      * 주문 목록 응답 DTO 변환
+     * TODO: 주문 목록 조회 시 주문별 orderItems 개별 조회로 N+1 발생 가능
+     * 추후 orderId 목록 기반 일괄 조회 또는 Projection 쿼리로 개선 예정
      */
     private OrderSummaryResponse toOrderSummaryResponse(Order order) {
         List<OrderItem> orderItems = orderItemRepository.findAllByOrderId(order.getId());
@@ -156,7 +178,17 @@ public class OrderQueryService {
     /**
      * 주문 상세 상품 응답 DTO 변환
      */
-    private OrderDetailItemResponse toOrderDetailItemResponse(OrderItem orderItem) {
+    private OrderDetailItemResponse toOrderDetailItemResponse(
+        OrderItem orderItem,
+        Map<Long, Delivery> deliveryMap
+    ) {
+        Delivery delivery = deliveryMap.get(orderItem.getId());
+
+        // 결제 전 주문(PENDING_PAYMENT)은 아직 배송 정보가 생성되지 않았을 수 있음
+        DeliverySummaryResponse deliveryResponse = delivery != null
+            ? DeliverySummaryResponse.of(delivery)
+            : null;
+
         return new OrderDetailItemResponse(
             orderItem.getId(),
             orderItem.getProductItem().getId(),
@@ -165,7 +197,7 @@ public class OrderQueryService {
             orderItem.getQuantity(),
             orderItem.getPrice(),
             orderItem.getStatus(),
-            null // TODO: 배송 도메인 연동 후 DeliverySummaryResponse 매핑
+            deliveryResponse
         );
     }
 
