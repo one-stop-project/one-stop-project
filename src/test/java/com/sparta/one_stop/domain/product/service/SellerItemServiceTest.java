@@ -52,7 +52,7 @@ class SellerItemServiceTest {
     private static final Long OTHER_USER_ID = 99L;
     private static final Long ITEM_ID = 10L;
 
-    // ===== 테스트 헬퍼 =====
+    // ===== 객체 생성 헬퍼 =====
 
     // 실제 엔티티 그래프(User-Seller-Product-ProductItem)를 만들어 반환
     private ProductItem createItem(Long ownerUserId, ProductStatus productStatus,
@@ -104,6 +104,16 @@ class SellerItemServiceTest {
         }
     }
 
+    // ===== 목 세팅 헬퍼 =====
+
+    private void mockFindItem(ProductItem item) {
+        given(productItemRepository.findById(ITEM_ID)).willReturn(Optional.of(item));
+    }
+
+    private void mockFindItemForUpdate(ProductItem item) {
+        given(productItemRepository.findByIdForUpdate(ITEM_ID)).willReturn(Optional.of(item));
+    }
+
     @Nested
     @DisplayName("updateItem - 옵션 수정")
     class UpdateItem {
@@ -113,7 +123,7 @@ class SellerItemServiceTest {
         void updateItem_priceOnly_succeedsWithoutLock() {
             // given
             ProductItem item = createItem(SELLER_USER_ID, ProductStatus.APPROVED, 1000L, 50L);
-            given(productItemRepository.findById(ITEM_ID)).willReturn(Optional.of(item));
+            mockFindItem(item);
             ItemUpdateRequest request = new ItemUpdateRequest(2000L, null, null);
 
             // when
@@ -132,7 +142,7 @@ class SellerItemServiceTest {
         void updateItem_withStock_locksAndRecordsAdjustment() {
             // given
             ProductItem item = createItem(SELLER_USER_ID, ProductStatus.APPROVED, 1000L, 50L);
-            given(productItemRepository.findByIdForUpdate(ITEM_ID)).willReturn(Optional.of(item));
+            mockFindItemForUpdate(item);
             ItemUpdateRequest request = new ItemUpdateRequest(null, 200L, null);
 
             // when
@@ -160,7 +170,7 @@ class SellerItemServiceTest {
         void updateItem_statusOnly_succeedsWithoutHistory() {
             // given
             ProductItem item = createItem(SELLER_USER_ID, ProductStatus.APPROVED, 1000L, 50L);
-            given(productItemRepository.findById(ITEM_ID)).willReturn(Optional.of(item));
+            mockFindItem(item);
             ItemUpdateRequest request = new ItemUpdateRequest(null, null, ProductItemStatus.STOP);
 
             // when
@@ -177,7 +187,7 @@ class SellerItemServiceTest {
         void updateItem_allFieldsNull_succeedsWithNoChange() {
             // given
             ProductItem item = createItem(SELLER_USER_ID, ProductStatus.APPROVED, 1000L, 50L);
-            given(productItemRepository.findById(ITEM_ID)).willReturn(Optional.of(item));
+            mockFindItem(item);
             ItemUpdateRequest request = new ItemUpdateRequest(null, null, null);
 
             // when
@@ -210,7 +220,7 @@ class SellerItemServiceTest {
         void updateItem_otherSellerProduct_throwsProduct008() {
             // given
             ProductItem item = createItem(OTHER_USER_ID, ProductStatus.APPROVED, 1000L, 50L);
-            given(productItemRepository.findById(ITEM_ID)).willReturn(Optional.of(item));
+            mockFindItem(item);
             ItemUpdateRequest request = new ItemUpdateRequest(2000L, null, null);
 
             // when & then
@@ -225,7 +235,7 @@ class SellerItemServiceTest {
         void updateItem_parentDiscontinued_throwsProduct010() {
             // given
             ProductItem item = createItem(SELLER_USER_ID, ProductStatus.DISCONTINUED, 1000L, 50L);
-            given(productItemRepository.findById(ITEM_ID)).willReturn(Optional.of(item));
+            mockFindItem(item);
             ItemUpdateRequest request = new ItemUpdateRequest(2000L, null, null);
 
             // when & then
@@ -241,7 +251,7 @@ class SellerItemServiceTest {
             // given
             ProductItem item =
                     createItem(SELLER_USER_ID, ProductStatus.FORCE_INACTIVE, 1000L, 50L);
-            given(productItemRepository.findById(ITEM_ID)).willReturn(Optional.of(item));
+            mockFindItem(item);
             ItemUpdateRequest request = new ItemUpdateRequest(2000L, null, null);
 
             // when
@@ -257,7 +267,7 @@ class SellerItemServiceTest {
         void updateItem_stockExceedsMax_throwsInventory003() {
             // given
             ProductItem item = createItem(SELLER_USER_ID, ProductStatus.APPROVED, 1000L, 50L);
-            given(productItemRepository.findByIdForUpdate(ITEM_ID)).willReturn(Optional.of(item));
+            mockFindItemForUpdate(item);
             ItemUpdateRequest request = new ItemUpdateRequest(null, 100_000L, null);
 
             // when & then
@@ -277,7 +287,7 @@ class SellerItemServiceTest {
         void inbound_validQuantity_increasesStockAndRecordsHistory() {
             // given
             ProductItem item = createItem(SELLER_USER_ID, ProductStatus.APPROVED, 1000L, 80L);
-            given(productItemRepository.findByIdForUpdate(ITEM_ID)).willReturn(Optional.of(item));
+            mockFindItemForUpdate(item);
             InboundRequest request = new InboundRequest(50L, null);
 
             // when
@@ -306,7 +316,7 @@ class SellerItemServiceTest {
         void inbound_withReason_savesReason() {
             // given
             ProductItem item = createItem(SELLER_USER_ID, ProductStatus.APPROVED, 1000L, 80L);
-            given(productItemRepository.findByIdForUpdate(ITEM_ID)).willReturn(Optional.of(item));
+            mockFindItemForUpdate(item);
             InboundRequest request = new InboundRequest(50L, "정기 입고");
 
             // when
@@ -324,7 +334,7 @@ class SellerItemServiceTest {
         void inbound_nullReason_savesHistoryWithNullReason() {
             // given
             ProductItem item = createItem(SELLER_USER_ID, ProductStatus.APPROVED, 1000L, 80L);
-            given(productItemRepository.findByIdForUpdate(ITEM_ID)).willReturn(Optional.of(item));
+            mockFindItemForUpdate(item);
             InboundRequest request = new InboundRequest(50L, null);
 
             // when
@@ -356,7 +366,7 @@ class SellerItemServiceTest {
         void inbound_otherSellerProduct_throwsProduct008() {
             // given
             ProductItem item = createItem(OTHER_USER_ID, ProductStatus.APPROVED, 1000L, 80L);
-            given(productItemRepository.findByIdForUpdate(ITEM_ID)).willReturn(Optional.of(item));
+            mockFindItemForUpdate(item);
             InboundRequest request = new InboundRequest(50L, null);
 
             // when & then
@@ -371,7 +381,7 @@ class SellerItemServiceTest {
         void inbound_parentDiscontinued_throwsProduct010() {
             // given
             ProductItem item = createItem(SELLER_USER_ID, ProductStatus.DISCONTINUED, 1000L, 80L);
-            given(productItemRepository.findByIdForUpdate(ITEM_ID)).willReturn(Optional.of(item));
+            mockFindItemForUpdate(item);
             InboundRequest request = new InboundRequest(50L, null);
 
             // when & then
@@ -386,7 +396,7 @@ class SellerItemServiceTest {
         void inbound_exceedsMaxStock_throwsInventory003() {
             // given
             ProductItem item = createItem(SELLER_USER_ID, ProductStatus.APPROVED, 1000L, 50_000L);
-            given(productItemRepository.findByIdForUpdate(ITEM_ID)).willReturn(Optional.of(item));
+            mockFindItemForUpdate(item);
             InboundRequest request = new InboundRequest(50_000L, null);
 
             // when & then
@@ -401,7 +411,7 @@ class SellerItemServiceTest {
         void inbound_atMaxStockPlusOne_throwsInventory003() {
             // given
             ProductItem item = createItem(SELLER_USER_ID, ProductStatus.APPROVED, 1000L, 99_999L);
-            given(productItemRepository.findByIdForUpdate(ITEM_ID)).willReturn(Optional.of(item));
+            mockFindItemForUpdate(item);
             InboundRequest request = new InboundRequest(1L, null);
 
             // when & then
