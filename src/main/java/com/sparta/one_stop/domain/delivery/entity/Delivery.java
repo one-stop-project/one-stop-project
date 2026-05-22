@@ -1,6 +1,7 @@
 package com.sparta.one_stop.domain.delivery.entity;
 
 import com.sparta.one_stop.domain.order.entity.OrderItem;
+import com.sparta.one_stop.global.entity.BaseEntity;
 import com.sparta.one_stop.global.enums.delivery.DeliveryStatus;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
@@ -26,7 +27,7 @@ import java.time.LocalDateTime;
 @Table(name = "delivery")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class Delivery {
+public class Delivery extends BaseEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -47,25 +48,16 @@ public class Delivery {
     @Column(name = "delivery_company", length = 50)
     private String deliveryCompany;
 
-    @Column(name = "created_at", nullable = false, updatable = false)
-    private LocalDateTime createdAt;
-
-    @Column(name = "updated_at", nullable = false)
-    private LocalDateTime updatedAt;
-
     @Builder
     public Delivery(OrderItem orderItem) {
         this.orderItem = orderItem;
         this.status = DeliveryStatus.ACCEPT;
-        this.createdAt = LocalDateTime.now();
-        this.updatedAt = LocalDateTime.now();
     }
 
     // 발주 확인: ACCEPT → INSTRUCT
     public void confirm() {
         validateTransition(DeliveryStatus.INSTRUCT);
         this.status = DeliveryStatus.INSTRUCT;
-        this.updatedAt = LocalDateTime.now();
     }
 
     // 운송장 등록: INSTRUCT → DEPARTURE
@@ -74,14 +66,12 @@ public class Delivery {
         this.deliveryCompany = deliveryCompany;
         this.invoiceNumber = invoiceNumber;
         this.status = DeliveryStatus.DEPARTURE;
-        this.updatedAt = LocalDateTime.now();
     }
 
     // 배송 상태 변경: DEPARTURE → DELIVERING → FINAL_DELIVERY
     public void updateStatus(DeliveryStatus newStatus) {
         validateTransition(newStatus);
         this.status = newStatus;
-        this.updatedAt = LocalDateTime.now();
     }
 
     private void validateTransition(DeliveryStatus next) {
@@ -102,5 +92,5 @@ public class Delivery {
         return this.status == DeliveryStatus.ACCEPT
             || this.status == DeliveryStatus.INSTRUCT;
     }
-    
+
 }
