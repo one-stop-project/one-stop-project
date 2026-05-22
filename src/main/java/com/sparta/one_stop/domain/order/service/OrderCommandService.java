@@ -12,13 +12,17 @@ import com.sparta.one_stop.domain.order.dto.response.CreateOrderItemResponse;
 import com.sparta.one_stop.domain.order.dto.response.CreateOrderResponse;
 import com.sparta.one_stop.domain.order.dto.response.RestoredCouponResponse;
 import com.sparta.one_stop.domain.order.entity.Order;
+import com.sparta.one_stop.domain.order.entity.OrderCancelHistory;
 import com.sparta.one_stop.domain.order.entity.OrderItem;
+import com.sparta.one_stop.domain.order.repository.OrderCancelHistoryRepository;
 import com.sparta.one_stop.domain.order.repository.OrderItemRepository;
 import com.sparta.one_stop.domain.order.repository.OrderRepository;
 import com.sparta.one_stop.domain.product.entity.ProductItem;
 import com.sparta.one_stop.domain.product.repository.ProductItemRepository;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.UserRepository;
+import com.sparta.one_stop.global.enums.order.CancelActorType;
+import com.sparta.one_stop.global.enums.order.OrderCancelType;
 import com.sparta.one_stop.global.enums.order.OrderStatus;
 import com.sparta.one_stop.global.enums.order.OrderType;
 import com.sparta.one_stop.global.exception.CustomException;
@@ -37,6 +41,7 @@ public class OrderCommandService {
 
     private static final long MIN_ORDER_PRICE = 1_000L;
     private static final long DEFAULT_DELIVERY_FEE = 3_000L;
+    private static final int NOT_RESTORED_POINT = 0;
 
     private final UserRepository userRepository;
     private final ProductItemRepository productItemRepository;
@@ -44,6 +49,7 @@ public class OrderCommandService {
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
     private final DeliveryRepository deliveryRepository;
+    private final OrderCancelHistoryRepository orderCancelHistoryRepository;
 
     /**
      * 주문 생성 1단계
@@ -122,8 +128,10 @@ public class OrderCommandService {
      * - 이미 취소된 주문 중복 취소 방지
      * - 배송 상태 기준 취소 가능 여부 검증
      * - 재고 복구
-     * - 포인트/쿠폰은 MVP 이후 연동
-     * - TODO: 취소 사유 저장 정책 확정 후 request.reason()을 주문 취소 이력에 반영 예정
+     * - Order / OrderItem 상태 취소 처리
+     * - 주문 취소 이력 저장
+     * TODO: Delivery 상태 ORDER_CANCELLED 전환은 배송 도메인 반영 후 연동
+     * TODO: 포인트/쿠폰은 MVP 이후 연동
      */
     public CancelOrderResponse cancelOrder(
         Long userId,
@@ -149,16 +157,31 @@ public class OrderCommandService {
             orderItems
         );
 
-        // 재고 복구
+        // 재고 복구 및 주문 상품 취소 처리
         for (OrderItem orderItem : orderItems) {
             orderItem.getProductItem()
                 .increaseStock(orderItem.getQuantity());
+
+            orderItem.cancel();
         }
 
         order.cancel();
 
         // MVP 단계에서는 쿠폰 복구 미구현이므로 null
         RestoredCouponResponse restoredCoupon = null;
+
+        OrderCancelHistory cancelHistory = new OrderCancelHistory(
+            order,
+            null,
+            CancelActorType.BUYER,
+            userId,
+            OrderCancelType.BUYER_CANCEL,
+            request.reason(),
+            order.getFinalPrice(),
+            NOT_RESTORED_POINT   // MVP 단계에서는 포인트 복구 미구현이므로 0
+        );
+
+        orderCancelHistoryRepository.save(cancelHistory);
 
         return new CancelOrderResponse(
             order.getId(),

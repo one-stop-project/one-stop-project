@@ -113,7 +113,7 @@ public class OrderItem extends BaseEntity {
     public void markOrdered() {
 
         if (this.status != OrderItemStatus.PENDING_PAYMENT) {
-            throw new IllegalStateException("결제 대기 상태에서만 주문 접수 처리할 수 있습니다.");
+            throw new IllegalStateException("주문 접수는 PENDING_PAYMENT 상태에서만 처리할 수 있습니다.");
         }
 
         this.status = OrderItemStatus.ORDERED;
@@ -157,6 +157,17 @@ public class OrderItem extends BaseEntity {
         }
 
         this.status = OrderItemStatus.REJECTED;
+    }
+
+    // 주문 취소
+    public void cancel() {
+        if (this.status != OrderItemStatus.PENDING_PAYMENT
+            && this.status != OrderItemStatus.ORDERED
+            && this.status != OrderItemStatus.CONFIRMED)  {
+            throw new IllegalStateException("현재 상태에서는 주문 상품을 취소할 수 없습니다.");
+        }
+
+        this.status = OrderItemStatus.CANCELLED;
     }
 
 }
