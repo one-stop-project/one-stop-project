@@ -331,7 +331,7 @@ public class OrderCommandService {
 
     /**
      * 주문 상품 엔티티 생성
-     * - 주문 시점의 상품명/옵션명/가격을 스냅샷으로 저장
+     * - 주문 시점의 상품명/옵션명/가격/썸네일 URL을 스냅샷으로 저장
      */
     private OrderItem createOrderItem(
         Order order,
@@ -348,7 +348,8 @@ public class OrderCommandService {
             productItem.getProduct().getSeller(),
             itemName,
             target.quantity(),
-            productItem.getPrice()
+            productItem.getPrice(),
+            productItem.getProduct().getThumbnailUrl()
         );
     }
 
