@@ -2,6 +2,7 @@ package com.sparta.one_stop.domain.user.service;
 
 
 import com.sparta.one_stop.domain.auth.event.AllDevicesLogoutEvent;
+import com.sparta.one_stop.domain.auth.service.RedisTokenService;
 import com.sparta.one_stop.domain.user.dto.request.PasswordChangeRequest;
 import com.sparta.one_stop.domain.user.dto.request.UserUpdateRequest;
 import com.sparta.one_stop.domain.user.dto.request.WithdrawRequest;

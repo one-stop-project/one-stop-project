@@ -13,7 +13,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.convert.DurationUnit;
 import org.springframework.stereotype.Component;
-import io.jsonwebtoken.JwtException;
 
 import javax.crypto.SecretKey;
 import java.time.Duration;
@@ -155,22 +154,24 @@ public class JwtTokenProvider {
     /**
      * 토큰의 남은 만료 시간(초)을 계산합니다. (블랙리스트 저장용 TTL)
      */
-    public long getExpirationSeconds(String token) {
+    public long getExpiration(String token) {
         try {
-            Claims claims = Jwts.parser()
+            // 버전 0.12.x 문법에 맞게 수정 및 key -> secretKey 변경
+            Date expiration = Jwts.parser()
                 .verifyWith(secretKey)
                 .build()
                 .parseSignedClaims(token)
-                .getPayload();
+                .getPayload()
+                .getExpiration();
 
-            // 현재 시간(UTC 기준)과 비교가 필요할 수 있습니다.
-            // 현재는 서버 시간을 사용하고 계신데, 이는 아주 적절합니다.
-            long now = System.currentTimeMillis();
-            long remainTime = claims.getExpiration().getTime() - now;
+            long now = new Date().getTime();
+            long remainTime = expiration.getTime() - now;
 
-            return remainTime > 0 ? remainTime / 1000 : 0;
-        } catch (JwtException e) { // ExpiredJwtException 포함한 모든 JWT 관련 예외를 포괄
-            return 0;
+            return remainTime > 0 ? remainTime / 1000 : 0; // 남은 시간을 초(Seconds) 단위로 반환
+        } catch (ExpiredJwtException e) {
+            return 0; // 이미 만료된 토큰은 0을 반환 (블랙리스트에 넣을 필요 없음)
+        } catch (Exception e) {
+            return 0; // 파싱 실패 시 예외 처리
         }
     }
 
