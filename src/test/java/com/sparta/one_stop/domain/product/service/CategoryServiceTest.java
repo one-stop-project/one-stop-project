@@ -40,7 +40,7 @@ class CategoryServiceTest {
     @InjectMocks
     private CategoryService categoryService;
 
-    // ===== 테스트 헬퍼 =====
+    // ===== 객체 생성 헬퍼 =====
 
     // 실제 Category 엔티티 생성 (id는 리플렉션으로 주입, getDepth 정상 동작)
     private Category category(Long id, String name, Category parent) {
@@ -52,6 +52,28 @@ class CategoryServiceTest {
         return c;
     }
 
+    // ===== 목 세팅 헬퍼 =====
+
+    private void mockFindCategory(Category category) {
+        given(categoryRepository.findById(category.getId())).willReturn(Optional.of(category));
+    }
+
+    private void mockCategoryNotFound(Long categoryId) {
+        given(categoryRepository.findById(categoryId)).willReturn(Optional.empty());
+    }
+
+    private void mockAllCategories(Category... categories) {
+        given(categoryRepository.findAllByOrderByIdAsc()).willReturn(List.of(categories));
+    }
+
+    private void mockSaveReturns(Category category) {
+        given(categoryRepository.save(any(Category.class))).willReturn(category);
+    }
+
+    private void mockProductMappingExists(boolean exists) {
+        given(productCategoryMappingRepository.existsByCategoryIdIn(anyList())).willReturn(exists);
+    }
+
     @Nested
     @DisplayName("create - 카테고리 생성")
     class Create {
@@ -61,8 +83,7 @@ class CategoryServiceTest {
         void create_root_success() {
             // given
             given(categoryRepository.existsByParentIsNullAndName("전자기기")).willReturn(false);
-            given(categoryRepository.save(any(Category.class)))
-                    .willReturn(category(1L, "전자기기", null));
+            mockSaveReturns(category(1L, "전자기기", null));
 
             // when
             CategoryResponse response =
@@ -79,10 +100,9 @@ class CategoryServiceTest {
         void create_child_success() {
             // given
             Category root = category(1L, "전자기기", null);
-            given(categoryRepository.findById(1L)).willReturn(Optional.of(root));
+            mockFindCategory(root);
             given(categoryRepository.existsByParentIdAndName(1L, "노트북")).willReturn(false);
-            given(categoryRepository.save(any(Category.class)))
-                    .willReturn(category(2L, "노트북", root));
+            mockSaveReturns(category(2L, "노트북", root));
 
             // when
             CategoryResponse response =
@@ -97,7 +117,7 @@ class CategoryServiceTest {
         @DisplayName("존재하지 않는 parentId면 CATEGORY_001 예외")
         void create_parentNotFound_throwsCategory001() {
             // given
-            given(categoryRepository.findById(99L)).willReturn(Optional.empty());
+            mockCategoryNotFound(99L);
 
             // when & then
             assertThatThrownBy(
@@ -113,7 +133,7 @@ class CategoryServiceTest {
             Category root = category(1L, "1단", null);
             Category mid = category(2L, "2단", root);
             Category leaf = category(3L, "3단", mid);
-            given(categoryRepository.findById(3L)).willReturn(Optional.of(leaf));
+            mockFindCategory(leaf);
 
             // when & then
             assertThatThrownBy(
@@ -140,7 +160,7 @@ class CategoryServiceTest {
         void create_childDuplicateName_throwsCategory002() {
             // given
             Category root = category(1L, "전자기기", null);
-            given(categoryRepository.findById(1L)).willReturn(Optional.of(root));
+            mockFindCategory(root);
             given(categoryRepository.existsByParentIdAndName(1L, "노트북")).willReturn(true);
 
             // when & then
@@ -161,7 +181,7 @@ class CategoryServiceTest {
             // given
             Category root = category(1L, "전자기기", null);
             Category child = category(2L, "노트북", root);
-            given(categoryRepository.findById(2L)).willReturn(Optional.of(child));
+            mockFindCategory(child);
             given(categoryRepository.existsByParentIdAndNameAndIdNot(1L, "랩탑", 2L))
                     .willReturn(false);
 
@@ -179,7 +199,7 @@ class CategoryServiceTest {
             // given
             Category root = category(1L, "전자기기", null);
             Category child = category(2L, "노트북", root);
-            given(categoryRepository.findById(2L)).willReturn(Optional.of(child));
+            mockFindCategory(child);
             given(categoryRepository.existsByParentIdAndNameAndIdNot(1L, "노트북", 2L))
                     .willReturn(false);
 
@@ -195,7 +215,7 @@ class CategoryServiceTest {
         @DisplayName("존재하지 않는 카테고리면 CATEGORY_001 예외")
         void updateName_categoryNotFound_throwsCategory001() {
             // given
-            given(categoryRepository.findById(99L)).willReturn(Optional.empty());
+            mockCategoryNotFound(99L);
 
             // when & then
             assertThatThrownBy(
@@ -210,7 +230,7 @@ class CategoryServiceTest {
             // given
             Category root = category(1L, "전자기기", null);
             Category child = category(2L, "노트북", root);
-            given(categoryRepository.findById(2L)).willReturn(Optional.of(child));
+            mockFindCategory(child);
             given(categoryRepository.existsByParentIdAndNameAndIdNot(1L, "태블릿", 2L))
                     .willReturn(true);
 
@@ -231,10 +251,9 @@ class CategoryServiceTest {
         void delete_single_success() {
             // given
             Category root = category(1L, "전자기기", null);
-            given(categoryRepository.findById(1L)).willReturn(Optional.of(root));
-            given(categoryRepository.findAllByOrderByIdAsc()).willReturn(List.of(root));
-            given(productCategoryMappingRepository.existsByCategoryIdIn(List.of(1L)))
-                    .willReturn(false);
+            mockFindCategory(root);
+            mockAllCategories(root);
+            mockProductMappingExists(false);
 
             // when
             categoryService.delete(1L);
@@ -250,11 +269,9 @@ class CategoryServiceTest {
             Category root = category(1L, "전자기기", null);
             Category child = category(2L, "노트북", root);
             Category grand = category(3L, "게이밍노트북", child);
-            given(categoryRepository.findById(1L)).willReturn(Optional.of(root));
-            given(categoryRepository.findAllByOrderByIdAsc())
-                    .willReturn(List.of(root, child, grand));
-            given(productCategoryMappingRepository.existsByCategoryIdIn(anyList()))
-                    .willReturn(false);
+            mockFindCategory(root);
+            mockAllCategories(root, child, grand);
+            mockProductMappingExists(false);
 
             // when
             categoryService.delete(1L);
@@ -269,7 +286,7 @@ class CategoryServiceTest {
         @DisplayName("존재하지 않는 카테고리면 CATEGORY_001 예외")
         void delete_categoryNotFound_throwsCategory001() {
             // given
-            given(categoryRepository.findById(99L)).willReturn(Optional.empty());
+            mockCategoryNotFound(99L);
 
             // when & then
             assertThatThrownBy(() -> categoryService.delete(99L))
@@ -282,10 +299,9 @@ class CategoryServiceTest {
         void delete_mappingOnSelf_throwsCategory004() {
             // given
             Category root = category(1L, "전자기기", null);
-            given(categoryRepository.findById(1L)).willReturn(Optional.of(root));
-            given(categoryRepository.findAllByOrderByIdAsc()).willReturn(List.of(root));
-            given(productCategoryMappingRepository.existsByCategoryIdIn(List.of(1L)))
-                    .willReturn(true);
+            mockFindCategory(root);
+            mockAllCategories(root);
+            mockProductMappingExists(true);
 
             // when & then
             assertThatThrownBy(() -> categoryService.delete(1L))
@@ -300,11 +316,9 @@ class CategoryServiceTest {
             // given
             Category root = category(1L, "전자기기", null);
             Category child = category(2L, "노트북", root);
-            given(categoryRepository.findById(1L)).willReturn(Optional.of(root));
-            given(categoryRepository.findAllByOrderByIdAsc())
-                    .willReturn(List.of(root, child));
-            given(productCategoryMappingRepository.existsByCategoryIdIn(anyList()))
-                    .willReturn(true);
+            mockFindCategory(root);
+            mockAllCategories(root, child);
+            mockProductMappingExists(true);
 
             // when & then
             assertThatThrownBy(() -> categoryService.delete(1L))
@@ -322,7 +336,7 @@ class CategoryServiceTest {
         @DisplayName("카테고리가 없으면 빈 리스트를 반환한다")
         void getTree_empty() {
             // given
-            given(categoryRepository.findAllByOrderByIdAsc()).willReturn(List.of());
+            mockAllCategories();
 
             // when
             List<CategoryTreeResponse> tree = categoryService.getTree();
@@ -336,7 +350,7 @@ class CategoryServiceTest {
         void getTree_singleRoot() {
             // given
             Category root = category(1L, "전자기기", null);
-            given(categoryRepository.findAllByOrderByIdAsc()).willReturn(List.of(root));
+            mockAllCategories(root);
 
             // when
             List<CategoryTreeResponse> tree = categoryService.getTree();
@@ -354,8 +368,7 @@ class CategoryServiceTest {
             Category root = category(1L, "전자기기", null);
             Category child = category(2L, "노트북", root);
             Category grand = category(3L, "게이밍노트북", child);
-            given(categoryRepository.findAllByOrderByIdAsc())
-                    .willReturn(List.of(root, child, grand));
+            mockAllCategories(root, child, grand);
 
             // when
             List<CategoryTreeResponse> tree = categoryService.getTree();
@@ -380,8 +393,7 @@ class CategoryServiceTest {
             Category child2 = category(2L, "노트북", root);
             Category child3 = category(3L, "태블릿", root);
             // findAllByOrderByIdAsc 결과는 id 오름차순
-            given(categoryRepository.findAllByOrderByIdAsc())
-                    .willReturn(List.of(root, child2, child3));
+            mockAllCategories(root, child2, child3);
 
             // when
             List<CategoryTreeResponse> tree = categoryService.getTree();

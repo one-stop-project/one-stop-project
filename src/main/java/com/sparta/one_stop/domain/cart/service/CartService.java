@@ -16,14 +16,12 @@ import com.sparta.one_stop.domain.user.repository.UserRepository;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
 @Service
-@Slf4j
 @RequiredArgsConstructor
 @Transactional
 public class CartService {
@@ -80,7 +78,7 @@ public class CartService {
         // 이미 존재하면 수량 증가
         if (cartItem != null) {
 
-            long nextQuantity =
+            int nextQuantity =
                 cartItem.getQuantity() + request.quantity();
 
             // 재고 초과 검증
@@ -108,18 +106,23 @@ public class CartService {
 
     /**
      * 장바구니 조회
+     * - 장바구니가 없으면 빈 장바구니 응답 반환
      */
     @Transactional(readOnly = true)
     public CartResponse getCart(Long userId) {
 
-        Cart cart = cartRepository.findByUserId(userId)
-            .orElseThrow(() -> new CustomException(ErrorCode.CART_003));
+        return cartRepository.findByUserId(userId)
+            .map(cart -> {
+                List<CartItem> cartItems = cartItemRepository.findAllByCartId(
+                    cart.getId()
+                );
 
-        List<CartItem> cartItems = cartItemRepository.findAllByCartId(
-            cart.getId()
-        );
-
-        return CartResponse.of(cart, cartItems);
+                return CartResponse.of(
+                    cart,
+                    cartItems
+                );
+            })
+            .orElseGet(CartResponse::empty);
     }
 
     /**
@@ -166,6 +169,7 @@ public class CartService {
             );
         }
 
+        // 요청 수량이 현재 수량과 같으면 별도 변경 없이 현재 상태 반환
         return UpdateCartItemResponse.of(
             cartItemId,
             requestQuantity
@@ -250,11 +254,11 @@ public class CartService {
     }
 
     /**
-     * 장바구니 수량이 재고를 초과하는지 검증
+     * 요청 수량 또는 변경 후 수량이 상품 재고를 초과하는지 검증
      */
     private void validateStockLimit(
         ProductItem productItem,
-        long quantity
+        int quantity
     ) {
 
         if (quantity > productItem.getStock()) {
@@ -264,22 +268,21 @@ public class CartService {
 
     /**
      * 장바구니 수량 증가 가능 여부 검증
+     * - nextQuantity는 변경 후 최종 수량
      * - STOP 상품은 수량 증가 불가
-     * - 변경 후 수량은 재고를 초과할 수 없음
+     * - 변경 후 최종 수량은 재고를 초과할 수 없음
      */
     private void validateIncreaseCartItemQuantity(
         ProductItem productItem,
-        int requestQuantity
+        int nextQuantity
     ) {
-
         if (!productItem.isOnSale()) {
             throw new CustomException(ErrorCode.CART_001);
         }
 
-        // 재고 초과 검증
         validateStockLimit(
             productItem,
-            requestQuantity
+            nextQuantity
         );
     }
 

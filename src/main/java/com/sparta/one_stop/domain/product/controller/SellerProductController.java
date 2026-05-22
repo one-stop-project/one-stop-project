@@ -1,10 +1,14 @@
 package com.sparta.one_stop.domain.product.controller;
 
 import com.sparta.one_stop.domain.product.dto.request.ProductCreateRequest;
+import com.sparta.one_stop.domain.product.dto.request.ProductImageAddRequest;
 import com.sparta.one_stop.domain.product.dto.request.ProductUpdateRequest;
 import com.sparta.one_stop.domain.product.dto.response.ProductCreateResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductDeleteResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductDetailResponse;
+import com.sparta.one_stop.domain.product.dto.response.ProductImageAddResponse;
+import com.sparta.one_stop.domain.product.dto.response.ProductImageDeleteResponse;
+import com.sparta.one_stop.domain.product.dto.response.ProductImageThumbnailResponse;
 import com.sparta.one_stop.domain.product.dto.response.SellerProductListResponse;
 import com.sparta.one_stop.domain.product.service.SellerProductService;
 import com.sparta.one_stop.global.response.ApiResponse;
@@ -83,6 +87,47 @@ public class SellerProductController {
         @PathVariable Long productId
     ) {
         ProductDeleteResponse response = sellerProductService.delete(authUser.userId(), productId);
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    // 상품 이미지 삭제 (Soft Delete)
+    @Operation(summary = "상품 이미지 삭제 (Soft Delete)")
+    @DeleteMapping("/{productId}/images/{imageId}")
+    public ResponseEntity<ApiResponse<ProductImageDeleteResponse>> deleteImage(
+        @AuthenticationPrincipal AuthUser authUser,
+        @PathVariable Long productId,
+        @PathVariable Long imageId
+    ) {
+        ProductImageDeleteResponse response =
+            sellerProductService.deleteImage(authUser.userId(), productId, imageId);
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    // 상품 이미지 추가
+    @Operation(summary = "상품 이미지 추가")
+    @PostMapping("/{productId}/images")
+    public ResponseEntity<ApiResponse<ProductImageAddResponse>> addImages(
+        @AuthenticationPrincipal AuthUser authUser,
+        @PathVariable Long productId,
+        @Valid @RequestBody ProductImageAddRequest request
+    ) {
+        ProductImageAddResponse response =
+            sellerProductService.addImages(authUser.userId(), productId, request);
+        return ResponseEntity
+            .status(HttpStatus.CREATED)
+            .body(ApiResponse.success(response));
+    }
+
+    // 상품 대표 이미지(썸네일) 변경
+    @Operation(summary = "상품 대표 이미지(썸네일) 변경")
+    @PatchMapping("/{productId}/images/{imageId}/thumbnail")
+    public ResponseEntity<ApiResponse<ProductImageThumbnailResponse>> changeThumbnail(
+        @AuthenticationPrincipal AuthUser authUser,
+        @PathVariable Long productId,
+        @PathVariable Long imageId
+    ) {
+        ProductImageThumbnailResponse response =
+            sellerProductService.changeThumbnail(authUser.userId(), productId, imageId);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 }

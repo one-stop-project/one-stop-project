@@ -1,5 +1,6 @@
 package com.sparta.one_stop.domain.product.entity;
 
+import com.sparta.one_stop.global.entity.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -7,7 +8,7 @@ import lombok.*;
 @Table(name = "related_product")
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class RelatedProduct {
+public class RelatedProduct extends BaseEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

@@ -1,5 +1,6 @@
 package com.sparta.one_stop.domain.product.entity;
 
+import com.sparta.one_stop.global.entity.BaseEntity;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -12,7 +13,7 @@ import lombok.*;
         })
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class ProductCategoryMapping {
+public class ProductCategoryMapping extends BaseEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

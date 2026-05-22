@@ -65,6 +65,10 @@ public class OrderItem extends BaseEntity {
     @Column(name = "price", nullable = false)
     private Long price;
 
+    // 주문 시점 썸네일 URL 스냅샷
+    @Column(name = "thumbnail_url", length = 500)
+    private String thumbnailUrl;
+
     // 주문 상품 상태
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
@@ -77,7 +81,8 @@ public class OrderItem extends BaseEntity {
         Seller seller,
         String itemName,
         Integer quantity,
-        Long price
+        Long price,
+        String thumbnailUrl
     ) {
 
         if (itemName == null || itemName.isBlank()) {
@@ -98,10 +103,22 @@ public class OrderItem extends BaseEntity {
         this.itemName = itemName;
         this.quantity = quantity;
         this.price = price;
-        this.status = OrderItemStatus.ORDERED;
+        this.thumbnailUrl = thumbnailUrl;
+        this.status = OrderItemStatus.PENDING_PAYMENT;
     }
 
     // == 비즈니스 메서드 ==
+
+    // 결제 완료 후 주문 접수 처리
+    public void markOrdered() {
+
+        if (this.status != OrderItemStatus.PENDING_PAYMENT) {
+            throw new IllegalStateException("주문 접수는 PENDING_PAYMENT 상태에서만 처리할 수 있습니다.");
+        }
+
+        this.status = OrderItemStatus.ORDERED;
+    }
+
     // 주문 확정
     public void confirm() {
 
@@ -140,6 +157,17 @@ public class OrderItem extends BaseEntity {
         }
 
         this.status = OrderItemStatus.REJECTED;
+    }
+
+    // 주문 취소
+    public void cancel() {
+        if (this.status != OrderItemStatus.PENDING_PAYMENT
+            && this.status != OrderItemStatus.ORDERED
+            && this.status != OrderItemStatus.CONFIRMED)  {
+            throw new IllegalStateException("현재 상태에서는 주문 상품을 취소할 수 없습니다.");
+        }
+
+        this.status = OrderItemStatus.CANCELLED;
     }
 
 }
