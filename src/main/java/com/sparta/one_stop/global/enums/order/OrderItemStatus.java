@@ -12,6 +12,7 @@ public enum OrderItemStatus {
     CONFIRMED("판매자 확인 완료"),
     SHIPPING("배송 중"),
     DELIVERED("배송 완료"),
+    CANCELLED("주문 취소"),
     REJECTED("주문 거절");
 
     private final String description;
