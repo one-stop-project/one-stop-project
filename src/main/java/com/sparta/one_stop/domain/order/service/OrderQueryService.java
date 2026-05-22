@@ -2,7 +2,6 @@ package com.sparta.one_stop.domain.order.service;
 
 import com.sparta.one_stop.domain.delivery.entity.Delivery;
 import com.sparta.one_stop.domain.delivery.repository.DeliveryRepository;
-import com.sparta.one_stop.domain.order.dto.response.DeliverySummaryResponse;
 import com.sparta.one_stop.domain.order.dto.response.OrderDetailItemResponse;
 import com.sparta.one_stop.domain.order.dto.response.OrderDetailResponse;
 import com.sparta.one_stop.domain.order.dto.response.OrderPageResponse;
@@ -115,7 +114,10 @@ public class OrderQueryService {
             ));
 
         List<OrderDetailItemResponse> itemResponses = orderItems.stream()
-            .map(orderItem -> toOrderDetailItemResponse(orderItem, deliveryMap))
+            .map(orderItem -> OrderDetailItemResponse.of(
+                orderItem,
+                deliveryMap.get(orderItem.getId())
+            ))
             .toList();
 
         ReceiverResponse receiver = new ReceiverResponse(
@@ -172,32 +174,6 @@ public class OrderQueryService {
             firstItemName,
             firstItemThumbnail,
             order.getCreatedAt()
-        );
-    }
-
-    /**
-     * 주문 상세 상품 응답 DTO 변환
-     */
-    private OrderDetailItemResponse toOrderDetailItemResponse(
-        OrderItem orderItem,
-        Map<Long, Delivery> deliveryMap
-    ) {
-        Delivery delivery = deliveryMap.get(orderItem.getId());
-
-        // 결제 전 주문(PENDING_PAYMENT)은 아직 배송 정보가 생성되지 않았을 수 있음
-        DeliverySummaryResponse deliveryResponse = delivery != null
-            ? DeliverySummaryResponse.of(delivery)
-            : null;
-
-        return new OrderDetailItemResponse(
-            orderItem.getId(),
-            orderItem.getProductItem().getId(),
-            orderItem.getItemName(),
-            orderItem.getSeller().getId(),
-            orderItem.getQuantity(),
-            orderItem.getPrice(),
-            orderItem.getStatus(),
-            deliveryResponse
         );
     }
 
