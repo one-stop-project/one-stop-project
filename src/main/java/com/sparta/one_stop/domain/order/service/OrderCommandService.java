@@ -130,7 +130,7 @@ public class OrderCommandService {
      * - 재고 복구
      * - Order / OrderItem 상태 취소 처리
      * - 주문 취소 이력 저장
-     * TODO: Delivery 상태 ORDER_CANCELLED 전환은 배송 도메인 반영 후 연동
+     * - Delivery 상태 ORDER_CANCELLED 처리
      * TODO: 포인트/쿠폰은 MVP 이후 연동
      */
     public CancelOrderResponse cancelOrder(
@@ -163,6 +163,18 @@ public class OrderCommandService {
                 .increaseStock(orderItem.getQuantity());
 
             orderItem.cancel();
+        }
+
+        // 배송 상태 ORDER_CANCELLED 처리
+        List<Long> orderItemIds = orderItems.stream()
+            .map(OrderItem::getId)
+            .toList();
+
+        List<Delivery> deliveries =
+            deliveryRepository.findAllByOrderItemIdIn(orderItemIds);
+
+        for (Delivery delivery : deliveries) {
+            delivery.cancelOrder();
         }
 
         order.cancel();

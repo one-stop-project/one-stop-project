@@ -21,8 +21,6 @@ import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-import java.time.LocalDateTime;
-
 @Entity
 @Table(name = "delivery")
 @Getter
@@ -80,11 +78,20 @@ public class Delivery extends BaseEntity {
             case INSTRUCT -> next == DeliveryStatus.DEPARTURE;
             case DEPARTURE -> next == DeliveryStatus.DELIVERING;
             case DELIVERING -> next == DeliveryStatus.FINAL_DELIVERY;
-            case FINAL_DELIVERY -> false;
+            case FINAL_DELIVERY, ORDER_CANCELLED -> false;
         };
         if (!valid) {
             throw new CustomException(ErrorCode.SHIPPING_002);
         }
+    }
+
+    // 주문 취소 처리
+    public void cancelOrder() {
+        if (!isCancelable()) {
+            throw new CustomException(ErrorCode.SHIPPING_002);
+        }
+
+        this.status = DeliveryStatus.ORDER_CANCELLED;
     }
 
     // 주문 취소 가능 배송 상태 여부
