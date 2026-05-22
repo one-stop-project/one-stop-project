@@ -11,7 +11,8 @@ public enum DeliveryStatus {
     INSTRUCT("상품준비중"),
     DEPARTURE("배송지시"),
     DELIVERING("배송중"),
-    FINAL_DELIVERY("배송완료");
+    FINAL_DELIVERY("배송완료"),
+    ORDER_CANCELLED("주문취소");
 
     private final String description;
 }

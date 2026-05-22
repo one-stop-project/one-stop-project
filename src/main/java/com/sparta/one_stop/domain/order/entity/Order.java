@@ -43,7 +43,7 @@ public class Order extends BaseEntity {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-    // MVP 단계에서 쿠폰과 구독은 구현 안함(추후 구현 예정)
+//    //TODO: MVP 단계에서 쿠폰과 구독은 구현 안함(추후 구현 예정)
 //    // 구독 정보
 //    @ManyToOne(fetch = FetchType.LAZY)
 //    @JoinColumn(name = "subscription_id")

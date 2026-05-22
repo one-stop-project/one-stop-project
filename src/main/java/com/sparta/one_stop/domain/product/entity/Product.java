@@ -5,14 +5,12 @@ import com.sparta.one_stop.global.entity.BaseEntity;
 import com.sparta.one_stop.global.enums.product.ProductStatus;
 import jakarta.persistence.*;
 import lombok.*;
-import org.springframework.data.annotation.CreatedDate;
 
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
 
 // idx_product_name_fulltext: FULLTEXT(name, description) — DB 마이그레이션으로 별도 관리
-//BaseEntity 추가 필요
 @Entity
 @Table(name = "product",
         indexes = {
@@ -105,6 +103,11 @@ public class Product extends BaseEntity {
         if (name != null) this.name = name;
         if (description != null) this.description = description;
         if (thumbnailUrl != null) this.thumbnailUrl = thumbnailUrl;
+    }
+
+    // 대표 이미지(display_order=1) 변경 시 썸네일 URL 동기화
+    public void changeThumbnailUrl(String thumbnailUrl) {
+        this.thumbnailUrl = thumbnailUrl;
     }
 
     // 관리자 승인 처리

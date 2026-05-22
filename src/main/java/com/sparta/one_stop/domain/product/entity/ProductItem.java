@@ -1,5 +1,6 @@
 package com.sparta.one_stop.domain.product.entity;
 
+import com.sparta.one_stop.global.entity.BaseEntity;
 import com.sparta.one_stop.global.enums.product.ProductItemStatus;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
@@ -23,7 +24,6 @@ import lombok.NoArgsConstructor;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
-//BaseEntity 추가 필요
 @Entity
 @Table(name = "product_item",
         indexes = {
@@ -31,7 +31,7 @@ import java.util.stream.Stream;
         })
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class ProductItem {
+public class ProductItem extends BaseEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

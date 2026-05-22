@@ -43,4 +43,15 @@ public record CartResponse(
             itemCount
         );
     }
+
+    // 아직 장바구니가 생성되지 않은 사용자를 위한 빈 응답
+    public static CartResponse empty() {
+        return new CartResponse(
+            null,
+            List.of(),
+            0L,
+            0
+        );
+    }
+
 }
