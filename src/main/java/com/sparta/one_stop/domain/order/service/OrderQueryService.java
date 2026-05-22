@@ -68,9 +68,28 @@ public class OrderQueryService {
             pageRequest
         );
 
-        List<OrderSummaryResponse> content = orders.getContent()
-            .stream()
-            .map(this::toOrderSummaryResponse)
+        List<Order> orderContent = orders.getContent();
+
+        List<Long> orderIds = orderContent.stream()
+            .map(Order::getId)
+            .toList();
+
+        // 주문 목록의 orderId를 기준으로 주문 상품을 일괄 조회하여 N+1 방지
+        List<OrderItem> orderItems = orderIds.isEmpty()
+            ? List.of()
+            : orderItemRepository.findAllByOrderIdInWithProduct(orderIds);
+
+        // 주문별 주문 상품 목록을 빠르게 매핑하기 위해 orderId 기준으로 그룹핑
+        Map<Long, List<OrderItem>> orderItemMap = orderItems.stream()
+            .collect(Collectors.groupingBy(orderItem ->
+                orderItem.getOrder().getId()
+            ));
+
+        List<OrderSummaryResponse> content = orderContent.stream()
+            .map(order -> OrderSummaryResponse.of(
+                order,
+                orderItemMap.getOrDefault(order.getId(), List.of())
+            ))
             .toList();
 
         return new OrderPageResponse(
@@ -136,43 +155,6 @@ public class OrderQueryService {
             order.getDiscountPrice(),
             order.getUsedPoint(),
             order.getFinalPrice(),
-            order.getCreatedAt()
-        );
-    }
-
-    /**
-     * 주문 목록 응답 DTO 변환
-     * TODO: 주문 목록 조회 시 주문별 orderItems 개별 조회로 N+1 발생 가능
-     * 추후 orderId 목록 기반 일괄 조회 또는 Projection 쿼리로 개선 예정
-     */
-    private OrderSummaryResponse toOrderSummaryResponse(Order order) {
-        List<OrderItem> orderItems = orderItemRepository.findAllByOrderId(order.getId());
-
-        OrderItem firstItem = orderItems.isEmpty()
-            ? null
-            : orderItems.get(0);
-
-        String firstItemName = firstItem != null
-            ? firstItem.getItemName()
-            : null;
-
-        String firstItemThumbnail = firstItem != null
-            ? firstItem.getProductItem()
-              .getProduct()
-              .getThumbnailUrl()
-            : null;
-
-        int itemCount = orderItems.stream()
-            .mapToInt(OrderItem::getQuantity)
-            .sum();
-
-        return new OrderSummaryResponse(
-            order.getId(),
-            order.getFinalPrice(),
-            order.getStatus(),
-            itemCount,
-            firstItemName,
-            firstItemThumbnail,
             order.getCreatedAt()
         );
     }
