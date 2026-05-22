@@ -16,15 +16,15 @@ public interface OrderItemRepository extends JpaRepository<OrderItem, Long> {
     List<OrderItem> findAllByOrderId(Long orderId);
 
     // 주문 목록 조회용
-    // 여러 주문 ID에 해당하는 주문 상품, 상품 옵션, 상품 정보를 한 번에 조회하여 N+1 문제를 방지
+    // 여러 주문 ID에 해당하는 주문 상품을 한 번에 조회하여 주문별 개별 조회 N+1을 방지
+    // orderId 기준 그룹핑에 필요한 Order 연관 정보를 함께 조회
     @Query("""
-    select oi
-    from OrderItem oi
-    join fetch oi.productItem pi
-    join fetch pi.product p
-    where oi.order.id in :orderIds
+        select oi
+        from OrderItem oi
+        join fetch oi.order o
+        where o.id in :orderIds
     """)
-    List<OrderItem> findAllByOrderIdInWithProduct(
+    List<OrderItem> findAllByOrderIdInWithOrder(
         @Param("orderIds") List<Long> orderIds
     );
 

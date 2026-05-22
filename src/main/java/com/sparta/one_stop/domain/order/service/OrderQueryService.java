@@ -77,7 +77,7 @@ public class OrderQueryService {
         // 주문 목록의 orderId를 기준으로 주문 상품을 일괄 조회하여 N+1 방지
         List<OrderItem> orderItems = orderIds.isEmpty()
             ? List.of()
-            : orderItemRepository.findAllByOrderIdInWithProduct(orderIds);
+            : orderItemRepository.findAllByOrderIdInWithOrder(orderIds);
 
         // 주문별 주문 상품 목록을 빠르게 매핑하기 위해 orderId 기준으로 그룹핑
         Map<Long, List<OrderItem>> orderItemMap = orderItems.stream()

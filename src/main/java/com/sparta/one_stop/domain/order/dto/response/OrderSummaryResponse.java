@@ -29,7 +29,7 @@ public record OrderSummaryResponse(
      * 주문 목록 응답 DTO 변환
      * - 주문 상품 목록은 서비스에서 일괄 조회한 결과를 전달받음
      * - 주문별 주문 상품 개별 조회로 인한 N+1 문제를 방지
-     * - 대표 상품 썸네일 생성을 위해 Product 정보가 함께 조회되어 있어야 함
+     * - 대표 상품명/썸네일은 주문 시점 스냅샷 값을 사용
      */
     public static OrderSummaryResponse of(
         Order order,
@@ -44,9 +44,7 @@ public record OrderSummaryResponse(
             : null;
 
         String firstItemThumbnail = firstItem != null
-            ? firstItem.getProductItem()
-                .getProduct()
-                .getThumbnailUrl()
+            ? firstItem.getThumbnailUrl()
             : null;
 
         int itemCount = orderItems.stream()

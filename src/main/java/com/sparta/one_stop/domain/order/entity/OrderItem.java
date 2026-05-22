@@ -65,6 +65,10 @@ public class OrderItem extends BaseEntity {
     @Column(name = "price", nullable = false)
     private Long price;
 
+    // 주문 시점 썸네일 URL 스냅샷
+    @Column(name = "thumbnail_url", length = 500)
+    private String thumbnailUrl;
+
     // 주문 상품 상태
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 20)
@@ -77,7 +81,8 @@ public class OrderItem extends BaseEntity {
         Seller seller,
         String itemName,
         Integer quantity,
-        Long price
+        Long price,
+        String thumbnailUrl
     ) {
 
         if (itemName == null || itemName.isBlank()) {
@@ -98,6 +103,7 @@ public class OrderItem extends BaseEntity {
         this.itemName = itemName;
         this.quantity = quantity;
         this.price = price;
+        this.thumbnailUrl = thumbnailUrl;
         this.status = OrderItemStatus.PENDING_PAYMENT;
     }
 
