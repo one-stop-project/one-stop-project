@@ -1,12 +1,15 @@
 package com.sparta.one_stop.domain.product.service;
 
 import com.sparta.one_stop.domain.product.dto.request.ProductCreateRequest;
+import com.sparta.one_stop.domain.product.dto.request.ProductImageAddRequest;
 import com.sparta.one_stop.domain.product.dto.request.ProductItemCreateRequest;
 import com.sparta.one_stop.domain.product.dto.request.ProductUpdateRequest;
 import com.sparta.one_stop.domain.product.dto.response.ProductCreateResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductDeleteResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductDetailResponse;
+import com.sparta.one_stop.domain.product.dto.response.ProductImageAddResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductImageDeleteResponse;
+import com.sparta.one_stop.domain.product.dto.response.ProductImageThumbnailResponse;
 import com.sparta.one_stop.domain.product.dto.response.SellerProductListResponse;
 import com.sparta.one_stop.domain.product.entity.Category;
 import com.sparta.one_stop.domain.product.entity.Product;
@@ -178,6 +181,95 @@ public class SellerProductService {
         return ProductImageDeleteResponse.builder()
             .deletedImageId(imageId)
             .remainingImageCount(remaining.size())
+            .thumbnailUrl(product.getThumbnailUrl())
+            .build();
+    }
+
+    // 상품 이미지 추가
+    @Transactional
+    public ProductImageAddResponse addImages(Long userId, Long productId, ProductImageAddRequest request) {
+        Seller seller = findApprovedSeller(userId);
+
+        // 낙관적 락 강제 증가 -> 같은 상품 이미지 동시 변경 직렬화
+        Product product = productRepository.findByIdForImageUpdate(productId)
+            .orElseThrow(() -> new CustomException(ErrorCode.PRODUCT_001));
+
+        if (!product.getSeller().getId().equals(seller.getId())) {
+            throw new CustomException(ErrorCode.PRODUCT_008);
+        }
+
+        // DISCONTINUED 상태는 수정 불가 (FORCE_INACTIVE는 허용)
+        if (!product.isEditable()) {
+            throw new CustomException(ErrorCode.PRODUCT_010);
+        }
+
+        List<ProductImage> activeImages = productImageRepository
+            .findByProductIdAndStatusOrderByDisplayOrderAsc(productId, ProductImageStatus.ACTIVE);
+
+        // 추가 후 ACTIVE 이미지가 최대 10장을 초과하면 거부
+        List<String> imageUrls = request.getImageUrls();
+        if (activeImages.size() + imageUrls.size() > 10) {
+            throw new CustomException(ErrorCode.PRODUCT_006);
+        }
+
+        // 기존 이미지는 1..N 연속 정렬 유지 -> 마지막 순서 다음부터 배치
+        int nextOrder = activeImages.size();
+        for (int i = 0; i < imageUrls.size(); i++) {
+            ProductImage image = ProductImage.builder()
+                .product(product)
+                .imageUrl(imageUrls.get(i))
+                .displayOrder(nextOrder + i + 1)
+                .build();
+            product.addProductImage(image);
+        }
+
+        return ProductImageAddResponse.builder()
+            .addedImageCount(imageUrls.size())
+            .totalImageCount(activeImages.size() + imageUrls.size())
+            .thumbnailUrl(product.getThumbnailUrl())
+            .build();
+    }
+
+    // 대표 이미지(썸네일) 변경 (선택 이미지를 display_order=1로 승격 + 재정렬 + 썸네일 동기화)
+    @Transactional
+    public ProductImageThumbnailResponse changeThumbnail(Long userId, Long productId, Long imageId) {
+        Seller seller = findApprovedSeller(userId);
+
+        // 낙관적 락 강제 증가 -> 같은 상품 이미지 동시 변경 직렬화
+        Product product = productRepository.findByIdForImageUpdate(productId)
+            .orElseThrow(() -> new CustomException(ErrorCode.PRODUCT_001));
+
+        if (!product.getSeller().getId().equals(seller.getId())) {
+            throw new CustomException(ErrorCode.PRODUCT_008);
+        }
+
+        // DISCONTINUED 상태는 수정 불가 (FORCE_INACTIVE는 허용)
+        if (!product.isEditable()) {
+            throw new CustomException(ErrorCode.PRODUCT_010);
+        }
+
+        List<ProductImage> activeImages = productImageRepository
+            .findByProductIdAndStatusOrderByDisplayOrderAsc(productId, ProductImageStatus.ACTIVE);
+
+        ProductImage target = activeImages.stream()
+            .filter(image -> image.getId().equals(imageId))
+            .findFirst()
+            .orElseThrow(() -> new CustomException(ErrorCode.PRODUCT_011));
+
+        // 선택 이미지를 대표로 승격, 나머지는 기존 상대 순서 유지
+        target.updateDisplayOrder(1);
+        int order = 2;
+        for (ProductImage image : activeImages) {
+            if (!image.getId().equals(imageId)) {
+                image.updateDisplayOrder(order++);
+            }
+        }
+
+        // 대표 이미지 URL을 상품 썸네일에 동기화
+        product.changeThumbnailUrl(target.getImageUrl());
+
+        return ProductImageThumbnailResponse.builder()
+            .thumbnailImageId(target.getId())
             .thumbnailUrl(product.getThumbnailUrl())
             .build();
     }
