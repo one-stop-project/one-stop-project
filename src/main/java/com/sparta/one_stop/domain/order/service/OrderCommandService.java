@@ -3,6 +3,8 @@ package com.sparta.one_stop.domain.order.service;
 import com.sparta.one_stop.domain.cart.entity.CartItem;
 import com.sparta.one_stop.domain.cart.repository.CartItemRepository;
 import com.sparta.one_stop.domain.delivery.entity.Delivery;
+import com.sparta.one_stop.domain.delivery.entity.DeliveryHistory;
+import com.sparta.one_stop.domain.delivery.repository.DeliveryHistoryRepository;
 import com.sparta.one_stop.domain.delivery.repository.DeliveryRepository;
 import com.sparta.one_stop.domain.order.dto.request.CancelOrderRequest;
 import com.sparta.one_stop.domain.order.dto.request.CreateOrderItemRequest;
@@ -21,6 +23,7 @@ import com.sparta.one_stop.domain.product.entity.ProductItem;
 import com.sparta.one_stop.domain.product.repository.ProductItemRepository;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.UserRepository;
+import com.sparta.one_stop.global.enums.delivery.DeliveryStatus;
 import com.sparta.one_stop.global.enums.order.CancelActorType;
 import com.sparta.one_stop.global.enums.order.OrderCancelType;
 import com.sparta.one_stop.global.enums.order.OrderStatus;
@@ -50,6 +53,7 @@ public class OrderCommandService {
     private final OrderItemRepository orderItemRepository;
     private final DeliveryRepository deliveryRepository;
     private final OrderCancelHistoryRepository orderCancelHistoryRepository;
+    private final DeliveryHistoryRepository deliveryHistoryRepository;
 
     /**
      * 주문 생성 1단계
@@ -128,9 +132,9 @@ public class OrderCommandService {
      * - 이미 취소된 주문 중복 취소 방지
      * - 배송 상태 기준 취소 가능 여부 검증
      * - 재고 복구
-     * - Order / OrderItem 상태 취소 처리
+     * - Order / OrderItem / Delivery 상태 취소 처리
      * - 주문 취소 이력 저장
-     * - Delivery 상태 ORDER_CANCELLED 처리
+     * - 배송 취소 이력 저장
      * TODO: 포인트/쿠폰은 MVP 이후 연동
      */
     public CancelOrderResponse cancelOrder(
@@ -152,9 +156,15 @@ public class OrderCommandService {
 
         List<OrderItem> orderItems = orderItemRepository.findAllByOrderId(orderId);
 
-        validateCancelableDeliveryStatus(
+        List<Delivery> deliveries = findDeliveriesForCancel(
             order,
             orderItems
+        );
+
+        validateCancelableDeliveryStatus(
+            order,
+            orderItems,
+            deliveries
         );
 
         // 재고 복구 및 주문 상품 취소 처리
@@ -165,16 +175,20 @@ public class OrderCommandService {
             orderItem.cancel();
         }
 
-        // 배송 상태 ORDER_CANCELLED 처리
-        List<Long> orderItemIds = orderItems.stream()
-            .map(OrderItem::getId)
-            .toList();
+        // 배송 상태 ORDER_CANCELLED 처리 및 배송 이력 저장
+        if (!deliveries.isEmpty()) {
+            for (Delivery delivery : deliveries) {
+                delivery.cancelOrder();
+            }
 
-        List<Delivery> deliveries =
-            deliveryRepository.findAllByOrderItemIdIn(orderItemIds);
+            List<DeliveryHistory> deliveryHistories = deliveries.stream()
+                .map(delivery -> new DeliveryHistory(
+                    delivery,
+                    DeliveryStatus.ORDER_CANCELLED
+                ))
+                .toList();
 
-        for (Delivery delivery : deliveries) {
-            delivery.cancelOrder();
+            deliveryHistoryRepository.saveAll(deliveryHistories);
         }
 
         order.cancel();
@@ -411,16 +425,9 @@ public class OrderCommandService {
      */
     private void validateCancelableDeliveryStatus(
         Order order,
-        List<OrderItem> orderItems
+        List<OrderItem> orderItems,
+        List<Delivery> deliveries
     ) {
-        List<Long> orderItemIds = orderItems.stream()
-            .map(OrderItem::getId)
-            .toList();
-
-        List<Delivery> deliveries = deliveryRepository.findAllByOrderItemIdIn(
-            orderItemIds
-        );
-
         if (deliveries.isEmpty()) {
             if (order.getStatus() == OrderStatus.PENDING_PAYMENT) {
                 return;
@@ -439,6 +446,29 @@ public class OrderCommandService {
         if (hasNotCancelableDelivery) {
             throw new CustomException(ErrorCode.ORDER_008);
         }
+    }
+
+    /**
+     * 취소 대상 배송 목록 조회
+     * - 결제 전 주문은 배송 정보가 없을 수 있으므로 빈 목록 반환 가능
+     */
+    private List<Delivery> findDeliveriesForCancel(
+        Order order,
+        List<OrderItem> orderItems
+    ) {
+        List<Long> orderItemIds = orderItems.stream()
+            .map(OrderItem::getId)
+            .toList();
+
+        List<Delivery> deliveries = deliveryRepository.findAllByOrderItemIdIn(
+            orderItemIds
+        );
+
+        if (deliveries.isEmpty() && order.getStatus() == OrderStatus.PENDING_PAYMENT) {
+            return List.of();
+        }
+
+        return deliveries;
     }
 
     /**
