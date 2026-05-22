@@ -36,7 +36,7 @@ public class JwtAuthenticationEntryPoint implements AuthenticationEntryPoint {
         response.setCharacterEncoding("UTF-8");
         response.getWriter().write(objectMapper.writeValueAsString(
             ErrorResponse.of(ErrorCode.AUTH_007,
-                            authException.getMessage(),
+                            ErrorCode.AUTH_007.getMessage(),
                             request.getRequestURI())));
     }
 }

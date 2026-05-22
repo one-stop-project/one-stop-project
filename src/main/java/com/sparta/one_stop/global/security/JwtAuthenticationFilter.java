@@ -40,7 +40,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 // 토큰 유효성 검증 및 Claims 파싱
                 Claims claims = jwtTokenProvider.parseClaims(accessToken);
 
-                // [개선 2] 라이브러리 예외 대신 CustomException 사용
+                //  라이브러리 예외 대신 CustomException 사용
                 String jti = claims.getId();
                 if (redisTokenService.isBlacklisted(jti)) {
                     log.debug("블랙리스트 처리된 토큰 접근 차단: jti={}", jti); // [개선 8] warn -> debug로 낮춰 로그 폭발 방지
@@ -51,7 +51,6 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 setAuthentication(claims, request);
             }
 
-        // 예외가 발생했든 안 했든 필터 체인은 무조건 타도록 보장
         filterChain.doFilter(request, response);
     }
 

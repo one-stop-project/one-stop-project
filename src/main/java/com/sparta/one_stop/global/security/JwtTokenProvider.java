@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.convert.DurationUnit;
 import org.springframework.stereotype.Component;
+import io.jsonwebtoken.JwtException;
 
 import javax.crypto.SecretKey;
 import java.time.Duration;
@@ -154,24 +155,22 @@ public class JwtTokenProvider {
     /**
      * 토큰의 남은 만료 시간(초)을 계산합니다. (블랙리스트 저장용 TTL)
      */
-    public long getExpiration(String token) {
+    public long getExpirationSeconds(String token) {
         try {
-            // 버전 0.12.x 문법에 맞게 수정 및 key -> secretKey 변경
-            Date expiration = Jwts.parser()
+            Claims claims = Jwts.parser()
                 .verifyWith(secretKey)
                 .build()
                 .parseSignedClaims(token)
-                .getPayload()
-                .getExpiration();
+                .getPayload();
 
-            long now = new Date().getTime();
-            long remainTime = expiration.getTime() - now;
+            // 현재 시간(UTC 기준)과 비교가 필요할 수 있습니다.
+            // 현재는 서버 시간을 사용하고 계신데, 이는 아주 적절합니다.
+            long now = System.currentTimeMillis();
+            long remainTime = claims.getExpiration().getTime() - now;
 
-            return remainTime > 0 ? remainTime / 1000 : 0; // 남은 시간을 초(Seconds) 단위로 반환
-        } catch (ExpiredJwtException e) {
-            return 0; // 이미 만료된 토큰은 0을 반환 (블랙리스트에 넣을 필요 없음)
-        } catch (Exception e) {
-            return 0; // 파싱 실패 시 예외 처리
+            return remainTime > 0 ? remainTime / 1000 : 0;
+        } catch (JwtException e) { // ExpiredJwtException 포함한 모든 JWT 관련 예외를 포괄
+            return 0;
         }
     }
 
@@ -186,23 +185,13 @@ public class JwtTokenProvider {
         }
     }
 
-    public long getExpirationSeconds(String token) {
-        try {
-            Date expiration = parseClaims(token).getExpiration();
-            long remain = expiration.getTime() - System.currentTimeMillis();
-            return remain > 0 ? remain / 1000 : 0;
-        } catch (ExpiredJwtException e) {
-            return 0;
-        }
-    }
-
     public static final String BEARER_PREFIX = "Bearer ";
 
     /**
      * 헤더에서 순수 토큰만 추출합니다.
      */
     public String resolveToken(String bearerToken) {
-        // [개선 7] trim() 적용하여 안전성 극대화
+        //  trim() 적용하여 안전성 극대화
         if (bearerToken != null && bearerToken.trim().startsWith(BEARER_PREFIX)) {
             return bearerToken.trim().substring(BEARER_PREFIX.length()).trim();
         }
