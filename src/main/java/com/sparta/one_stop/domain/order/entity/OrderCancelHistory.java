@@ -45,7 +45,7 @@ public class OrderCancelHistory extends BaseEntity {
     @Column(name = "actor_type", nullable = false, length = 30)
     private CancelActorType actorType;
 
-    // 실제 처리자 ID, SYSTEM 처리 시 null 가능
+    // 실제 처리자 ID, 처리 주체 유형에 따라 필수 여부 결정
     @Column(name = "actor_id")
     private Long actorId;
 
@@ -89,6 +89,11 @@ public class OrderCancelHistory extends BaseEntity {
             throw new IllegalArgumentException("취소/거절 유형은 필수입니다.");
         }
 
+        validateActorId(
+            actorType,
+            actorId
+        );
+
         if (cancelledPrice == null || cancelledPrice < 0) {
             throw new IllegalArgumentException("취소/거절 금액은 0원 이상이어야 합니다.");
         }
@@ -105,6 +110,24 @@ public class OrderCancelHistory extends BaseEntity {
         this.reason = reason;
         this.cancelledPrice = cancelledPrice;
         this.restoredPoint = restoredPoint;
+    }
+
+    // 처리 주체 유형에 따른 actorId 필수 여부 검증
+    private void validateActorId(
+        CancelActorType actorType,
+        Long actorId
+    ) {
+        if (actorType.isActorIdRequired() && actorId == null) {
+            throw new IllegalArgumentException("처리자 ID는 필수입니다.");
+        }
+
+        if (!actorType.isActorIdRequired() && actorId != null) {
+            throw new IllegalArgumentException("해당 처리 주체는 actorId를 가질 수 없습니다.");
+        }
+
+        if (actorId != null && actorId <= 0) {
+            throw new IllegalArgumentException("처리자 ID는 1 이상이어야 합니다.");
+        }
     }
 
 }
