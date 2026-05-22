@@ -2,7 +2,6 @@ package com.sparta.one_stop.global.security;
 
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.sparta.one_stop.domain.auth.service.RedisTokenService;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import com.sparta.one_stop.global.response.ErrorResponse;

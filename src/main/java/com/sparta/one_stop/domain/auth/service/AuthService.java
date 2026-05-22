@@ -13,9 +13,11 @@ import com.sparta.one_stop.domain.user.entity.Seller;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.SellerRepository;
 import com.sparta.one_stop.domain.user.repository.UserRepository;
+import com.sparta.one_stop.global.enums.ratelimit.RateLimitPolicy;
 import com.sparta.one_stop.global.enums.user.UserRole;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
+import com.sparta.one_stop.global.ratelimit.RateLimitService;
 import com.sparta.one_stop.global.security.JwtTokenProvider;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.JwtException;
@@ -40,6 +42,8 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final RedisTokenService redisTokenService;
+    private final DeviceLimitService deviceLimitService;
+    private final RateLimitService rateLimitService;
 
     //  허용된 회원가입 Role 명시적 관리
     private static final Set<UserRole> ALLOWED_SIGNUP_ROLES = Set.of(UserRole.BUYER, UserRole.SELLER);
@@ -56,7 +60,10 @@ public class AuthService {
     //  POST /api/auth/signup — 회원가입
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     @Transactional
-    public SignUpResponse signup(SignUpRequest request) {
+    public SignUpResponse signup(SignUpRequest request, String clientIp) {
+
+        rateLimitService.tryConsume(RateLimitPolicy.SIGNUP_PER_IP, clientIp);
+
         if (!ALLOWED_SIGNUP_ROLES.contains(request.role())) {
             throw new CustomException(ErrorCode.AUTH_011, "허용되지 않은 가입 권한입니다.");
         }

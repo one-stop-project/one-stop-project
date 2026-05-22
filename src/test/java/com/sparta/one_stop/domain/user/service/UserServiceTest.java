@@ -1,5 +1,6 @@
 package com.sparta.one_stop.domain.user.service;
 
+import com.sparta.one_stop.domain.auth.event.AllDevicesLogoutEvent;
 import com.sparta.one_stop.domain.auth.service.RedisTokenService;
 import com.sparta.one_stop.domain.user.dto.request.PasswordChangeRequest;
 import com.sparta.one_stop.domain.user.dto.request.UserUpdateRequest;
@@ -7,6 +8,7 @@ import com.sparta.one_stop.domain.user.dto.request.WithdrawRequest;
 import com.sparta.one_stop.domain.user.dto.response.UserMeResponse;
 import com.sparta.one_stop.domain.user.dto.response.UserUpdateResponse;
 import com.sparta.one_stop.domain.user.entity.User;
+import com.sparta.one_stop.domain.user.repository.SellerRepository;
 import com.sparta.one_stop.domain.user.repository.UserRepository;
 import com.sparta.one_stop.global.enums.user.UserRole;
 import com.sparta.one_stop.global.enums.user.UserStatus;
@@ -20,6 +22,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.util.Optional;
 
@@ -37,15 +40,21 @@ class UserServiceTest {
     @Mock
     private UserRepository userRepository;
     @Mock
+    private SellerRepository sellerRepository;
+    @Mock
     private PasswordEncoder passwordEncoder;
     @Mock
     private RedisTokenService redisTokenService;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     private User testUser;
     private final Long USER_ID = 1L;
 
     @BeforeEach
     void setUp() {
+        userService = new UserService(userRepository, passwordEncoder, eventPublisher);
+
         testUser = User.builder()
             .email("test@test.com")
             .password("encoded-old-password")
@@ -113,14 +122,13 @@ class UserServiceTest {
 
         given(userRepository.findById(USER_ID)).willReturn(Optional.of(testUser));
         given(passwordEncoder.matches("old-password", testUser.getPassword())).willReturn(true);
-        given(passwordEncoder.matches("new-password", testUser.getPassword())).willReturn(false);
         given(passwordEncoder.encode("new-password")).willReturn("encoded-new-password");
 
         userService.changePassword(USER_ID, request);
 
         assertThat(testUser.getPassword()).isEqualTo("encoded-new-password");
         // 모든 기기 로그아웃 검증
-        verify(redisTokenService, times(1)).deleteAllRefreshTokensByUserId(USER_ID);
+        verify(eventPublisher, times(1)).publishEvent(any(AllDevicesLogoutEvent.class));
     }
 
     @Test
@@ -168,7 +176,7 @@ class UserServiceTest {
         // Soft Delete 상태 확인
         assertThat(testUser.getStatus()).isEqualTo(UserStatus.WITHDRAWN);
         // 탈퇴 후 토큰 전체 삭제 검증
-        verify(redisTokenService, times(1)).deleteAllRefreshTokensByUserId(USER_ID);
+        verify(eventPublisher, times(1)).publishEvent(any(AllDevicesLogoutEvent.class));
     }
 
     @Test

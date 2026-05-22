@@ -186,23 +186,13 @@ public class JwtTokenProvider {
         }
     }
 
-    public long getExpirationSeconds(String token) {
-        try {
-            Date expiration = parseClaims(token).getExpiration();
-            long remain = expiration.getTime() - System.currentTimeMillis();
-            return remain > 0 ? remain / 1000 : 0;
-        } catch (ExpiredJwtException e) {
-            return 0;
-        }
-    }
-
     public static final String BEARER_PREFIX = "Bearer ";
 
     /**
      * 헤더에서 순수 토큰만 추출합니다.
      */
     public String resolveToken(String bearerToken) {
-        // [개선 7] trim() 적용하여 안전성 극대화
+        //  trim() 적용하여 안전성 극대화
         if (bearerToken != null && bearerToken.trim().startsWith(BEARER_PREFIX)) {
             return bearerToken.trim().substring(BEARER_PREFIX.length()).trim();
         }

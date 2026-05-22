@@ -29,6 +29,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import jakarta.servlet.http.HttpServletRequest;
 
 import java.util.UUID;
 
@@ -45,9 +46,10 @@ public class AuthController {
     @Operation(summary = "회원가입", description = "일반 구매자(BUYER) 및 판매자(SELLER) 회원가입을 처리합니다. 판매자 가입 시 상호명과 사업자번호가 필수입니다.")
     @PostMapping("/signup")
     public ResponseEntity<ApiResponse<SignUpResponse>> signup(
-        @Valid @RequestBody SignUpRequest request) {
+        @Valid @RequestBody SignUpRequest request, HttpServletRequest servletRequest) {
+        String clientIp = getClientIp(servletRequest);
         return ResponseEntity.status(HttpStatus.CREATED)
-            .body(ApiResponse.success(authService.signup(request)));
+            .body(ApiResponse.success(authService.signup(request, clientIp)));
     }
 
     @Operation(
@@ -144,5 +146,30 @@ public class AuthController {
             .header(HttpHeaders.SET_COOKIE, clearRtCookie)
             .header(HttpHeaders.SET_COOKIE, clearDeviceCookie)
             .body(ApiResponse.success());
+    }
+
+    /**
+     * 💡 [헬퍼 메서드] 리버스 프록시나 로드밸런서를 거쳐온 요청의 진짜 IP 추출
+     */
+    private String getClientIp(HttpServletRequest request) {
+        // Nginx, AWS ALB 등을 거치면 원래 IP는 X-Forwarded-For 헤더에 담깁니다.
+        String ip = request.getHeader("X-Forwarded-For");
+
+        if (ip == null || ip.length() == 0 || "unknown".equalsIgnoreCase(ip)) {
+            ip = request.getHeader("Proxy-Client-IP");
+        }
+        if (ip == null || ip.length() == 0 || "unknown".equalsIgnoreCase(ip)) {
+            ip = request.getHeader("WL-Proxy-Client-IP");
+        }
+        if (ip == null || ip.length() == 0 || "unknown".equalsIgnoreCase(ip)) {
+            ip = request.getRemoteAddr(); // 프록시가 없는 로컬 개발 환경 등에서 동작
+        }
+
+        // X-Forwarded-For 헤더에 여러 IP가 콤마(,)로 묶여 올 수 있으므로 첫 번째(Client) IP만 추출
+        if (ip != null && ip.contains(",")) {
+            ip = ip.split(",")[0].trim();
+        }
+
+        return ip;
     }
 }

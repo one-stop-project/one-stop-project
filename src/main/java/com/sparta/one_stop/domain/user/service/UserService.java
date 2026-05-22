@@ -1,6 +1,7 @@
 package com.sparta.one_stop.domain.user.service;
 
 
+import com.sparta.one_stop.domain.auth.event.AllDevicesLogoutEvent;
 import com.sparta.one_stop.domain.auth.service.RedisTokenService;
 import com.sparta.one_stop.domain.user.dto.request.PasswordChangeRequest;
 import com.sparta.one_stop.domain.user.dto.request.UserUpdateRequest;
@@ -13,6 +14,7 @@ import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,8 +26,7 @@ public class UserService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
-    private final RedisTokenService redisTokenService;
-
+    private final ApplicationEventPublisher eventPublisher;
 
     // 내 정보 조회
     @Transactional(readOnly = true)
@@ -58,15 +59,16 @@ public class UserService {
         }
 
         // 2. 새 비밀번호가 현재와 동일한지 확인
-        if (passwordEncoder.matches(request.newPassword(), user.getPassword())) {
+        if (request.currentPassword().equals(request.newPassword())) {
             throw new CustomException(ErrorCode.MEMBER_003);
         }
 
-        // 3. 비밀번호 변경
-        user.changePassword(passwordEncoder.encode(request.newPassword()));
+        // 3. 인코딩 + Entity 변경
+        String newEncoded = passwordEncoder.encode(request.newPassword());
+        user.changePassword(newEncoded);
 
-        // 4. [보안 정책] 모든 기기 강제 로그아웃 — 변경 사실을 다른 기기에서 강제 인지시킴
-        redisTokenService.deleteAllRefreshTokensByUserId(userId);
+        // 4. 이벤트 발행 — DB 커밋 후 Listener가 Redis 정리
+        eventPublisher.publishEvent(new AllDevicesLogoutEvent(userId, "PASSWORD_CHANGED"));
 
         log.info("비밀번호 변경 (전체 세션 무효화): userId={}", userId);
     }
@@ -76,18 +78,20 @@ public class UserService {
     public void withdraw(Long userId, WithdrawRequest request) {
         User user = findUserById(userId);
 
-        // 1. 비밀번호 재확인 (실수/타인 조작 방지)
-        if (!passwordEncoder.matches(request.password(), user.getPassword())) {
-            throw new CustomException(ErrorCode.MEMBER_002);
+        // OAuth2 사용자는 비밀번호 검증 스킵
+        if (!user.isOAuth2User()) {
+            if (!passwordEncoder.matches(request.password(), user.getPassword())) {
+                throw new CustomException(ErrorCode.MEMBER_002);
+            }
         }
 
-        // 2. Soft Delete (status = WITHDRAWN)
+        // Soft Delete (status = WITHDRAWN)
         user.withdraw();
 
-        // 3. 모든 기기 RT 일괄 삭제 (다중 기기 키 패턴: RT:{userId}:*)
-        redisTokenService.deleteAllRefreshTokensByUserId(userId);
+        // 이벤트 발행 — Redis 정리 + 알림 발송 등
+        eventPublisher.publishEvent(new AllDevicesLogoutEvent(userId, "WITHDRAWN"));
 
-        log.info("회원 탈퇴: userId={}", userId);
+        log.info("회원 탈퇴: userId={}, isOAuth2={}", userId, user.isOAuth2User());
     }
 
     // ── 내부 헬퍼 ──

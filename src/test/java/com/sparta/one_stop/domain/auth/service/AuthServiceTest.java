@@ -12,6 +12,7 @@ import com.sparta.one_stop.domain.user.repository.UserRepository;
 import com.sparta.one_stop.global.enums.user.UserRole;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
+import com.sparta.one_stop.global.ratelimit.RateLimitService;
 import com.sparta.one_stop.global.security.JwtTokenProvider;
 import io.jsonwebtoken.Claims; // 인터페이스만 임포트
 import org.junit.jupiter.api.BeforeEach;
@@ -42,16 +43,15 @@ class AuthServiceTest {
     @InjectMocks
     private AuthService authService;
 
-    @Mock
-    private UserRepository userRepository;
-    @Mock
-    private SellerRepository sellerRepository;
-    @Mock
-    private PasswordEncoder passwordEncoder;
-    @Mock
-    private JwtTokenProvider jwtTokenProvider;
-    @Mock
-    private RedisTokenService redisTokenService;
+    @Mock private AuthQueryService authQueryService;      // 추가
+    @Mock private AuthCommandService authCommandService;  // 추가
+    @Mock private UserRepository userRepository;
+    @Mock private SellerRepository sellerRepository;
+    @Mock private PasswordEncoder passwordEncoder;
+    @Mock private JwtTokenProvider jwtTokenProvider;
+    @Mock private RedisTokenService redisTokenService;
+    @Mock private DeviceLimitService deviceLimitService;  // 추가
+    @Mock private RateLimitService rateLimitService;
 
     private User testUser;
     private final String DEVICE_ID = "device-123";
@@ -84,7 +84,7 @@ class AuthServiceTest {
         given(userRepository.existsByEmail(anyString())).willReturn(false);
         given(passwordEncoder.encode(anyString())).willReturn("encoded");
 
-        SignUpResponse response = authService.signup(request);
+        SignUpResponse response = authService.signup(request, "127.0.0.1");
 
         verify(userRepository, times(1)).save(any(User.class));
         verify(sellerRepository, never()).save(any());
@@ -104,7 +104,7 @@ class AuthServiceTest {
         given(userRepository.existsByEmail(anyString())).willReturn(false);
         given(passwordEncoder.encode(anyString())).willReturn("encoded");
 
-        SignUpResponse response = authService.signup(request);
+        SignUpResponse response = authService.signup(request, "127.0.0.1");
 
         verify(userRepository, times(1)).save(any(User.class));
         verify(sellerRepository, times(1)).save(any());
@@ -117,7 +117,7 @@ class AuthServiceTest {
         SignUpRequest request = mock(SignUpRequest.class);
         given(request.role()).willReturn(UserRole.ADMIN);
 
-        CustomException exception = assertThrows(CustomException.class, () -> authService.signup(request));
+        CustomException exception = assertThrows(CustomException.class, () -> authService.signup(request, "127.0.0.1"));
         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.AUTH_011);
     }
 
@@ -129,7 +129,7 @@ class AuthServiceTest {
         given(request.email()).willReturn("dup@test.com");
         given(userRepository.existsByEmail("dup@test.com")).willReturn(true);
 
-        CustomException exception = assertThrows(CustomException.class, () -> authService.signup(request));
+        CustomException exception = assertThrows(CustomException.class, () -> authService.signup(request, "127.0.0.1"));
         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.AUTH_002);
     }
 
@@ -141,7 +141,7 @@ class AuthServiceTest {
         given(request.email()).willReturn("seller@test.com");
         given(request.shopName()).willReturn(""); // 빈 상호명
 
-        CustomException exception = assertThrows(CustomException.class, () -> authService.signup(request));
+        CustomException exception = assertThrows(CustomException.class, () -> authService.signup(request,"127.0.0.1"));
         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COMMON_001);
     }
 
@@ -161,7 +161,7 @@ class AuthServiceTest {
 
         when(userRepository.save(any(User.class))).thenThrow(DataIntegrityViolationException.class);
 
-        CustomException exception = assertThrows(CustomException.class, () -> authService.signup(request));
+        CustomException exception = assertThrows(CustomException.class, () -> authService.signup(request, "127.0.0.1"));
         assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.AUTH_002);
     }
 

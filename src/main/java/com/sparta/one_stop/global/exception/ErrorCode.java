@@ -36,6 +36,19 @@ public enum ErrorCode {
     AUTH_011(HttpStatus.FORBIDDEN, "AUTH_011", "접근 권한이 없습니다"),
     AUTH_012(HttpStatus.UNAUTHORIZED, "AUTH_012", "다른 기기에서 로그인되어 세션이 만료되었습니다"),
 
+    // ===== AUTH - 로그인 횟수 제한 =====
+    AUTH_013(HttpStatus.TOO_MANY_REQUESTS, "AUTH_013", "너무 많은 요청입니다. 잠시 후 다시 시도해주세요"),
+
+    // ===== AUTH - 기기제한 =====
+    AUTH_014(HttpStatus.UNAUTHORIZED, "AUTH_014", "최대 기기 수를 초과했습니다. 다른 기기에서 로그아웃해주세요"),
+    AUTH_015(HttpStatus.UNAUTHORIZED, "AUTH_015", "다른 기기에서 로그인되어 자동으로 로그아웃되었습니다"),
+
+    // ===== AUTH - OAuth2 =====
+    AUTH_016(HttpStatus.CONFLICT, "AUTH_016", "이미 OAuth2 계정이 연결되어 있습니다"),
+    AUTH_017(HttpStatus.CONFLICT, "AUTH_017", "지원하지 않는 OAuth2 제공자입니다: "),
+    AUTH_018(HttpStatus.CONFLICT, "AUTH_018", "이메일 수신 오류 / 예기치 못한 오류 발생 "),
+    AUTH_019(HttpStatus.CONFLICT, "AUTH_019", "이미 가입된 이메일입니다.: "),
+
     // ===== MEMBER - 회원 =====
     MEMBER_001(HttpStatus.NOT_FOUND, "MEMBER_001", "회원 정보를 찾을 수 없습니다"),
     MEMBER_002(HttpStatus.BAD_REQUEST, "MEMBER_002", "현재 비밀번호가 일치하지 않습니다"),
