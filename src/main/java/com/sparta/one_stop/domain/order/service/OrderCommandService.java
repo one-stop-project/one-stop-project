@@ -24,14 +24,12 @@ import com.sparta.one_stop.global.enums.order.OrderType;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Comparator;
 import java.util.List;
 
-@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -52,7 +50,8 @@ public class OrderCommandService {
      * - DIRECT / CART 주문 분기
      * - 서버 기준 상품 가격 재계산
      * - 재고 검증 및 차감
-     * - 주문 상태는 PENDING_PAYMENT 로 생성
+     * - Order 상태는 PENDING_PAYMENT 로 생성
+     * - OrderItem 상태도 PENDING_PAYMENT 로 생성
      */
     public CreateOrderResponse createOrder(
         Long userId,
@@ -63,7 +62,7 @@ public class OrderCommandService {
 
         validateOrderType(request);
 
-        List<OrderTarget> orderTargets = getOrderTargets(
+        List<OrderTarget> orderTargets = prepareOrderTargets(
             userId,
             request
         );
@@ -108,7 +107,7 @@ public class OrderCommandService {
         }
 
         List<CreateOrderItemResponse> orderItemResponses = orderItems.stream()
-            .map(this::toCreateOrderItemResponse)
+            .map(CreateOrderItemResponse::of)
             .toList();
 
         return CreateOrderResponse.of(
@@ -124,6 +123,7 @@ public class OrderCommandService {
      * - 배송 상태 기준 취소 가능 여부 검증
      * - 재고 복구
      * - 포인트/쿠폰은 MVP 이후 연동
+     * - TODO: 취소 사유 저장 정책 확정 후 request.reason()을 주문 취소 이력에 반영 예정
      */
     public CancelOrderResponse cancelOrder(
         Long userId,
@@ -191,9 +191,11 @@ public class OrderCommandService {
     }
 
     /**
-     * 주문 유형에 따라 주문 대상 상품 목록 생성
+     * 주문 유형에 따라 주문 대상 상품을 준비
+     * - DIRECT / CART 분기
+     * - 주문 가능 여부 검증 및 재고 차감 포함
      */
-    private List<OrderTarget> getOrderTargets(
+    private List<OrderTarget> prepareOrderTargets(
         Long userId,
         CreateOrderRequest request
     ) {
@@ -209,6 +211,9 @@ public class OrderCommandService {
 
     /**
      * DIRECT 주문 대상 생성
+     * - 상품 옵션 조회
+     * - 주문 가능 여부 검증
+     * - 재고 차감
      */
     private List<OrderTarget> getDirectOrderTargets(
         List<CreateOrderItemRequest> items
@@ -235,6 +240,10 @@ public class OrderCommandService {
 
     /**
      * CART 주문 대상 생성
+     * - 장바구니 상품 조회
+     * - 본인 장바구니 검증
+     * - 주문 가능 여부 검증
+     * - 재고 차감
      */
     private List<OrderTarget> getCartOrderTargets(
         Long userId,
@@ -322,6 +331,7 @@ public class OrderCommandService {
 
     /**
      * 주문 상품 엔티티 생성
+     * - 주문 시점의 상품명/옵션명/가격을 스냅샷으로 저장
      */
     private OrderItem createOrderItem(
         Order order,
@@ -343,26 +353,6 @@ public class OrderCommandService {
     }
 
     /**
-     * 주문 상품 응답 DTO 변환
-     */
-    private CreateOrderItemResponse toCreateOrderItemResponse(
-        OrderItem orderItem
-    ) {
-        Long subtotal = orderItem.getPrice() * orderItem.getQuantity();
-
-        return new CreateOrderItemResponse(
-            orderItem.getId(),
-            orderItem.getProductItem().getId(),
-            orderItem.getItemName(),
-            orderItem.getPrice(),
-            orderItem.getQuantity(),
-            subtotal,
-            orderItem.getSeller().getShopName(),
-            orderItem.getStatus()
-        );
-    }
-
-    /**
      * 주문 소유자 검증
      */
     private void validateOrderOwner(
@@ -380,6 +370,7 @@ public class OrderCommandService {
      * 배송 상태 기준 주문 취소 가능 여부 검증
      * - 결제 전(PENDING_PAYMENT)에는 배송 정보가 없어도 취소 가능
      * - 결제 후 배송 정보가 있다면 ACCEPT, INSTRUCT 상태에서만 취소 가능
+     * - 결제 후 일부 주문상품에 배송 정보가 없으면 비정상 상태로 처리
      * - DEPARTURE 이후 상태에서는 취소 불가
      */
     private void validateCancelableDeliveryStatus(
