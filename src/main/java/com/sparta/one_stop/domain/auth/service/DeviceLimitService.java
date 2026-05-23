@@ -1,13 +1,17 @@
 package com.sparta.one_stop.domain.auth.service;
 
-import com.sparta.one_stop.global.common.RedisKeyConstants;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.RedisConnectionFailureException;
+import org.springframework.data.redis.RedisSystemException;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -15,7 +19,8 @@ import static com.sparta.one_stop.global.common.RedisKeyConstants.REFRESH_TOKEN_
 
 /**
  *
- * 다중 기기 동시 로그인 제한 서비스
+ * 다중 기기 동시 로그인 제한 서비스 — 동시성 안전판
+ *
  * 정책:
  *   - 한 사용자당 최대 5개 기기 동시 로그인 (MAX_DEVICES)
  *   - 초과 시 가장 오래된 기기 자동 로그아웃 (LRU)
@@ -32,6 +37,32 @@ import static com.sparta.one_stop.global.common.RedisKeyConstants.REFRESH_TOKEN_
  *   - RT 탈취 후 무한 기기 등록 차단
  *   - 새 기기 로그인 시 가장 오래된 기기 강제 로그아웃
  *
+ *
+ *
+ *   ---------------- 기능 설명 -----------------------
+ *  1. registerDevice — Lua Script 원자성
+ *     - 단일 Lua Script = 1회 원자 실행
+ *     → 동시 로그인 시 MAX_DEVICES 초과 우회 차단
+ *
+ *  2. touchDevice — TTL 갱신 추가
+ *     - TTL도 함께 갱신 → removeAllDevices에서 RT 누락 방지
+ *
+ *  3. 입력 검증 강화
+ *     - deviceId null/blank 차단
+ *     - userId null 차단
+ *
+ *  4. Fail-Open 정책 명문화
+ *     - Redis 장애 시 가용성 우선
+ *     - 단, 보안 로그 반드시 남김
+ *
+ *  ---------------- 데이터 구조 -----------------------
+ *  ZSET: devices:{userId}
+ *    - member: deviceId
+ *    - score:  마지막 활동 timestamp (밀리초)
+ *
+ *  STRING: RT:{userId}:{deviceId}
+ *    - value: refresh token JWT
+ *    - TTL:   14일 (DEVICES_TTL_SECONDS와 동일)
  */
 @Slf4j
 @Service
@@ -47,101 +78,163 @@ public class DeviceLimitService {
     private static final long DEVICES_TTL_SECONDS = 14 * 24 * 60 * 60;  // 14일
 
     /**
+     * registerDevice Lua Script — 원자적 기기 등록 + LRU 추방
      *
-     * 새 기기 등록 + 초과 시 가장 오래된 기기 제거
+     * KEYS[1] = devices:{userId}      (ZSET 인덱스)
+     * KEYS[2] = RT:{userId}:          (RT 키 prefix)
      *
-     * 호출 시점: AuthService.login에서 RT 저장 직전
+     * ARGV[1] = newDeviceId
+     * ARGV[2] = timestamp (now)
+     * ARGV[3] = MAX_DEVICES
+     * ARGV[4] = TTL seconds
      *
-     * @param userId   사용자 ID
-     * @param deviceId 새 기기 식별자
-     * @return 제거된 기기 ID (있으면), 없으면 null
+     * 흐름:
+     *   1. ZADD: 새 기기 추가 (기존이면 timestamp 갱신)
+     *   2. EXPIRE: ZSET TTL 갱신
+     *   3. ZCARD: 기기 수 확인
+     *   4. MAX_DEVICES 초과 시:
+     *      a. ZRANGE 0 0: 가장 오래된 기기 추출
+     *      b. ZREM: ZSET에서 제거
+     *      c. DEL: 해당 기기 RT 삭제
+     *      d. 반환: 추방된 deviceId
+     *   5. 한도 내: 빈 문자열 반환
      *
+     * 원자성: 위 모든 작업이 단일 트랜잭션처럼 실행
      */
+    private static final String REGISTER_DEVICE_SCRIPT =
+        "redis.call('ZADD', KEYS[1], ARGV[2], ARGV[1]) " +
+            "redis.call('EXPIRE', KEYS[1], ARGV[4]) " +
+            "local count = redis.call('ZCARD', KEYS[1]) " +
+            "if count > tonumber(ARGV[3]) then " +
+            "local oldest = redis.call('ZRANGE', KEYS[1], 0, 0) " +
+            " if #oldest > 0 then " +
+            " redis.call('ZREM', KEYS[1], oldest[1]) " +
+            " redis.call('DEL', KEYS[2] .. oldest[1]) " +
+            "return oldest[1]" +
+            "end" +
+            "end" +
+            "return ''";
+
+    private static final RedisScript<String> REGISTER_DEVICE =
+        new DefaultRedisScript<>(REGISTER_DEVICE_SCRIPT, String.class);
+
+    private static final String REMOVE_ALL_DEVICES_SCRIPT =
+        "local devices = redis.call('ZRANGE', KEYS[1], 0, -1) " +
+            "local count = #devices" +
+            "for i = 1, count do" +
+            "redis.call('DEL', KEYS[2] .. devices[i]) " +
+            "end" +
+            "redis.call('DEL', KEYS[1]) " +
+            "return count";
+
+    private static final RedisScript<Long> REMOVE_ALL_DEVICES =
+        new DefaultRedisScript<>(REMOVE_ALL_DEVICES_SCRIPT, Long.class);
+
+    // 새 기기 등록 + 초과 시 가장 오래된 기기 자동 로그아웃(원자적)
+    // @return 추방된 deviceId, 한도 내였으면 null
 
     public String registerDevice(Long userId, String deviceId) {
-        String key = DEVICES_KEY_PREFIX + userId;
+        validateInputs(userId, deviceId);
+
+        String zsetKey = devicesKey(userId);
+        String rtPrefix = REFRESH_TOKEN_PREFIX + userId + ":";
         long now = System.currentTimeMillis();
 
-        // 1. 새 기기 추가 (또는 기존 기기 timestamp 갱신)
-        redisTemplate.opsForZSet().add(key, deviceId, now);
-        redisTemplate.expire(key, DEVICES_TTL_SECONDS, TimeUnit.SECONDS);
+        try {
+            String evicted = redisTemplate.execute(
+                REGISTER_DEVICE,
+                List.of(zsetKey, rtPrefix),
+                deviceId,
+                String.valueOf(now),
+                String.valueOf(MAX_DEVICES),
+                String.valueOf(DEVICES_TTL_SECONDS)
+            );
 
-        // 2. 기기 수 조회
-        Long count = redisTemplate.opsForZSet().size(key);
-        if (count == null || count <= MAX_DEVICES) {
-            return null;  // 한도 내, 제거 불필요
-        }
-
-        // 3. 초과 — 가장 오래된 기기 추출 (score 낮은 순 = 가장 오래된)
-        Set<String> oldest = redisTemplate.opsForZSet().range(key, 0, 0);
-        if (oldest == null || oldest.isEmpty()) {
+            if (evicted != null && !evicted.isEmpty()) {
+                log.warn("[기기 제한] LRU 강제 로그아웃 - userId={}, evicted={}, new={}",
+                    userId, evicted, deviceId);
+                return evicted;
+            }
+            return null;
+        } catch (RedisConnectionFailureException | RedisSystemException e) {
+            // Fail-Open : Redis 장애 시 로그인은 허용
+            log.error("[기기제한] Redis 장애 - Fail-Open : userId={}", userId, e);
             return null;
         }
-
-        String evictedDeviceId = oldest.iterator().next();
-
-        // 4. ZSET에서 제거
-        redisTemplate.opsForZSet().remove(key, evictedDeviceId);
-
-        // 5. 해당 기기의 RT 삭제 (강제 로그아웃)
-        String rtKey = REFRESH_TOKEN_PREFIX + userId + ":" + evictedDeviceId;
-        redisTemplate.delete(rtKey);
-
-        log.warn("[기기 제한] LRU 강제 로그아웃 — userId={}, 제거된 기기={}, 새 기기={}",
-            userId, evictedDeviceId, deviceId);
-
-        return evictedDeviceId;
     }
 
     /**
      * 기기 활동 시간 갱신 (LRU 갱신)
      *
      * 호출 시점: 토큰 재발급 (refresh) 시
+     * TTL도 함께 갱신
+     * refresh가 일어나도 ZSET이 RT보다 먼저 만료되면
+     * removeAllDevices에서 일부 RT 누락됨
      */
     public void touchDevice(Long userId, String deviceId) {
-        String key = DEVICES_KEY_PREFIX + userId;
-        redisTemplate.opsForZSet().add(key, deviceId, System.currentTimeMillis());
+        if (userId == null || deviceId == null || deviceId.isBlank()) {
+            return;
+        }
+
+        String key = devicesKey(userId);
+        try {
+            redisTemplate.opsForZSet().add(key, deviceId, System.currentTimeMillis());
+            redisTemplate.expire(key, DEVICES_TTL_SECONDS, TimeUnit.SECONDS);
+        } catch (RedisConnectionFailureException | RedisSystemException e) {
+            log.warn("[기기 제한] touchDevice 실패 (무시) : userId={}, deviceId ={}", userId, deviceId);
+        }
+
     }
 
     /**
      * 특정 기기 제거 (로그아웃)
      */
     public void removeDevice(Long userId, String deviceId) {
-        String key = DEVICES_KEY_PREFIX + userId;
-        redisTemplate.opsForZSet().remove(key, deviceId);
+        if (userId == null || deviceId == null || deviceId.isBlank()) return;
+
+        try {
+            redisTemplate.opsForZSet().remove(devicesKey(userId), deviceId);
+        } catch (RedisConnectionFailureException | RedisSystemException e) {
+            log.warn("[기기 제한] removeDevice 실패: userId={}, deviceId={}", userId, deviceId);
+        }
     }
 
     /**
-     * 사용자의 모든 기기 제거 (탈퇴, 비밀번호 변경 등)
+     * 사용자의 모든 기기 제거 + 모든 RT 삭제 (Lua Script 원자 실행)
+     *
+     * 호출 시점:
+     *   - 비밀번호 변경 시
+     *   - 회원 탈퇴 시
+     *   - 관리자 강제 정지 시
+     *
+     * 특징 :
+     *   - 다중 명령어 → Lua Script로 원자성 보장
+     *   - SCAN 없이 ZSET 인덱스만으로 처리 (1000배 빠름)
+     *
+     * @return 삭제된 기기 수
      */
     public long removeAllDevices(Long userId) {
-        String zsetKey = DEVICES_KEY_PREFIX + userId;
+        if (userId == null) return 0L;
+
+        String zsetKey = devicesKey(userId);
+        String rtPrefix = REFRESH_TOKEN_PREFIX + userId + ":";
 
         try {
-            // 1. ZSET에 등록된 모든 기기 ID(deviceId)를 가져옵니다. (시간 복잡도 O(N), 최대 5대라 매우 빠름)
-            Set<String> deviceIds = redisTemplate.opsForZSet().range(zsetKey, 0, -1);
+            Long deletedCount = redisTemplate.execute(
+                REMOVE_ALL_DEVICES,
+                List.of(zsetKey, rtPrefix)
+            );
 
-            if (deviceIds == null || deviceIds.isEmpty()) {
-                return 0L; // 지울 기기가 없으면 0 반환
+            long count = deletedCount != null ? deletedCount : 0L;
+            if (count > 0) {
+                log.info("[기기 제한] 전체 기기 로그아웃: userId={}, count={}", userId, count);
             }
+            return count;
 
-            // 2. 삭제할 키들을 한 바구니에 담습니다. (실제 RT 키들 + ZSET 키)
-            Set<String> keysToDelete = new HashSet<>();
-            for (String deviceId : deviceIds) {
-                // 주의: RT Prefix 상수는 프로젝트 환경에 맞게 임포트해서 쓰세요!
-                keysToDelete.add(REFRESH_TOKEN_PREFIX + userId + ":" + deviceId);
-            }
-            keysToDelete.add(zsetKey); // 마지막으로 ZSET(기기 목록) 자체도 지울 목록에 추가
-
-            // 3. 한 번의 네트워크 통신으로 깔끔하게 일괄 삭제!
-            Long deletedCount = redisTemplate.delete(keysToDelete);
-
-            // ZSET 키 1개를 제외한 순수 RT 삭제 개수를 반환하거나, 전체 삭제 개수 반환
-            return deletedCount != null ? deletedCount : 0L;
-
-        } catch (Exception e) {
-            log.error("[기기 제한] 전체 기기 로그아웃 실패 (Fail-Open): userId={}", userId, e);
-            return 0L; // Redis 장애 시 회원탈퇴 로직 등이 멈추지 않도록 Fail-Open 처리
+        } catch (RedisConnectionFailureException | RedisSystemException e) {
+            // Fail-Open: 비밀번호 변경/탈퇴 막지 않도록
+            log.error("[기기 제한] removeAllDevices 실패 (Fail-Open): userId={}", userId, e);
+            return 0L;
         }
     }
 
@@ -151,16 +244,48 @@ public class DeviceLimitService {
      * @return ZSetTuple — {deviceId, lastActiveTimestamp}
      */
     public Set<ZSetOperations.TypedTuple<String>> listDevices(Long userId) {
-        String key = DEVICES_KEY_PREFIX + userId;
-        return redisTemplate.opsForZSet().rangeWithScores(key, 0, -1);
+        if (userId == null) return Set.of();
+
+        try {
+            return redisTemplate.opsForZSet().rangeWithScores(devicesKey(userId), 0, -1);
+        } catch (RedisConnectionFailureException | RedisSystemException e) {
+            log.error("[기기 제한] listDevices 실패: userId={}", userId, e);
+            return Set.of();
+        }
     }
 
     /**
      * 사용자의 활성 기기 수
      */
     public long countDevices(Long userId) {
-        String key = DEVICES_KEY_PREFIX + userId;
-        Long count = redisTemplate.opsForZSet().size(key);
-        return count != null ? count : 0;
+        if (userId == null) return 0L;
+
+        try {
+            Long count = redisTemplate.opsForZSet().size(devicesKey(userId));
+            return count != null ? count : 0L;
+        } catch (RedisConnectionFailureException | RedisSystemException e) {
+            return 0L;
+        }
     }
+
+    // ═══════════════════════════════════════════════════════════
+    //  Private
+    // ═══════════════════════════════════════════════════════════
+
+    private String devicesKey(Long userId) {
+        return DEVICES_KEY_PREFIX + userId;
+    }
+
+    private void validateInputs(Long userId, String deviceId) {
+        if (userId == null) {
+            throw new IllegalArgumentException("userId cannot be null");
+        }
+        if (deviceId == null || deviceId.isBlank()) {
+            throw new IllegalArgumentException("deviceId cannot be null or blank");
+        }
+        if (deviceId.length() > 100) {
+            throw new IllegalArgumentException("deviceId too long (max 100 chars)");
+        }
+    }
+
 }

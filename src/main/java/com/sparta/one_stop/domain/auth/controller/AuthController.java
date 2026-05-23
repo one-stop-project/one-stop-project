@@ -58,15 +58,17 @@ public class AuthController {
     )
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<LoginResponse>> login(
-        @Valid @RequestBody LoginRequest request,
+        @Valid @RequestBody LoginRequest request, HttpServletRequest servletRequest,
         @Parameter(in = ParameterIn.COOKIE, name = "device_id", description = "기존에 발급받은 기기 식별자 (없는 경우 서버에서 자동 생성)")
         @CookieValue(value = "device_id", required = false) String existingDeviceId) {
+
+        String clientIp = getClientIp(servletRequest);
 
         // 1. 서버 기반 Device ID 발급 (최초 로그인 시)
         String deviceId = (existingDeviceId != null) ? existingDeviceId : UUID.randomUUID().toString();
 
         // 2. 비즈니스 로직 처리
-        LoginResult result = authService.login(request, deviceId);
+        LoginResult result = authService.login(request, deviceId, clientIp);
 
         // 3. 보안 쿠키 생성 (RT & Device ID)
         String rtCookie = cookieUtil.createHttpOnlyCookie(

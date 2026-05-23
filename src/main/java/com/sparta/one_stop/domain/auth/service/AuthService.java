@@ -32,131 +32,156 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.Set;
 import java.util.UUID;
 
+/**
+ * AuthService — 인증 흐름 조율 (얇은 Facade)
+ *
+ * ═══════════════════════════════════════════════════════════
+ *  설계 원칙
+ * ═══════════════════════════════════════════════════════════
+ *
+ *  1. 책임 분리
+ *     - AuthService:        흐름 조율 (트랜잭션 없음)
+ *     - AuthQueryService:   DB 조회 + 인증 검증 (@Transactional)
+ *     - AuthCommandService: 회원가입 저장 (@Transactional)
+ *     - RedisTokenService:  RT/블랙리스트 관리
+ *     - DeviceLimitService: 다중 기기 관리
+ *
+ *  2. self-invocation 회피
+ *     - 모든 @Transactional 호출이 다른 Bean을 경유
+ *     - 프록시 패턴 정상 작동 보장
+ *
+ *  3. Rate Limit 일관 적용
+ *     - 모든 인증 진입점에 Rate Limit 체크
+ *     - BCrypt CPU 폭발 방어
+ *
+ * ═══════════════════════════════════════════════════════════
+ *  핵심 기능 설명
+ * ═══════════════════════════════════════════════════════════
+ *
+ *  1. self-invocation 완전 제거
+ *     - authenticateUser, saveUserAndSeller, validateActiveUser → 별도 Service
+ *
+ *  2. login 흐름의 Rate Limit 3계층 적용
+ *     - 글로벌 → IP → 계정 순서로 점진적 차단
+ *
+ *  3. refresh의 DB 조회 통합
+ *     - validateActiveUser + getUserRole → findActiveUser 1회로
+ *
+ *  4. 로그아웃 부분 실패 처리 명확화
+ *     - RT 삭제 / 기기 제거 / 블랙리스트 등록 각각 독립적으로 처리
+ */
+
+
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthService {
 
+    private final AuthQueryService authQueryService;
+    private final AuthCommandService authCommandService;
     private final UserRepository userRepository;
-    private final SellerRepository sellerRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
     private final RedisTokenService redisTokenService;
     private final DeviceLimitService deviceLimitService;
     private final RateLimitService rateLimitService;
 
-    //  허용된 회원가입 Role 명시적 관리
     private static final Set<UserRole> ALLOWED_SIGNUP_ROLES = Set.of(UserRole.BUYER, UserRole.SELLER);
 
     private String dummyHash;
 
-    // 타이밍 공격 방어용 Dummy Hash를 런타임에 동적 생성 (에러 방지)
     @PostConstruct
     public void init() {
+        // 타이밍 공격 방어용 더미 해시 (애플리케이션 시작 시 1회 생성)
         this.dummyHash = passwordEncoder.encode(UUID.randomUUID().toString());
+        log.info("[AuthService] 초기화 완료 — dummyHash 생성됨");
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    //  POST /api/auth/signup — 회원가입
+    //  POST /api/auth/signup
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    @Transactional
     public SignUpResponse signup(SignUpRequest request, String clientIp) {
-
+        // 1. Rate Limit (어뷰징 계정 생성 방어)
         rateLimitService.tryConsume(RateLimitPolicy.SIGNUP_PER_IP, clientIp);
 
+        // 2. 기본 검증 (DB 조회 전 빠른 검증)
         if (!ALLOWED_SIGNUP_ROLES.contains(request.role())) {
             throw new CustomException(ErrorCode.AUTH_011, "허용되지 않은 가입 권한입니다.");
         }
-
-        if (userRepository.existsByEmail(request.email())) {
-            throw new CustomException(ErrorCode.AUTH_002);
-        }
-
         if (request.role() == UserRole.SELLER) {
             validateSellerFields(request);
         }
 
-        User user = User.builder()
-            .email(request.email())
-            .password(passwordEncoder.encode(request.password()))
-            .name(request.name())
-            .phone(request.phone())
-            .address(request.address())
-            .role(request.role())
-            .build();
-
-        try {
-            userRepository.save(user);
-        } catch (DataIntegrityViolationException e) {
-            log.warn("회원가입 동시성 충돌 - 이메일 중복: {}", maskEmail(request.email()));
+        // 3. 이메일 중복 사전 체크 (UX — 친절한 에러 메시지)
+        //    동시성 안전성은 UNIQUE 인덱스 + AuthCommandService의 saveAndFlush가 보장
+        if (userRepository.existsByEmail(request.email())) {
             throw new CustomException(ErrorCode.AUTH_002);
         }
 
-        if (request.role() == UserRole.SELLER) {
-            Seller seller = Seller.builder()
-                .user(user)
-                .shopName(request.shopName())
-                .businessNumber(request.businessNumber())
-                .bankAccount(request.bankAccount())
-                .build();
-            sellerRepository.save(seller);
-        }
-
-        return SignUpResponse.from(user);
+        // 4. 가입 처리 (별도 Service — 트랜잭션 격리)
+        User savedUser = authCommandService.signup(request);
+        return SignUpResponse.from(savedUser);
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    //  POST /api/auth/login — 로그인
+    //  POST /api/auth/login — 가장 트래픽 부하 큰 흐름
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    @Transactional(readOnly = true)
-    public LoginResult login(LoginRequest request, String deviceId) {
-        User user = userRepository.findByEmail(request.email()).orElse(null);
+    public LoginResult login(LoginRequest request, String deviceId, String clientIp) {
+        // 1. Rate Limit 3계층 (BCrypt 도달 전 차단)
+        rateLimitService.tryConsume(RateLimitPolicy.LOGIN_PER_GLOBAL, "all");
+        rateLimitService.tryConsume(RateLimitPolicy.LOGIN_PER_IP, clientIp);
+        rateLimitService.tryConsume(RateLimitPolicy.LOGIN_PER_ACCOUNT, request.email());
 
-        if (user == null) {
-            passwordEncoder.matches(request.password(), dummyHash);
-            log.info("로그인 실패 - 계정 없음: {}", maskEmail(request.email()));
-            throw new CustomException(ErrorCode.AUTH_004);
-        }
+        // 2. 사용자 인증 (AuthQueryService — 트랜잭션 프록시 경유)
+        User user = authQueryService.authenticate(request, dummyHash);
 
-        if (!passwordEncoder.matches(request.password(), user.getPassword())) {
-            log.info("로그인 실패 - 비밀번호 불일치: userId={}", user.getId());
-            throw new CustomException(ErrorCode.AUTH_004);
-        }
-
-        validateUserStatus(user);
-
+        // 3. 토큰 발급 (트랜잭션 외부 — DB 부담 없음)
         String accessToken = jwtTokenProvider.createAccessToken(user.getId(), user.getRole());
         String refreshToken = jwtTokenProvider.createRefreshToken(user.getId(), deviceId);
 
-        // 다중 기기(deviceId) 식별자를 포함하여 저장
+        // 4. 기기 등록 (Lua Script 원자 실행)
+        String evictedDeviceId = deviceLimitService.registerDevice(user.getId(), deviceId);
+        if (evictedDeviceId != null) {
+            log.info("[기기 제한] 기존 기기 자동 로그아웃: userId={}, evicted={}",
+                user.getId(), evictedDeviceId);
+            // TODO: 알림 도메인 연동 시 — 기존 기기 사용자에게 푸시 발송
+        }
+
+        // 5. RT 저장
         redisTokenService.saveRefreshToken(
             user.getId(), deviceId, refreshToken,
-            jwtTokenProvider.getRefreshTokenExpirySeconds());
+            jwtTokenProvider.getRefreshTokenExpirySeconds()
+        );
+
+        // 6. 마지막 로그인 시간 갱신 (별도 트랜잭션, best-effort)
+        authQueryService.recordLogin(user.getId());
 
         LoginResponse response = LoginResponse.of(
             accessToken,
             jwtTokenProvider.getAccessTokenExpirySeconds(),
             user
         );
-
         return new LoginResult(response, refreshToken);
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    //  POST /api/auth/refresh — 토큰 재발급
+    //  POST /api/auth/refresh
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    @Transactional(readOnly = true)
     public RefreshResult refresh(TokenRefreshRequest request, String deviceId) {
-        String oldRefreshToken = request.refreshToken();
-        Claims claims;
+        // 1. Rate Limit (refresh 폭주 방어)
+        rateLimitService.tryConsume(RateLimitPolicy.REFRESH_PER_DEVICE, deviceId);
 
+        String oldRefreshToken = request.refreshToken();
+
+        // 2. 토큰 파싱 + 검증
+        Claims claims;
         try {
             claims = jwtTokenProvider.parseClaims(oldRefreshToken);
         } catch (JwtException | IllegalArgumentException e) {
             throw new CustomException(ErrorCode.AUTH_010);
         }
 
-        // 토큰-쿠키 deviceId 일치 검증
+        // 3. deviceId 이중 검증 (페이로드 ↔ 쿠키)
         String tokenDeviceId = claims.get("deviceId", String.class);
         if (tokenDeviceId == null || !tokenDeviceId.equals(deviceId)) {
             log.warn("RT-Cookie deviceId 불일치 (탈취 의심): tokenDeviceId={}, cookieDeviceId={}",
@@ -164,83 +189,84 @@ public class AuthService {
             throw new CustomException(ErrorCode.AUTH_010);
         }
 
+        // 4. 사용자 조회 + 활성 검증 (1회 조회로 통합)
         Long userId = jwtTokenProvider.getUserId(claims);
-        User user = userRepository.findById(userId)
-            .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_001));
-        validateUserStatus(user);
+        User user = authQueryService.findActiveUser(userId);
 
+        // 5. 새 토큰 발급
         String newAccessToken = jwtTokenProvider.createAccessToken(user.getId(), user.getRole());
-        String newRefreshToken = jwtTokenProvider.createRefreshToken(user.getId(), deviceId);  // ★ deviceId 전달
+        String newRefreshToken = jwtTokenProvider.createRefreshToken(user.getId(), deviceId);
 
-        // Lua Script CAS를 이용한 원자적 갱신 검증
+        // 6. Lua Script CAS — 원자적 RTR 갱신
         boolean isRotated = redisTokenService.rotateRefreshTokenCAS(
-            userId, deviceId, oldRefreshToken, newRefreshToken, jwtTokenProvider.getRefreshTokenExpirySeconds()
+            userId, deviceId, oldRefreshToken, newRefreshToken,
+            jwtTokenProvider.getRefreshTokenExpirySeconds()
         );
 
         if (!isRotated) {
-            log.warn("RT 원자적 갱신 실패 (동시성 충돌 or 이미 갱신됨/탈취 의심): userId={}, deviceId={}", userId, deviceId);
+            log.warn("RT 원자적 갱신 실패 (동시성 충돌/탈취 의심): userId={}, deviceId={}",
+                userId, deviceId);
             throw new CustomException(ErrorCode.AUTH_010);
         }
 
-        // DTO에는 RT 없이, 별도로 newRefreshToken 반환
+        // 7. 기기 활동 시간 갱신 (LRU 신선도)
+        deviceLimitService.touchDevice(userId, deviceId);
+
         TokenRefreshResponse response = TokenRefreshResponse.of(
             newAccessToken,
             jwtTokenProvider.getAccessTokenExpirySeconds()
         );
-
         return new RefreshResult(response, newRefreshToken);
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    //  POST /api/auth/logout — 로그아웃
+    //  POST /api/auth/logout
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     public void logout(Long userId, String deviceId, String accessToken) {
-        redisTokenService.deleteRefreshToken(userId, deviceId);
+        // 각 작업이 독립적으로 실패해도 다른 작업은 진행 (best-effort)
 
+        // 1. RT 삭제 (특정 기기만)
+        try {
+            redisTokenService.deleteRefreshToken(userId, deviceId);
+        } catch (Exception e) {
+            log.error("로그아웃 부분 실패 — RT 삭제: userId={}", userId, e);
+        }
+
+        // 2. 기기 목록에서 제거
+        try {
+            deviceLimitService.removeDevice(userId, deviceId);
+        } catch (Exception e) {
+            log.error("로그아웃 부분 실패 — 기기 제거: userId={}", userId, e);
+        }
+
+        // 3. AT 블랙리스트 등록
         if (accessToken != null) {
             try {
                 String jti = jwtTokenProvider.getJti(accessToken);
-                long expiration = jwtTokenProvider.getExpiration(accessToken);
-
-                if (expiration > 0) {  // ← 가드 추가
+                long expiration = jwtTokenProvider.getExpirationSeconds(accessToken);
+                if (expiration > 0) {
                     redisTokenService.addToBlacklist(jti, expiration);
                 } else {
                     log.debug("이미 만료된 토큰은 블랙리스트 추가 생략: jti={}", jti);
                 }
-
             } catch (Exception e) {
-                log.error("로그아웃 부분 실패 - JTI 파싱 오류: userId={}", userId, e);
+                log.error("로그아웃 부분 실패 — JTI 블랙리스트: userId={}", userId, e);
             }
         }
+
         log.info("로그아웃 완료: userId={}, deviceId={}", userId, deviceId);
     }
 
-    // ── Private ── : 검증 및 이메일 마스킹 로직
-    private void validateUserStatus(User user) {
-        if (user.isSuspended()) throw new CustomException(ErrorCode.AUTH_005);
-        if (!user.isActive()) throw new CustomException(ErrorCode.AUTH_006);
-    }
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    //  Private
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     private void validateSellerFields(SignUpRequest request) {
-        // 프로젝트 ErrorCode Enum에 COMMON_001이 있는지 확인하시고 없으면 적절한 코드로 변경해주세요.
         if (request.shopName() == null || request.shopName().isBlank()) {
-            throw new CustomException(ErrorCode.COMMON_001, "판매자 상호명은 필수입니다");
+            throw new CustomException(ErrorCode.SELLER_010);
         }
         if (request.businessNumber() == null || request.businessNumber().isBlank()) {
-            throw new CustomException(ErrorCode.COMMON_001, "사업자 등록번호는 필수입니다");
+            throw new CustomException(ErrorCode.SELLER_011);
         }
-    }
-
-    private String maskEmail(String email) {
-        if (email == null || !email.contains("@")) return email;
-
-        int atIndex = email.indexOf("@");
-        String id = email.substring(0, atIndex);
-        String domain = email.substring(atIndex);
-
-        if (id.length() <= 2) {
-            return "*".repeat(id.length()) + domain;
-        }
-        return id.substring(0, 2) + "*".repeat(id.length() - 2) + domain;
     }
 }
