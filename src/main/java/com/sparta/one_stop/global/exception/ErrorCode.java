@@ -45,9 +45,10 @@ public enum ErrorCode {
 
     // ===== AUTH - OAuth2 =====
     AUTH_016(HttpStatus.CONFLICT, "AUTH_016", "이미 OAuth2 계정이 연결되어 있습니다"),
-    AUTH_017(HttpStatus.CONFLICT, "AUTH_017", "지원하지 않는 OAuth2 제공자입니다: "),
-    AUTH_018(HttpStatus.CONFLICT, "AUTH_018", "이메일 수신 오류 / 예기치 못한 오류 발생 "),
-    AUTH_019(HttpStatus.CONFLICT, "AUTH_019", "이미 가입된 이메일입니다.: "),
+    AUTH_017(HttpStatus.BAD_REQUEST, "AUTH_017", "지원하지 않는 OAuth2 제공자입니다"),
+    AUTH_018(HttpStatus.UNAUTHORIZED, "AUTH_018", "OAuth2 인증 처리에 실패했습니다"),
+    AUTH_019(HttpStatus.CONFLICT, "AUTH_019", "이미 다른 방법으로 가입된 이메일입니다"),
+
 
     // ===== MEMBER - 회원 =====
     MEMBER_001(HttpStatus.NOT_FOUND, "MEMBER_001", "회원 정보를 찾을 수 없습니다"),
@@ -149,6 +150,8 @@ public enum ErrorCode {
     SELLER_006(HttpStatus.CONFLICT, "SELLER_006", "이미 등록된 사업자등록번호입니다"),
     SELLER_007(HttpStatus.FORBIDDEN, "SELLER_007", "해당 주문 상품의 판매자가 아닙니다"),
     SELLER_008(HttpStatus.BAD_REQUEST, "SELLER_008", "이미 처리된 주문입니다"),
+    SELLER_010(HttpStatus.BAD_REQUEST, "SELLER_010", "판매자 상호명은 필수입니다"),
+    SELLER_011(HttpStatus.BAD_REQUEST, "SELLER_011", "사업자 등록번호는 필수입니다"),
 
     // ===== ADMIN - 관리자 =====
     ADMIN_001(HttpStatus.FORBIDDEN, "ADMIN_001", "관리자 권한이 필요합니다"),

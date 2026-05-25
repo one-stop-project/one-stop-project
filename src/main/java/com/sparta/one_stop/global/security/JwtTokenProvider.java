@@ -133,8 +133,11 @@ public class JwtTokenProvider {
     /**
      * AT 만료 시간 (초 단위) - 블랙리스트 TTL 산정용
      */
-    public long getRemainingExpiration(Claims claims) {
-        return claims.getExpiration().getTime() - System.currentTimeMillis();
+    public long getRemainingSeconds(Claims claims) {
+        long now = System.currentTimeMillis();
+        long expiration = claims.getExpiration().getTime();
+        long remainTime = expiration - now;
+        return remainTime > 0 ? remainTime / 1000 : 0;
     }
 
     /**
@@ -154,7 +157,7 @@ public class JwtTokenProvider {
     /**
      * 토큰의 남은 만료 시간(초)을 계산합니다. (블랙리스트 저장용 TTL)
      */
-    public long getExpiration(String token) {
+    public long getExpirationSeconds(String token) {
         try {
             // 버전 0.12.x 문법에 맞게 수정 및 key -> secretKey 변경
             Date expiration = Jwts.parser()

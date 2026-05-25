@@ -11,6 +11,7 @@ import com.sparta.one_stop.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -62,10 +63,15 @@ public class AuthCommandService {
         try {
             // ★ saveAndFlush — 즉시 INSERT 강제 (동시성 방어)
             savedUser = userRepository.saveAndFlush(user);
-        } catch (DataIntegrityViolationException e) {
-            // UNIQUE 인덱스 충돌 — 동시 가입 시도
+
+        } catch (DuplicateKeyException e) {
             log.warn("회원가입 동시성 충돌 — 이메일 중복: {}", maskEmail(request.email()));
             throw new CustomException(ErrorCode.AUTH_002);
+        }
+
+        catch (DataIntegrityViolationException e) {
+            log.error("회원가입 무결성 오류", e);
+            throw e;
         }
 
         // SELLER 추가 정보 저장

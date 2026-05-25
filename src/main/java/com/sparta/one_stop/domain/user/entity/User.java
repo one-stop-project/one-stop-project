@@ -102,6 +102,9 @@ public class User extends BaseEntity {
 
     // 비밀번호 재설정
     public void resetPassword(String newEncodedPassword) {
+        if (newEncodedPassword == null || newEncodedPassword.isBlank()) {
+            throw new CustomException(ErrorCode.MEMBER_002);
+        }
         this.password = newEncodedPassword;
     }
 
@@ -132,9 +135,19 @@ public class User extends BaseEntity {
 
     // OAuth2 계정 연결 — 신규 가입 시 한 번만 호출
     public void linkOAuth2(String provider, String providerId) {
+        // ★ 입력 검증 추가
+        if (provider == null || provider.isBlank()) {
+            throw new CustomException(ErrorCode.AUTH_017, "OAuth2 provider는 필수입니다");
+        }
+        if (providerId == null || providerId.isBlank()) {
+            throw new CustomException(ErrorCode.AUTH_018, "OAuth2 providerId는 필수입니다");
+        }
+
+        // 이미 연결된 경우 차단
         if (this.provider != null) {
             throw new CustomException(ErrorCode.AUTH_016, "이미 OAuth2 계정이 연결되어 있습니다");
         }
+
         this.provider = provider;
         this.providerId = providerId;
     }
