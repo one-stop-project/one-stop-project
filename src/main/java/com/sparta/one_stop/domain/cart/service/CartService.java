@@ -2,8 +2,9 @@ package com.sparta.one_stop.domain.cart.service;
 
 import com.sparta.one_stop.domain.cart.dto.request.AddCartItemRequest;
 import com.sparta.one_stop.domain.cart.dto.request.UpdateCartItemRequest;
+import com.sparta.one_stop.domain.cart.dto.response.CartItemDetailResponse;
 import com.sparta.one_stop.domain.cart.dto.response.CartItemResponse;
-import com.sparta.one_stop.domain.cart.dto.response.CartResponse;
+import com.sparta.one_stop.domain.cart.dto.response.CartPageResponse;
 import com.sparta.one_stop.domain.cart.dto.response.UpdateCartItemResponse;
 import com.sparta.one_stop.domain.cart.entity.Cart;
 import com.sparta.one_stop.domain.cart.entity.CartItem;
@@ -16,6 +17,8 @@ import com.sparta.one_stop.domain.user.repository.UserRepository;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -107,23 +110,53 @@ public class CartService {
     /**
      * 장바구니 조회
      * - 장바구니가 없으면 빈 장바구니 응답 반환
-     * - 장바구니 상품과 상품 정보를 함께 조회하여 DTO 변환 시 N+1 방지
+     * - 장바구니 상품은 페이징 조회
+     * - 상품 옵션/상품 정보를 함께 조회하여 DTO 변환 시 N+1 방지
+     * - totalPrice/itemCount는 전체 장바구니 기준으로 계산
      */
     @Transactional(readOnly = true)
-    public CartResponse getCart(Long userId) {
+    public CartPageResponse getCart(
+        Long userId,
+        Pageable pageable
+    ) {
 
         return cartRepository.findByUserId(userId)
             .map(cart -> {
-                List<CartItem> cartItems = cartItemRepository.findAllByCartIdWithProduct(
+                Page<CartItem> cartItemPage =
+                    cartItemRepository.findPageByCartIdWithProduct(
+                        cart.getId(),
+                        pageable
+                    );
+
+                Long totalPrice = cartItemRepository.sumTotalPriceByCartId(
                     cart.getId()
                 );
 
-                return CartResponse.of(
-                    cart,
-                    cartItems
+                Long totalQuantity = cartItemRepository.sumQuantityByCartId(
+                    cart.getId()
+                );
+
+                List<CartItemDetailResponse> content =
+                    cartItemPage.getContent()
+                        .stream()
+                        .map(CartItemDetailResponse::of)
+                        .toList();
+
+                return CartPageResponse.of(
+                    cart.getId(),
+                    content,
+                    totalPrice,
+                    totalQuantity.intValue(),
+                    cartItemPage.getNumber(),
+                    cartItemPage.getSize(),
+                    cartItemPage.getTotalElements(),
+                    cartItemPage.getTotalPages()
                 );
             })
-            .orElseGet(CartResponse::empty);
+            .orElseGet(() -> CartPageResponse.empty(
+                pageable.getPageNumber(),
+                pageable.getPageSize()
+            ));
     }
 
     /**

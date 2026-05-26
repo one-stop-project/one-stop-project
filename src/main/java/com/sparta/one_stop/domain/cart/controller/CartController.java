@@ -3,13 +3,16 @@ package com.sparta.one_stop.domain.cart.controller;
 import com.sparta.one_stop.domain.cart.dto.request.AddCartItemRequest;
 import com.sparta.one_stop.domain.cart.dto.request.UpdateCartItemRequest;
 import com.sparta.one_stop.domain.cart.dto.response.CartItemResponse;
-import com.sparta.one_stop.domain.cart.dto.response.CartResponse;
+import com.sparta.one_stop.domain.cart.dto.response.CartPageResponse;
 import com.sparta.one_stop.domain.cart.dto.response.UpdateCartItemResponse;
 import com.sparta.one_stop.domain.cart.service.CartService;
 import com.sparta.one_stop.global.response.ApiResponse;
 import com.sparta.one_stop.global.security.AuthUser;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -46,15 +49,21 @@ public class CartController {
 
     // 장바구니 조회
     @GetMapping
-    public ResponseEntity<ApiResponse<CartResponse>> getCart(
-        @AuthenticationPrincipal AuthUser authUser
+    public ResponseEntity<ApiResponse<CartPageResponse>> getCart(
+        @AuthenticationPrincipal AuthUser authUser,
+        @PageableDefault(
+            size = 20,
+            sort = "id",
+            direction = Sort.Direction.DESC
+        ) Pageable pageable
     ) {
-        CartResponse response = cartService.getCart(
-            authUser.userId()
-        );
-
         return ResponseEntity.ok(
-            ApiResponse.success(response)
+            ApiResponse.success(
+                cartService.getCart(
+                    authUser.userId(),
+                    pageable
+                )
+            )
         );
     }
 
