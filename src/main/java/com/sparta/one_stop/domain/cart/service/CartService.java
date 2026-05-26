@@ -107,13 +107,14 @@ public class CartService {
     /**
      * 장바구니 조회
      * - 장바구니가 없으면 빈 장바구니 응답 반환
+     * - 장바구니 상품과 상품 정보를 함께 조회하여 DTO 변환 시 N+1 방지
      */
     @Transactional(readOnly = true)
     public CartResponse getCart(Long userId) {
 
         return cartRepository.findByUserId(userId)
             .map(cart -> {
-                List<CartItem> cartItems = cartItemRepository.findAllByCartId(
+                List<CartItem> cartItems = cartItemRepository.findAllByCartIdWithProduct(
                     cart.getId()
                 );
 
