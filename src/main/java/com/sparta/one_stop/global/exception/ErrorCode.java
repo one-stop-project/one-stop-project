@@ -70,6 +70,8 @@ public enum ErrorCode {
     PRODUCT_009(HttpStatus.BAD_REQUEST, "PRODUCT_009", "주문 진행 중인 상품은 삭제할 수 없습니다"),
     PRODUCT_010(HttpStatus.BAD_REQUEST, "PRODUCT_010", "현재 상태에서는 수정할 수 없습니다"),
     PRODUCT_011(HttpStatus.NOT_FOUND, "PRODUCT_011", "상품 이미지를 찾을 수 없습니다"),
+    PRODUCT_012(HttpStatus.BAD_REQUEST, "PRODUCT_012", "상품 카테고리는 최소 1개 이상 매핑되어야 합니다"),
+    PRODUCT_013(HttpStatus.BAD_REQUEST, "PRODUCT_013", "상품 카테고리는 최대 3개까지 매핑할 수 있습니다"),
 
     // ===== CATEGORY - 카테고리 =====
     CATEGORY_001(HttpStatus.NOT_FOUND, "CATEGORY_001", "카테고리를 찾을 수 없습니다"),
