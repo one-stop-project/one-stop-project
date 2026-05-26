@@ -2,18 +2,18 @@ package com.sparta.one_stop.domain.cart.dto.response;
 
 public record UpdateCartItemResponse(
 
-    Long cartItemId,
+    Long itemId,
 
     Integer quantity
 ) {
 
     public static UpdateCartItemResponse of(
-        Long cartItemId,
+        Long itemId,
         Integer quantity
     ) {
 
         return new UpdateCartItemResponse(
-            cartItemId,
+            itemId,
             quantity
         );
     }
