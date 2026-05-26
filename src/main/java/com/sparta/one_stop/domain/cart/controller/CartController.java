@@ -6,8 +6,10 @@ import com.sparta.one_stop.domain.cart.dto.response.CartItemResponse;
 import com.sparta.one_stop.domain.cart.dto.response.CartPageResponse;
 import com.sparta.one_stop.domain.cart.dto.response.UpdateCartItemResponse;
 import com.sparta.one_stop.domain.cart.service.CartService;
+import com.sparta.one_stop.domain.cart.support.GuestCartCookieProvider;
 import com.sparta.one_stop.global.response.ApiResponse;
 import com.sparta.one_stop.global.security.AuthUser;
+import jakarta.servlet.http.HttpServletResponse;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
@@ -15,6 +17,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -35,15 +38,22 @@ public class CartController {
     @PostMapping("/items")
     public ResponseEntity<ApiResponse<CartItemResponse>> addCartItem(
         @AuthenticationPrincipal AuthUser authUser,
+        @CookieValue(
+            name = GuestCartCookieProvider.GUEST_CART_COOKIE_NAME,
+            required = false
+        ) String guestCartId,
+        HttpServletResponse response,
         @Valid @RequestBody AddCartItemRequest request
     ) {
-        CartItemResponse response = cartService.addCartItem(
-            authUser.userId(),
+        CartItemResponse cartItemResponse = cartService.addCartItem(
+            authUser,
+            guestCartId,
+            response,
             request
         );
 
         return ResponseEntity.ok(
-            ApiResponse.success(response)
+            ApiResponse.success(cartItemResponse)
         );
     }
 
@@ -51,49 +61,70 @@ public class CartController {
     @GetMapping
     public ResponseEntity<ApiResponse<CartPageResponse>> getCart(
         @AuthenticationPrincipal AuthUser authUser,
+        @CookieValue(
+            name = GuestCartCookieProvider.GUEST_CART_COOKIE_NAME,
+            required = false
+        ) String guestCartId,
+        HttpServletResponse response,
         @PageableDefault(
             size = 20,
             sort = "id",
             direction = Sort.Direction.DESC
         ) Pageable pageable
     ) {
+        CartPageResponse cartResponse = cartService.getCart(
+            authUser,
+            guestCartId,
+            response,
+            pageable
+        );
+
         return ResponseEntity.ok(
-            ApiResponse.success(
-                cartService.getCart(
-                    authUser.userId(),
-                    pageable
-                )
-            )
+            ApiResponse.success(cartResponse)
         );
     }
 
     // 장바구니 수량 변경
-    @PatchMapping("/items/{cartItemId}")
+    @PatchMapping("/items/{itemId}")
     public ResponseEntity<ApiResponse<UpdateCartItemResponse>> updateCartItemQuantity(
         @AuthenticationPrincipal AuthUser authUser,
-        @PathVariable Long cartItemId,
+        @CookieValue(
+            name = GuestCartCookieProvider.GUEST_CART_COOKIE_NAME,
+            required = false
+        ) String guestCartId,
+        HttpServletResponse response,
+        @PathVariable Long itemId,
         @Valid @RequestBody UpdateCartItemRequest request
     ) {
-        UpdateCartItemResponse response = cartService.updateCartItemQuantity(
-            authUser.userId(),
-            cartItemId,
+        UpdateCartItemResponse updateResponse = cartService.updateCartItemQuantity(
+            authUser,
+            guestCartId,
+            response,
+            itemId,
             request
         );
 
         return ResponseEntity.ok(
-            ApiResponse.success(response)
+            ApiResponse.success(updateResponse)
         );
     }
 
     // 장바구니 삭제
-    @DeleteMapping("/items/{cartItemId}")
+    @DeleteMapping("/items/{itemId}")
     public ResponseEntity<ApiResponse<Void>> deleteCartItem(
         @AuthenticationPrincipal AuthUser authUser,
-        @PathVariable Long cartItemId
+        @CookieValue(
+            name = GuestCartCookieProvider.GUEST_CART_COOKIE_NAME,
+            required = false
+        ) String guestCartId,
+        HttpServletResponse response,
+        @PathVariable Long itemId
     ) {
         cartService.deleteCartItem(
-            authUser.userId(),
-            cartItemId
+            authUser,
+            guestCartId,
+            response,
+            itemId
         );
 
         return ResponseEntity.ok(

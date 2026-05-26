@@ -6,16 +6,20 @@ public record CartPageResponse(
 
     Long cartId,
 
+    // 현재 페이지의 장바구니 상품 목록
     List<CartItemDetailResponse> content,
 
+    // 전체 장바구니 상품 총액
     Long totalPrice,
 
+    // 전체 장바구니 상품 수량 합계
     Integer itemCount,
 
     int page,
 
     int size,
 
+    // 전체 장바구니 상품 종류 수
     long totalElements,
 
     int totalPages
