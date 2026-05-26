@@ -2,8 +2,9 @@ package com.sparta.one_stop.domain.cart.service;
 
 import com.sparta.one_stop.domain.cart.dto.request.AddCartItemRequest;
 import com.sparta.one_stop.domain.cart.dto.request.UpdateCartItemRequest;
+import com.sparta.one_stop.domain.cart.dto.response.CartItemDetailResponse;
 import com.sparta.one_stop.domain.cart.dto.response.CartItemResponse;
-import com.sparta.one_stop.domain.cart.dto.response.CartResponse;
+import com.sparta.one_stop.domain.cart.dto.response.CartPageResponse;
 import com.sparta.one_stop.domain.cart.dto.response.UpdateCartItemResponse;
 import com.sparta.one_stop.domain.cart.entity.Cart;
 import com.sparta.one_stop.domain.cart.entity.CartItem;
@@ -15,7 +16,11 @@ import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.UserRepository;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
+import com.sparta.one_stop.global.security.AuthUser;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,14 +33,119 @@ public class CartService {
 
     private final CartRepository cartRepository;
     private final CartItemRepository cartItemRepository;
-
     private final UserRepository userRepository;
     private final ProductItemRepository productItemRepository;
+    private final GuestCartService guestCartService;
 
     /**
      * 장바구니 담기
-     * - cart 없으면 생성
-     * - 동일 상품 옵션 존재 시 수량 증가
+     * - 로그인 사용자는 DB 장바구니 사용
+     * - 비로그인 사용자는 Redis 장바구니 사용
+     */
+    public CartItemResponse addCartItem(
+        AuthUser authUser,
+        String guestCartId,
+        HttpServletResponse response,
+        AddCartItemRequest request
+    ) {
+        if (authUser != null) {
+            return addCartItem(
+                authUser.userId(),
+                request
+            );
+        }
+
+        return guestCartService.addCartItem(
+            guestCartId,
+            response,
+            request
+        );
+    }
+
+    /**
+     * 장바구니 조회
+     * - 로그인 사용자는 DB 장바구니 조회
+     * - 비로그인 사용자는 Redis 장바구니 조회
+     */
+    @Transactional(readOnly = true)
+    public CartPageResponse getCart(
+        AuthUser authUser,
+        String guestCartId,
+        HttpServletResponse response,
+        Pageable pageable
+    ) {
+        if (authUser != null) {
+            return getCart(
+                authUser.userId(),
+                pageable
+            );
+        }
+
+        return guestCartService.getCart(
+            guestCartId,
+            response,
+            pageable
+        );
+    }
+
+    /**
+     * 장바구니 수량 변경
+     * - PATCH 경로 변수는 itemId 기준
+     */
+    public UpdateCartItemResponse updateCartItemQuantity(
+        AuthUser authUser,
+        String guestCartId,
+        HttpServletResponse response,
+        Long itemId,
+        UpdateCartItemRequest request
+    ) {
+        if (authUser != null) {
+            return updateCartItemQuantityByItemId(
+                authUser.userId(),
+                itemId,
+                request
+            );
+        }
+
+        return guestCartService.updateCartItemQuantity(
+            guestCartId,
+            response,
+            itemId,
+            request
+        );
+    }
+
+    /**
+     * 장바구니 삭제
+     * - DELETE 경로 변수는 itemId 기준
+     */
+    public void deleteCartItem(
+        AuthUser authUser,
+        String guestCartId,
+        HttpServletResponse response,
+        Long itemId
+    ) {
+        if (authUser != null) {
+            deleteCartItemByItemId(
+                authUser.userId(),
+                itemId
+            );
+            return;
+        }
+
+        guestCartService.deleteCartItem(
+            guestCartId,
+            response,
+            itemId
+        );
+    }
+
+
+    /**
+     * 로그인 장바구니 담기
+     * - DB 장바구니가 없으면 생성
+     * - 동일 상품 옵션이 이미 존재하면 수량 증가
+     * - 새 상품 옵션 추가 시 최대 50종 제한 검증
      */
     public CartItemResponse addCartItem(
         Long userId,
@@ -105,50 +215,81 @@ public class CartService {
     }
 
     /**
-     * 장바구니 조회
-     * - 장바구니가 없으면 빈 장바구니 응답 반환
+     * 로그인 장바구니 조회
+     * - DB 장바구니가 없으면 빈 장바구니 응답 반환
+     * - 장바구니 상품은 페이징 조회
+     * - 상품 옵션/상품 정보를 함께 조회하여 DTO 변환 시 N+1 방지
+     * - totalPrice/itemCount는 전체 장바구니 기준으로 계산
      */
     @Transactional(readOnly = true)
-    public CartResponse getCart(Long userId) {
+    public CartPageResponse getCart(
+        Long userId,
+        Pageable pageable
+    ) {
 
         return cartRepository.findByUserId(userId)
             .map(cart -> {
-                List<CartItem> cartItems = cartItemRepository.findAllByCartId(
+                Page<CartItem> cartItemPage =
+                    cartItemRepository.findPageByCartIdWithProduct(
+                        cart.getId(),
+                        pageable
+                    );
+
+                Long totalPrice = cartItemRepository.sumTotalPriceByCartId(
                     cart.getId()
                 );
 
-                return CartResponse.of(
-                    cart,
-                    cartItems
+                Long totalQuantity = cartItemRepository.sumQuantityByCartId(
+                    cart.getId()
+                );
+
+                List<CartItemDetailResponse> content =
+                    cartItemPage.getContent()
+                        .stream()
+                        .map(CartItemDetailResponse::of)
+                        .toList();
+
+                return CartPageResponse.of(
+                    cart.getId(),
+                    content,
+                    totalPrice,
+                    totalQuantity.intValue(),
+                    cartItemPage.getNumber(),
+                    cartItemPage.getSize(),
+                    cartItemPage.getTotalElements(),
+                    cartItemPage.getTotalPages()
                 );
             })
-            .orElseGet(CartResponse::empty);
+            .orElseGet(() -> CartPageResponse.empty(
+                pageable.getPageNumber(),
+                pageable.getPageSize()
+            ));
     }
 
     /**
-     * 장바구니 수량 변경
-     * - 요청 quantity는 변경 후 최종 수량
-     * - PATCH는 1~99 사이 수량 변경만 담당
-     * - 삭제는 DELETE API에서 처리
+     * 로그인 장바구니 수량 변경
+     * - PATCH /api/carts/items/{itemId} 요청을 처리
+     * - userId로 장바구니를 조회한 뒤 cartId + itemId 기준으로 CartItem 조회
+     * - cartItemId가 아닌 상품 옵션 ID(itemId)를 기준으로 수정
      */
-    public UpdateCartItemResponse updateCartItemQuantity(
+    public UpdateCartItemResponse updateCartItemQuantityByItemId(
         Long userId,
-        Long cartItemId,
+        Long itemId,
         UpdateCartItemRequest request
     ) {
-
-        CartItem cartItem = cartItemRepository.findById(cartItemId)
+        Cart cart = cartRepository.findByUserId(userId)
             .orElseThrow(() -> new CustomException(ErrorCode.CART_004));
 
-        // 본인 장바구니 검증
-        validateCartOwner(userId, cartItem);
+        CartItem cartItem = cartItemRepository.findByCartIdAndProductItemId(
+                cart.getId(),
+                itemId
+            )
+            .orElseThrow(() -> new CustomException(ErrorCode.CART_004));
 
         int currentQuantity = cartItem.getQuantity();
         int requestQuantity = request.quantity();
 
-        // 증가
         if (requestQuantity > currentQuantity) {
-
             ProductItem productItem = cartItem.getProductItem();
 
             validateIncreaseCartItemQuantity(
@@ -159,55 +300,38 @@ public class CartService {
             cartItem.increaseQuantity(
                 requestQuantity - currentQuantity
             );
-        }
-
-        // 감소
-        else if (requestQuantity < currentQuantity) {
-
+        } else if (requestQuantity < currentQuantity) {
             cartItem.decreaseQuantity(
                 currentQuantity - requestQuantity
             );
         }
 
-        // 요청 수량이 현재 수량과 같으면 별도 변경 없이 현재 상태 반환
         return UpdateCartItemResponse.of(
-            cartItemId,
+            itemId,
             requestQuantity
         );
     }
 
     /**
-     * 장바구니 삭제
+     * 로그인 장바구니 상품 삭제
+     * - DELETE /api/carts/items/{itemId} 요청을 처리
+     * - userId로 장바구니를 조회한 뒤 cartId + itemId 기준으로 CartItem 조회
+     * - cartItemId가 아닌 상품 옵션 ID(itemId)를 기준으로 삭제
      */
-    public void deleteCartItem(
+    public void deleteCartItemByItemId(
         Long userId,
-        Long cartItemId
+        Long itemId
     ) {
-
-        CartItem cartItem = cartItemRepository.findById(cartItemId)
+        Cart cart = cartRepository.findByUserId(userId)
             .orElseThrow(() -> new CustomException(ErrorCode.CART_004));
 
-        // 본인 장바구니 검증
-        validateCartOwner(userId, cartItem);
+        CartItem cartItem = cartItemRepository.findByCartIdAndProductItemId(
+                cart.getId(),
+                itemId
+            )
+            .orElseThrow(() -> new CustomException(ErrorCode.CART_004));
 
         cartItemRepository.delete(cartItem);
-    }
-
-    /**
-     * 장바구니 소유자 검증
-     */
-    private void validateCartOwner(
-        Long userId,
-        CartItem cartItem
-    ) {
-
-        if (!cartItem.getCart()
-            .getUser()
-            .getId()
-            .equals(userId)) {
-
-            throw new CustomException(ErrorCode.CART_006);
-        }
     }
 
     /**

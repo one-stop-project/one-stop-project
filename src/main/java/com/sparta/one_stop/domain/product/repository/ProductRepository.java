@@ -1,6 +1,7 @@
 package com.sparta.one_stop.domain.product.repository;
 
 import com.sparta.one_stop.domain.product.entity.Product;
+import com.sparta.one_stop.global.enums.order.OrderItemStatus;
 import com.sparta.one_stop.global.enums.product.ProductStatus;
 import com.sparta.one_stop.global.enums.user.SellerStatus;
 import jakarta.persistence.LockModeType;
@@ -80,4 +81,11 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     @Modifying(clearAutomatically = true)
     @Query("UPDATE Product p SET p.viewCount = p.viewCount + 1 WHERE p.id = :id")
     void incrementViewCount(@Param("id") Long id);
+
+    // 진행 중 주문 존재 여부 (상품 삭제 차단용 — PRODUCT_009)
+    @Query("SELECT COUNT(oi) > 0 FROM OrderItem oi " +
+           "WHERE oi.productItem.product.id = :productId " +
+           "AND oi.status IN :statuses")
+    boolean existsActiveOrderItemByProductId(@Param("productId") Long productId,
+                                             @Param("statuses") List<OrderItemStatus> statuses);
 }
