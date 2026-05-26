@@ -15,7 +15,8 @@ import java.util.Set;
 @Table(name = "product",
         indexes = {
                 @Index(name = "idx_product_seller", columnList = "seller_id, status"),
-                @Index(name = "idx_product_status", columnList = "status, created_at")
+                @Index(name = "idx_product_status", columnList = "status, created_at"),
+                @Index(name = "idx_product_sales", columnList = "status, sales_count")
         })
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
