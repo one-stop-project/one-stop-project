@@ -2,7 +2,7 @@ package com.sparta.one_stop.domain.product.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 
@@ -19,6 +19,7 @@ import com.sparta.one_stop.domain.product.repository.ProductRepository;
 import com.sparta.one_stop.domain.user.entity.Seller;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.SellerRepository;
+import com.sparta.one_stop.global.enums.order.OrderItemStatus;
 import com.sparta.one_stop.global.enums.product.ProductImageStatus;
 import com.sparta.one_stop.global.enums.product.ProductStatus;
 import com.sparta.one_stop.global.enums.user.UserRole;
@@ -539,7 +540,14 @@ class SellerProductServiceTest {
             Product product = createProduct(seller, ProductStatus.APPROVED);
             given(sellerRepository.findByUserId(SELLER_USER_ID)).willReturn(Optional.of(seller));
             given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
-            given(productRepository.existsActiveOrderItemByProductId(eq(PRODUCT_ID), anyList()))
+            given(productRepository.existsActiveOrderItemByProductId(
+                    eq(PRODUCT_ID),
+                    argThat(statuses -> statuses.size() == 4
+                            && statuses.containsAll(List.of(
+                                    OrderItemStatus.PENDING_PAYMENT,
+                                    OrderItemStatus.ORDERED,
+                                    OrderItemStatus.CONFIRMED,
+                                    OrderItemStatus.SHIPPING)))))
                     .willReturn(false);
 
             // when
@@ -557,7 +565,14 @@ class SellerProductServiceTest {
             Product product = createProduct(seller, ProductStatus.APPROVED);
             given(sellerRepository.findByUserId(SELLER_USER_ID)).willReturn(Optional.of(seller));
             given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
-            given(productRepository.existsActiveOrderItemByProductId(eq(PRODUCT_ID), anyList()))
+            given(productRepository.existsActiveOrderItemByProductId(
+                    eq(PRODUCT_ID),
+                    argThat(statuses -> statuses.size() == 4
+                            && statuses.containsAll(List.of(
+                                    OrderItemStatus.PENDING_PAYMENT,
+                                    OrderItemStatus.ORDERED,
+                                    OrderItemStatus.CONFIRMED,
+                                    OrderItemStatus.SHIPPING)))))
                     .willReturn(true);
 
             // when & then
