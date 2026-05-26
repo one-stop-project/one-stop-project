@@ -21,6 +21,7 @@ import com.sparta.one_stop.domain.product.repository.ProductImageRepository;
 import com.sparta.one_stop.domain.product.repository.ProductRepository;
 import com.sparta.one_stop.domain.user.entity.Seller;
 import com.sparta.one_stop.domain.user.repository.SellerRepository;
+import com.sparta.one_stop.global.enums.order.OrderItemStatus;
 import com.sparta.one_stop.global.enums.product.ProductImageStatus;
 import com.sparta.one_stop.global.enums.product.ProductStatus;
 import com.sparta.one_stop.global.enums.user.SellerStatus;
@@ -45,6 +46,14 @@ public class SellerProductService {
     private final ProductImageRepository productImageRepository;
     private final CategoryRepository categoryRepository;
     private final SellerRepository sellerRepository;
+
+    // 상품 삭제 차단 기준: 종료 상태(DELIVERED/CANCELLED/REJECTED)가 아닌 진행 중 주문
+    private static final List<OrderItemStatus> ACTIVE_ORDER_ITEM_STATUSES = List.of(
+        OrderItemStatus.PENDING_PAYMENT,
+        OrderItemStatus.ORDERED,
+        OrderItemStatus.CONFIRMED,
+        OrderItemStatus.SHIPPING
+    );
 
     // 상품 등록 (APPROVE_REQUESTED 상태로 생성)
     @Transactional
@@ -94,7 +103,7 @@ public class SellerProductService {
             throw new CustomException(ErrorCode.PRODUCT_008);
         }
 
-        // 정책: DISCONTINUED / FORCE_INACTIVE 상태는 수정 불가
+        // 정책: DISCONTINUED 상태만 수정 불가 (FORCE_INACTIVE는 판매자 소명/재승인을 위해 수정 허용)
         if (!product.isEditable()) {
             throw new CustomException(ErrorCode.PRODUCT_010);
         }
@@ -127,6 +136,11 @@ public class SellerProductService {
 
         if (!product.getSeller().getId().equals(seller.getId())) {
             throw new CustomException(ErrorCode.PRODUCT_008);
+        }
+
+        // 정책: 진행 중 주문(PENDING_PAYMENT/ORDERED/CONFIRMED/SHIPPING) 존재 시 삭제 불가
+        if (productRepository.existsActiveOrderItemByProductId(productId, ACTIVE_ORDER_ITEM_STATUSES)) {
+            throw new CustomException(ErrorCode.PRODUCT_009);
         }
 
         product.discontinue();
@@ -285,8 +299,16 @@ public class SellerProductService {
         return seller;
     }
 
-    // 카테고리 조회 + 존재 검증
+    // 카테고리 조회 + 존재 검증 + 매핑 개수 검증 (DTO @Size 외 방어 깊이)
     private List<Category> findAndValidateCategories(List<Long> categoryIds) {
+        // 정책: 상품당 카테고리 매핑 최소 1개, 최대 3개
+        if (categoryIds == null || categoryIds.isEmpty()) {
+            throw new CustomException(ErrorCode.PRODUCT_012);
+        }
+        if (categoryIds.size() > 3) {
+            throw new CustomException(ErrorCode.PRODUCT_013);
+        }
+
         List<Category> categories = categoryRepository.findAllByIdIn(categoryIds);
 
         if (categories.size() != categoryIds.size()) {

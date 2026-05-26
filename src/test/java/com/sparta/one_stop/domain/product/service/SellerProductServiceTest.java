@@ -2,9 +2,12 @@ package com.sparta.one_stop.domain.product.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 
 import com.sparta.one_stop.domain.product.dto.request.ProductImageAddRequest;
+import com.sparta.one_stop.domain.product.dto.request.ProductUpdateRequest;
 import com.sparta.one_stop.domain.product.dto.response.ProductImageAddResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductImageDeleteResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductImageThumbnailResponse;
@@ -109,6 +112,12 @@ class SellerProductServiceTest {
     private ProductImageAddRequest addRequest(List<String> imageUrls) {
         ProductImageAddRequest request = BeanUtils.instantiateClass(ProductImageAddRequest.class);
         ReflectionTestUtils.setField(request, "imageUrls", imageUrls);
+        return request;
+    }
+
+    private ProductUpdateRequest updateRequest(List<Long> categoryIds) {
+        ProductUpdateRequest request = BeanUtils.instantiateClass(ProductUpdateRequest.class);
+        ReflectionTestUtils.setField(request, "categoryIds", categoryIds);
         return request;
     }
 
@@ -515,6 +524,84 @@ class SellerProductServiceTest {
                     SELLER_USER_ID, PRODUCT_ID, 1L))
                     .isInstanceOf(CustomException.class)
                     .extracting("errorCode").isEqualTo(ErrorCode.PRODUCT_010);
+        }
+    }
+
+    @Nested
+    @DisplayName("delete - 상품 삭제 (Soft Delete → DISCONTINUED)")
+    class DeleteProduct {
+
+        @Test
+        @DisplayName("진행 중 주문이 없으면 상품이 DISCONTINUED 상태로 전환된다")
+        void delete_noActiveOrder_discontinuesProduct() {
+            // given
+            Seller seller = approvedSeller(SELLER_ID);
+            Product product = createProduct(seller, ProductStatus.APPROVED);
+            given(sellerRepository.findByUserId(SELLER_USER_ID)).willReturn(Optional.of(seller));
+            given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+            given(productRepository.existsActiveOrderItemByProductId(eq(PRODUCT_ID), anyList()))
+                    .willReturn(false);
+
+            // when
+            sellerProductService.delete(SELLER_USER_ID, PRODUCT_ID);
+
+            // then
+            assertThat(product.getStatus()).isEqualTo(ProductStatus.DISCONTINUED);
+        }
+
+        @Test
+        @DisplayName("진행 중 주문(PENDING_PAYMENT/ORDERED/CONFIRMED/SHIPPING)이 있으면 PRODUCT_009 예외가 발생한다")
+        void delete_activeOrderExists_throwsProduct009() {
+            // given
+            Seller seller = approvedSeller(SELLER_ID);
+            Product product = createProduct(seller, ProductStatus.APPROVED);
+            given(sellerRepository.findByUserId(SELLER_USER_ID)).willReturn(Optional.of(seller));
+            given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+            given(productRepository.existsActiveOrderItemByProductId(eq(PRODUCT_ID), anyList()))
+                    .willReturn(true);
+
+            // when & then
+            assertThatThrownBy(() -> sellerProductService.delete(SELLER_USER_ID, PRODUCT_ID))
+                    .isInstanceOf(CustomException.class)
+                    .extracting("errorCode").isEqualTo(ErrorCode.PRODUCT_009);
+            assertThat(product.getStatus()).isEqualTo(ProductStatus.APPROVED);
+        }
+    }
+
+    @Nested
+    @DisplayName("update - 카테고리 매핑 개수 가드 (서비스 레벨 방어 깊이)")
+    class UpdateProductCategoryGuard {
+
+        @Test
+        @DisplayName("카테고리 ID 리스트가 비어있으면 PRODUCT_012 예외가 발생한다")
+        void update_emptyCategoryIds_throwsProduct012() {
+            // given
+            Seller seller = approvedSeller(SELLER_ID);
+            Product product = createProduct(seller, ProductStatus.APPROVED);
+            given(sellerRepository.findByUserId(SELLER_USER_ID)).willReturn(Optional.of(seller));
+            given(productRepository.findWithCollectionsById(PRODUCT_ID)).willReturn(Optional.of(product));
+            ProductUpdateRequest request = updateRequest(List.of());
+
+            // when & then
+            assertThatThrownBy(() -> sellerProductService.update(SELLER_USER_ID, PRODUCT_ID, request))
+                    .isInstanceOf(CustomException.class)
+                    .extracting("errorCode").isEqualTo(ErrorCode.PRODUCT_012);
+        }
+
+        @Test
+        @DisplayName("카테고리 ID가 4개 이상이면 PRODUCT_013 예외가 발생한다")
+        void update_tooManyCategoryIds_throwsProduct013() {
+            // given
+            Seller seller = approvedSeller(SELLER_ID);
+            Product product = createProduct(seller, ProductStatus.APPROVED);
+            given(sellerRepository.findByUserId(SELLER_USER_ID)).willReturn(Optional.of(seller));
+            given(productRepository.findWithCollectionsById(PRODUCT_ID)).willReturn(Optional.of(product));
+            ProductUpdateRequest request = updateRequest(List.of(1L, 2L, 3L, 4L));
+
+            // when & then
+            assertThatThrownBy(() -> sellerProductService.update(SELLER_USER_ID, PRODUCT_ID, request))
+                    .isInstanceOf(CustomException.class)
+                    .extracting("errorCode").isEqualTo(ErrorCode.PRODUCT_013);
         }
     }
 }
