@@ -101,31 +101,33 @@ public class DeviceLimitService {
      *
      * 원자성: 위 모든 작업이 단일 트랜잭션처럼 실행
      */
-    private static final String REGISTER_DEVICE_SCRIPT =
-        "redis.call('ZADD', KEYS[1], ARGV[2], ARGV[1]) " +
-            "redis.call('EXPIRE', KEYS[1], ARGV[4]) " +
-            "local count = redis.call('ZCARD', KEYS[1]) " +
-            "if count > tonumber(ARGV[3]) then " +
-            "local oldest = redis.call('ZRANGE', KEYS[1], 0, 0) " +
-            " if #oldest > 0 then " +
-            " redis.call('ZREM', KEYS[1], oldest[1]) " +
-            " redis.call('DEL', KEYS[2] .. oldest[1]) " +
-            "return oldest[1]" +
-            "end" +
-            "end" +
-            "return ''";
+    private static final String REGISTER_DEVICE_SCRIPT = """
+    redis.call('ZADD', KEYS[1], ARGV[2], ARGV[1])
+    redis.call('EXPIRE', KEYS[1], ARGV[4])
+    local count = redis.call('ZCARD', KEYS[1])
+    if count > tonumber(ARGV[3]) then
+      local oldest = redis.call('ZRANGE', KEYS[1], 0, 0)
+      if #oldest > 0 then
+        redis.call('ZREM', KEYS[1], oldest[1])
+        redis.call('DEL', KEYS[2] .. oldest[1])
+        return oldest[1]
+      end
+    end
+    return ''
+    """;
 
     private static final RedisScript<String> REGISTER_DEVICE =
         new DefaultRedisScript<>(REGISTER_DEVICE_SCRIPT, String.class);
 
-    private static final String REMOVE_ALL_DEVICES_SCRIPT =
-        "local devices = redis.call('ZRANGE', KEYS[1], 0, -1) " +
-            "local count = #devices" +
-            "for i = 1, count do" +
-            "redis.call('DEL', KEYS[2] .. devices[i]) " +
-            "end" +
-            "redis.call('DEL', KEYS[1]) " +
-            "return count";
+    private static final String REMOVE_ALL_DEVICES_SCRIPT = """
+    local devices = redis.call('ZRANGE', KEYS[1], 0, -1)
+    local count = #devices
+    for i = 1, count do
+      redis.call('DEL', KEYS[2] .. devices[i])
+    end
+    redis.call('DEL', KEYS[1])
+    return count
+    """;
 
     private static final RedisScript<Long> REMOVE_ALL_DEVICES =
         new DefaultRedisScript<>(REMOVE_ALL_DEVICES_SCRIPT, Long.class);
@@ -157,7 +159,6 @@ public class DeviceLimitService {
             }
             return null;
         } catch (RedisConnectionFailureException | RedisSystemException e) {
-            // Fail-Open : Redis 장애 시 로그인은 허용
             log.error("[기기제한] Redis 장애 - Fail-Open : userId={}", userId, e);
             return null;
         }
