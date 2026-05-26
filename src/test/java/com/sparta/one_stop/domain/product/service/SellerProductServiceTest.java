@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.verify;
 
 import com.sparta.one_stop.domain.product.dto.request.ProductImageAddRequest;
 import com.sparta.one_stop.domain.product.dto.request.ProductUpdateRequest;
@@ -554,6 +555,14 @@ class SellerProductServiceTest {
             sellerProductService.delete(SELLER_USER_ID, PRODUCT_ID);
 
             // then
+            verify(productRepository).existsActiveOrderItemByProductId(
+                    eq(PRODUCT_ID),
+                    argThat(statuses -> statuses.size() == 4
+                            && statuses.containsAll(List.of(
+                                    OrderItemStatus.PENDING_PAYMENT,
+                                    OrderItemStatus.ORDERED,
+                                    OrderItemStatus.CONFIRMED,
+                                    OrderItemStatus.SHIPPING))));
             assertThat(product.getStatus()).isEqualTo(ProductStatus.DISCONTINUED);
         }
 
@@ -579,6 +588,14 @@ class SellerProductServiceTest {
             assertThatThrownBy(() -> sellerProductService.delete(SELLER_USER_ID, PRODUCT_ID))
                     .isInstanceOf(CustomException.class)
                     .extracting("errorCode").isEqualTo(ErrorCode.PRODUCT_009);
+            verify(productRepository).existsActiveOrderItemByProductId(
+                    eq(PRODUCT_ID),
+                    argThat(statuses -> statuses.size() == 4
+                            && statuses.containsAll(List.of(
+                                    OrderItemStatus.PENDING_PAYMENT,
+                                    OrderItemStatus.ORDERED,
+                                    OrderItemStatus.CONFIRMED,
+                                    OrderItemStatus.SHIPPING))));
             assertThat(product.getStatus()).isEqualTo(ProductStatus.APPROVED);
         }
     }
