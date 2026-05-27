@@ -13,6 +13,7 @@ import com.sparta.one_stop.domain.user.repository.UserRepository;
 import com.sparta.one_stop.global.enums.user.UserStatus;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
+import org.springframework.cache.annotation.CachePut;
 import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -55,9 +56,11 @@ public class UserStatusCacheService {
     //   - 갱신 직후 조회 요청에서 cache miss 방지
     //   - 트래픽 많은 사용자에 유리
 
-    @CacheEvict(value = "userStatus", key = "#userId", cacheManager = "redisCacheManager")
-    public void evictAndRefresh(Long userId, UserStatus newStatus) {
+    @CachePut(value = "userStatus", key = "#userId", cacheManager = "redisCacheManager")
+    public UserStatus evictAndRefresh(Long userId, UserStatus newStatus) {
         log.info("[UserStatusCache] 캐시 갱신 : userId={}, newStatus={}", userId, newStatus);
+
+        return newStatus;
     }
 
 

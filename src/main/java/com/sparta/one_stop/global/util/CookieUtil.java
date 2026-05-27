@@ -1,5 +1,6 @@
 package com.sparta.one_stop.global.util;
 
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.ResponseCookie;
 import org.springframework.stereotype.Component;
 
@@ -10,6 +11,12 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class CookieUtil {
+
+    @Value("${app.cookie.same-site:Lax}")
+    private String sameSite;
+
+    @Value("${app.cookie.secure:true}")
+    private boolean secure;
 
     /**
      * 기본 HttpOnly 쿠키 생성
@@ -27,10 +34,10 @@ public class CookieUtil {
     ) {
         return ResponseCookie.from(name, value)
             .httpOnly(true)
-            .secure(true)
+            .secure(secure)
             .path(path)
             .maxAge(maxAgeSeconds)
-            .sameSite("Strict")
+            .sameSite(sameSite)
             .build()
             .toString();
     }
@@ -47,9 +54,10 @@ public class CookieUtil {
     ) {
         return ResponseCookie.from(name, "")
             .httpOnly(true)
-            .secure(true)
+            .secure(secure)
             .path(path)
             .maxAge(0)
+            .sameSite(sameSite)
             .build()
             .toString();
     }
