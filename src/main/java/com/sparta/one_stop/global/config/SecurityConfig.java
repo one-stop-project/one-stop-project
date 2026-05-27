@@ -20,6 +20,7 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
+import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 /**
  * Spring Security 설정
@@ -40,6 +41,7 @@ public class SecurityConfig {
     private final JwtExceptionFilter jwtExceptionFilter;
     private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
     private final JwtAccessDeniedHandler jwtAccessDeniedHandler;
+    private final UrlBasedCorsConfigurationSource corsConfigurationSource;
 
 
     // @Component 필터의 서블릿 자동 등록 비활성화 (Security 체인에서만 실행되도록)
@@ -66,6 +68,9 @@ public class SecurityConfig {
     @Bean
     public SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
         http
+            // CORS 활성화(필터 체인의 가장 앞에서 처리되어야 함. * 수정시 참고바람)
+            .cors(cors -> cors.configurationSource(corsConfigurationSource))
+
             // CSRF 비활성화 (REST API + JWT 사용)
             .csrf(AbstractHttpConfigurer::disable)
 
@@ -86,6 +91,8 @@ public class SecurityConfig {
 
             // URL별 접근 권한 설정
             .authorizeHttpRequests(auth -> auth
+
+                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
                 // logout 별도 구성 / 인증 반드시 필요
                 .requestMatchers(HttpMethod.POST,"/api/auth/logout").authenticated()

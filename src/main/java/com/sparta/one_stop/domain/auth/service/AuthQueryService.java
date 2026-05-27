@@ -3,6 +3,7 @@ package com.sparta.one_stop.domain.auth.service;
 import com.sparta.one_stop.domain.auth.dto.request.LoginRequest;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.UserRepository;
+import com.sparta.one_stop.domain.user.service.UserStatusCacheService;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -42,6 +43,7 @@ public class AuthQueryService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final UserStatusCacheService userStatusCacheService;
 
     /**
      * 사용자 인증 — BCrypt 검증 + 활성 상태 확인
@@ -105,5 +107,13 @@ public class AuthQueryService {
         } catch (Exception e) {
             log.warn("lastLoginAt 갱신 실패 (무시): userId={}", userId, e);
         }
+    }
+
+    // 활성 상태만 검증
+    // 사용시점 : 1. JwtAuthenticationFilter, 2. User 전체 필요 없는 경우
+    // 효과 : DB조회X (캐시 히트 시)
+
+    public void verifyActiveByCache(Long userId) {
+        userStatusCacheService.verifyActive(userId);
     }
 }

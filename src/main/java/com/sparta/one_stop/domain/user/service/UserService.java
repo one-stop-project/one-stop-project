@@ -2,7 +2,6 @@ package com.sparta.one_stop.domain.user.service;
 
 
 import com.sparta.one_stop.domain.auth.event.AllDevicesLogoutEvent;
-import com.sparta.one_stop.domain.auth.service.RedisTokenService;
 import com.sparta.one_stop.domain.user.dto.request.PasswordChangeRequest;
 import com.sparta.one_stop.domain.user.dto.request.UserUpdateRequest;
 import com.sparta.one_stop.domain.user.dto.request.WithdrawRequest;
@@ -27,6 +26,7 @@ public class UserService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final ApplicationEventPublisher eventPublisher;
+    private final UserStatusCacheService userStatusCacheService;
 
     // 내 정보 조회
     @Transactional(readOnly = true)
@@ -88,10 +88,39 @@ public class UserService {
         // Soft Delete (status = WITHDRAWN)
         user.withdraw();
 
+        // 캐시 무효화
+        userStatusCacheService.evict(userId);
+
         // 이벤트 발행 — Redis 정리 + 알림 발송 등
         eventPublisher.publishEvent(new AllDevicesLogoutEvent(userId, "WITHDRAWN"));
 
         log.info("회원 탈퇴: userId={}, isOAuth2={}", userId, user.isOAuth2User());
+    }
+
+    // 관리자용 - 정지/해제 (향후 추가 시)
+    @Transactional
+    public void suspendUser(Long userId, String reason) {
+        User user = findUserById(userId);
+        user.suspend();
+
+        // 캐시 무효화
+        userStatusCacheService.evict(userId);
+
+        //정지된 사용자 전체 세션 무효화
+        eventPublisher.publishEvent(new AllDevicesLogoutEvent(userId, "SUSPENDED"));
+        log.info("회원 정지: userId={}, reason={}", userId, reason);
+
+    }
+
+    @Transactional
+    public void reactivateUser(Long userId) {
+        User user = findUserById(userId);
+        user.reactivate();
+
+        // 캐시 무효화 - status가 ACTIVE로 변경
+        userStatusCacheService.evict(userId);
+
+        log.info("회원 정지 해제: userId ={}", userId);
     }
 
     // ── 내부 헬퍼 ──
