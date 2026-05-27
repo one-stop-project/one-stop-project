@@ -41,7 +41,7 @@ public class AdminOrderService {
         // from이 to보다 이후면 예외 처리
         if (fromDateTime != null && toDateTime != null
             && fromDateTime.isAfter(toDateTime)) {
-            throw new CustomException(ErrorCode.COMMON_001, "from은 to보다 이전이어야 합니다.");
+            throw new CustomException(ErrorCode.COMMON_001, "기간 조건이 올바르지 않습니다.");
         }
 
         // 빈 문자열은 null로 처리 (검색 조건 미적용)
@@ -57,9 +57,12 @@ public class AdminOrderService {
             .toList();
 
         // 주문별 상품 수 일괄 조회 (N+1 방지)
-        List<Object[]> countResult = orderIds.isEmpty()
-            ? List.of()
-            : orderRepository.countItemsByOrderIds(orderIds);
+        List<Object[]> countResult;
+        if (orderIds.isEmpty()) {
+            countResult = List.of();
+        } else {
+            countResult = orderRepository.countItemsByOrderIds(orderIds);
+        }
 
         Map<Long, Integer> itemCountMap = countResult.stream()
             .collect(Collectors.toMap(
