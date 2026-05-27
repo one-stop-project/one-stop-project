@@ -1,0 +1,23 @@
+global:
+  # 15초마다 한 번씩 메트릭 수집
+  scrape_interval: 15s
+  # 수집 요청이 10초 안에 응답 없으면 타임아웃
+  scrape_timeout: 10s
+  # 15초마다 alerting rule 평가
+  evaluation_interval: 15s
+
+scrape_configs:
+
+  # ── Spring Boot 애플리케이션 ──
+  - job_name: 'spring-boot'
+    static_configs:
+      # host.docker.internal = 도커 컨테이너에서 내 로컬 PC를 가리키는 주소
+      # 도커 안에 있는 Prometheus가 로컬에서 띄운 Spring Boot를 바라보는 것
+      - targets: [ 'host.docker.internal:8080' ]
+    # Spring Boot Actuator가 메트릭을 노출하는 경로
+    metrics_path: '/actuator/prometheus'
+
+  # ── Prometheus 자기 자신도 모니터링 ──
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: [ 'localhost:9090' ]
