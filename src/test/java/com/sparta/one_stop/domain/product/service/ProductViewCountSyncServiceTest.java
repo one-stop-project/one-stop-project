@@ -19,13 +19,10 @@ import org.springframework.test.util.ReflectionTestUtils;
 import java.util.Optional;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("ProductViewCountSyncService - Redis 누적 카운트 DB 동기화")
+@DisplayName("ProductViewCountSyncService - 누적 카운트 DB 반영")
 class ProductViewCountSyncServiceTest {
 
     private static final Long PRODUCT_ID = 10L;
-
-    @Mock
-    private ProductViewCountService viewCountService;
 
     @Mock
     private ProductRepository productRepository;
@@ -34,57 +31,51 @@ class ProductViewCountSyncServiceTest {
     private ProductViewCountSyncService syncService;
 
     @Test
-    @DisplayName("누적 카운트가 0이면 DB 조회/업데이트 없이 즉시 종료한다")
+    @DisplayName("count가 0 이하이면 DB 조회/업데이트 없이 즉시 종료한다")
     void syncOne_zeroCount_skipsDbAccess() {
-        // given
-        given(viewCountService.flushAndGetCount(PRODUCT_ID)).willReturn(0L);
-
         // when
-        syncService.syncOne(PRODUCT_ID);
+        syncService.syncOne(PRODUCT_ID, 0L);
 
         // then
         then(productRepository).should(never()).findById(PRODUCT_ID);
     }
 
     @Test
-    @DisplayName("누적 카운트가 양수이면 Product.syncViewCount로 누적값이 반영된다")
+    @DisplayName("양수 count는 Product.syncViewCount로 반영된다")
     void syncOne_positiveCount_appliesToProduct() {
         // given
         Product product = createProduct(0L);
-        given(viewCountService.flushAndGetCount(PRODUCT_ID)).willReturn(15L);
         given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
 
         // when
-        syncService.syncOne(PRODUCT_ID);
+        syncService.syncOne(PRODUCT_ID, 15L);
 
         // then
         assertThat(product.getViewCount()).isEqualTo(15L);
     }
 
     @Test
-    @DisplayName("기존 viewCount가 있는 상품도 누적값이 가산되어 반영된다")
+    @DisplayName("기존 viewCount가 있는 상품도 누적값이 가산된다")
     void syncOne_existingViewCount_accumulates() {
         // given
         Product product = createProduct(100L);
-        given(viewCountService.flushAndGetCount(PRODUCT_ID)).willReturn(7L);
         given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
 
         // when
-        syncService.syncOne(PRODUCT_ID);
+        syncService.syncOne(PRODUCT_ID, 7L);
 
         // then
         assertThat(product.getViewCount()).isEqualTo(107L);
     }
 
     @Test
-    @DisplayName("productId에 해당하는 상품이 없으면 카운트 반영 없이 종료한다")
+    @DisplayName("productId에 해당하는 상품이 없으면 예외 없이 종료한다")
     void syncOne_productNotFound_noUpdate() {
         // given
-        given(viewCountService.flushAndGetCount(PRODUCT_ID)).willReturn(5L);
         given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.empty());
 
-        // when & then — 예외 없이 정상 종료
-        syncService.syncOne(PRODUCT_ID);
+        // when & then
+        syncService.syncOne(PRODUCT_ID, 5L);
     }
 
     private Product createProduct(long initialViewCount) {

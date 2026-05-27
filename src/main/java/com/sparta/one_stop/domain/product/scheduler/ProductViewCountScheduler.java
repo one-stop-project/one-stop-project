@@ -10,7 +10,8 @@ import org.springframework.stereotype.Component;
 import java.util.Set;
 
 // 5분마다 Redis 누적 조회수를 MySQL에 동기화
-// dirty SET에 등록된 productId만 처리 → 변경 없는 상품은 건드리지 않음
+// 흐름: peek(count) → DB UPDATE 성공 → acknowledge(DECRBY)
+// DB UPDATE 실패 시 acknowledge 미호출 → 다음 사이클에서 재시도 (유실 방지)
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -35,7 +36,17 @@ public class ProductViewCountScheduler {
         for (String pidStr : dirty) {
             try {
                 Long productId = Long.valueOf(pidStr);
-                syncService.syncOne(productId);
+                long count = viewCountService.peekCount(productId);
+
+                if (count <= 0) {
+                    // counter는 비었는데 dirty에는 남아있는 경우 — dirty cleanup
+                    viewCountService.acknowledge(productId, 0L);
+                    continue;
+                }
+
+                // DB UPDATE 성공 후에만 acknowledge — 트랜잭션 커밋 성공이 전제
+                syncService.syncOne(productId, count);
+                viewCountService.acknowledge(productId, count);
                 success++;
             } catch (Exception e) {
                 failure++;
