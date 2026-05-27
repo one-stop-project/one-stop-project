@@ -7,6 +7,7 @@ import com.sparta.one_stop.domain.cart.dto.response.CartItemResponse;
 import com.sparta.one_stop.domain.cart.dto.response.CartPageResponse;
 import com.sparta.one_stop.domain.cart.dto.response.UpdateCartItemResponse;
 import com.sparta.one_stop.domain.cart.support.GuestCartCookieProvider;
+import com.sparta.one_stop.domain.cart.support.GuestCartRedisKeyProvider;
 import com.sparta.one_stop.domain.product.entity.ProductItem;
 import com.sparta.one_stop.domain.product.repository.ProductItemRepository;
 import com.sparta.one_stop.global.exception.CustomException;
@@ -29,7 +30,6 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class GuestCartService {
 
-    private static final String GUEST_CART_KEY_PREFIX = "guest:cart:";
     private static final Duration GUEST_CART_TTL = Duration.ofDays(7);
     private static final int MAX_CART_ITEM_COUNT = 50;
     private static final int MAX_CART_ITEM_QUANTITY = 99;
@@ -37,6 +37,7 @@ public class GuestCartService {
     private final RedisTemplate<String, String> redisTemplate;
     private final ProductItemRepository productItemRepository;
     private final GuestCartCookieProvider guestCartCookieProvider;
+    private final GuestCartRedisKeyProvider guestCartRedisKeyProvider;
 
     /**
      * 비로그인 장바구니 담기
@@ -44,7 +45,6 @@ public class GuestCartService {
      * - 동일 itemId 존재 시 수량 증가
      * - 조회/담기/수정/삭제 시 Redis TTL과 쿠키 만료 시간 갱신
      */
-    @Transactional
     public CartItemResponse addCartItem(
         String guestCartId,
         HttpServletResponse response,
@@ -222,7 +222,6 @@ public class GuestCartService {
      * 비로그인 장바구니 수량 변경
      * - 요청 quantity는 변경 후 최종 수량
      */
-    @Transactional
     public UpdateCartItemResponse updateCartItemQuantity(
         String guestCartId,
         HttpServletResponse response,
@@ -273,7 +272,6 @@ public class GuestCartService {
     /**
      * 비로그인 장바구니 삭제
      */
-    @Transactional
     public void deleteCartItem(
         String guestCartId,
         HttpServletResponse response,
@@ -322,7 +320,11 @@ public class GuestCartService {
     }
 
     private String buildGuestCartKey(String guestCartId) {
-        return GUEST_CART_KEY_PREFIX + guestCartId;
+        if (guestCartId == null || guestCartId.isBlank()) {
+            throw new IllegalArgumentException("guestCartId는 필수입니다.");
+        }
+
+        return guestCartRedisKeyProvider.buildGuestCartKey(guestCartId);
     }
 
     /**

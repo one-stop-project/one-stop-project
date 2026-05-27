@@ -53,6 +53,14 @@ public class CartItem extends BaseEntity {
     // == 생성자 ==
     public CartItem(Cart cart, ProductItem productItem, int quantity) {
 
+        if (cart == null) {
+            throw new IllegalArgumentException("장바구니 정보는 필수입니다.");
+        }
+
+        if (productItem == null) {
+            throw new IllegalArgumentException("상품 옵션 정보는 필수입니다.");
+        }
+
         if (quantity <= 0) {
             throw new IllegalArgumentException("수량은 1 이상이어야 합니다.");
         }
@@ -94,6 +102,21 @@ public class CartItem extends BaseEntity {
         }
 
         this.quantity -= quantity;
+    }
+
+    // 장바구니 상품의 최종 수량 변경
+    // Redis 비로그인 장바구니 merge처럼 최종 수량을 계산한 뒤 반영할 때 사용
+    public void changeQuantity(int quantity) {
+
+        if (quantity <= 0) {
+            throw new IllegalArgumentException("수량은 1 이상이어야 합니다.");
+        }
+
+        if (quantity > 99) {
+            throw new IllegalArgumentException("장바구니 최대 수량은 99개입니다.");
+        }
+
+        this.quantity = quantity;
     }
 
 }

@@ -34,6 +34,11 @@ public class Cart  extends BaseEntity {
 
     // == 생성자 ==
     public Cart(User user) {
+
+        if (user == null) {
+            throw new IllegalArgumentException("장바구니 소유자는 필수입니다.");
+        }
+
         this.user = user;
     }
 

@@ -1,14 +1,16 @@
 package com.sparta.one_stop.domain.auth.controller;
 
 import com.sparta.one_stop.domain.auth.dto.request.LoginRequest;
+import com.sparta.one_stop.domain.auth.dto.request.SignUpRequest;
+import com.sparta.one_stop.domain.auth.dto.request.TokenRefreshRequest;
 import com.sparta.one_stop.domain.auth.dto.response.LoginResponse;
+import com.sparta.one_stop.domain.auth.dto.response.SignUpResponse;
+import com.sparta.one_stop.domain.auth.dto.response.TokenRefreshResponse;
 import com.sparta.one_stop.domain.auth.dto.result.LoginResult;
 import com.sparta.one_stop.domain.auth.dto.result.RefreshResult;
-import com.sparta.one_stop.domain.auth.dto.request.SignUpRequest;
-import com.sparta.one_stop.domain.auth.dto.response.SignUpResponse;
-import com.sparta.one_stop.domain.auth.dto.request.TokenRefreshRequest;
-import com.sparta.one_stop.domain.auth.dto.response.TokenRefreshResponse;
 import com.sparta.one_stop.domain.auth.service.AuthService;
+import com.sparta.one_stop.domain.cart.service.CartMergeService;
+import com.sparta.one_stop.domain.cart.support.GuestCartCookieProvider;
 import com.sparta.one_stop.global.response.ApiResponse;
 import com.sparta.one_stop.global.security.AuthUser;
 import com.sparta.one_stop.global.security.JwtTokenProvider;
@@ -17,8 +19,10 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.enums.ParameterIn;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -29,10 +33,10 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import jakarta.servlet.http.HttpServletRequest;
 
 import java.util.UUID;
 
+@Slf4j
 @Tag(name = "Auth", description = "인증/인가 관리 API (회원가입, 로그인, 토큰 재발급, 로그아웃)")
 @RestController
 @RequestMapping("/api/auth")
@@ -42,6 +46,8 @@ public class AuthController {
     private final AuthService authService;
     private final JwtTokenProvider jwtTokenProvider;
     private final CookieUtil cookieUtil;
+    private final CartMergeService cartMergeService;
+    private final GuestCartCookieProvider guestCartCookieProvider;
 
     @Operation(summary = "회원가입", description = "일반 구매자(BUYER) 및 판매자(SELLER) 회원가입을 처리합니다. 판매자 가입 시 상호명과 사업자번호가 필수입니다.")
     @PostMapping("/signup")
@@ -54,14 +60,17 @@ public class AuthController {
 
     @Operation(
         summary = "로그인 (토큰 및 Device ID 발급)",
-        description = "이메일과 비밀번호로 로그인합니다. 성공 시 Access Token은 JSON 응답으로 반환되며, refresh_token과 device_id는 HttpOnly 보안 쿠키로 설정됩니다."
+        description = "이메일과 비밀번호로 로그인합니다. 성공 시 Access Token은 JSON 응답으로 반환되며, refresh_token과 device_id는 HttpOnly 보안 쿠키로 설정됩니다. guest_cart_id 쿠키가 있는 경우 비로그인 장바구니를 로그인 사용자의 DB 장바구니로 병합합니다."
     )
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<LoginResponse>> login(
-        @Valid @RequestBody LoginRequest request, HttpServletRequest servletRequest,
+        @Valid @RequestBody LoginRequest request,
+        HttpServletRequest servletRequest,
         @Parameter(in = ParameterIn.COOKIE, name = "device_id", description = "기존에 발급받은 기기 식별자 (없는 경우 서버에서 자동 생성)")
-        @CookieValue(value = "device_id", required = false) String existingDeviceId) {
-
+        @CookieValue(value = "device_id", required = false) String existingDeviceId,
+        @Parameter(in = ParameterIn.COOKIE, name = GuestCartCookieProvider.GUEST_CART_COOKIE_NAME, description = "비로그인 장바구니 식별자")
+        @CookieValue(value = GuestCartCookieProvider.GUEST_CART_COOKIE_NAME, required = false) String guestCartId
+    ) {
         String clientIp = getClientIp(servletRequest);
 
         // 1. 서버 기반 Device ID 발급 (최초 로그인 시)
@@ -70,7 +79,25 @@ public class AuthController {
         // 2. 비즈니스 로직 처리
         LoginResult result = authService.login(request, deviceId, clientIp);
 
-        // 3. 보안 쿠키 생성 (RT & Device ID)
+        boolean guestCartMerged = false;
+
+        // 3. 비로그인 장바구니 merge
+        // guest_cart_id 쿠키가 있는 경우 Redis 장바구니를 userId 기준 DB 장바구니로 병합
+        // 사용자 편의를 위해 merge 실패가 로그인 실패로 이어지지 않도록 처리
+        try {
+            guestCartMerged = cartMergeService.mergeGuestCartToUserCart(
+                result.response().userId(),
+                guestCartId
+            );
+        } catch (Exception e) {
+            log.warn(
+                "비로그인 장바구니 merge 실패 - 로그인은 정상 처리: userId={}",
+                result.response().userId(),
+                e
+            );
+        }
+
+        // 4. 보안 쿠키 생성 (RT & Device ID)
         String rtCookie = cookieUtil.createHttpOnlyCookie(
             "refresh_token",
             result.refreshToken(),
@@ -83,13 +110,27 @@ public class AuthController {
             jwtTokenProvider.getRefreshTokenExpirySeconds(),
             "/api/auth"
         );
+
         // ※ 주의: 프론트엔드 보안 강화를 위해 클라이언트에 내려가는 LoginResponse JSON에서
         // RefreshToken 필드는 null로 비우거나 아예 DTO에서 제거하는 것이 정석
         // 현재는 쿠키를 통해 안전하게 전달
-        return ResponseEntity.ok()
+        ResponseEntity.BodyBuilder responseBuilder = ResponseEntity.ok()
             .header(HttpHeaders.SET_COOKIE, rtCookie)
-            .header(HttpHeaders.SET_COOKIE, deviceIdCookie)
-            .body(ApiResponse.success(result.response()));
+            .header(HttpHeaders.SET_COOKIE, deviceIdCookie);
+
+        // 5. merge 완료 후 비로그인 장바구니 쿠키 삭제
+        if (guestCartMerged) {
+            String clearGuestCartCookie = guestCartCookieProvider.createExpiredCookie();
+
+            responseBuilder.header(
+                HttpHeaders.SET_COOKIE,
+                clearGuestCartCookie
+            );
+        }
+
+        return responseBuilder.body(
+            ApiResponse.success(result.response())
+        );
     }
 
 
