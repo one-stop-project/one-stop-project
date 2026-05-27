@@ -1,6 +1,8 @@
 package com.sparta.one_stop.domain.user.entity;
 
 import com.sparta.one_stop.global.enums.user.SellerStatus;
+import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -71,10 +73,16 @@ public class Seller {
     }
 
     public void suspend() {
+        if (this.status != SellerStatus.APPROVED) {
+            throw new CustomException(ErrorCode.ADMIN_004);
+        }
         this.status = SellerStatus.SUSPENDED;
     }
 
     public void reactivate() {
+        if (this.status != SellerStatus.SUSPENDED) {
+            throw new CustomException(ErrorCode.ADMIN_004);
+        }
         this.status = SellerStatus.APPROVED;
     }
 }
