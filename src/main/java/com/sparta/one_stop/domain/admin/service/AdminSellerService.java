@@ -85,6 +85,7 @@ public class AdminSellerService {
         }
 
         seller.getUser().suspend();
+        seller.suspend();
         productRepository.updateStatusBySellerId(seller.getId(), ProductStatus.FORCE_INACTIVE);
 
         // 강제비활성화 이력 저장 (reason 필수)
