@@ -21,6 +21,10 @@ import java.util.List;
 @RequiredArgsConstructor
 public class AdminSellerController {
 
+    // TODO: M3 완료 후 @PreAuthorize("hasRole('ADMIN')") 또는
+    //       @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')") 추가 예정
+    // 현재는 SecurityConfig URL 패턴으로 ADMIN 권한 제어 중
+
     private final AdminSellerService adminSellerService;
 
     // 대기 중인 판매자 목록 조회
