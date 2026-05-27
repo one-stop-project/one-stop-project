@@ -7,6 +7,7 @@ import com.sparta.one_stop.domain.cart.dto.response.CartItemResponse;
 import com.sparta.one_stop.domain.cart.dto.response.CartPageResponse;
 import com.sparta.one_stop.domain.cart.dto.response.UpdateCartItemResponse;
 import com.sparta.one_stop.domain.cart.support.GuestCartCookieProvider;
+import com.sparta.one_stop.domain.cart.support.GuestCartRedisKeyProvider;
 import com.sparta.one_stop.domain.product.entity.ProductItem;
 import com.sparta.one_stop.domain.product.repository.ProductItemRepository;
 import com.sparta.one_stop.global.exception.CustomException;
@@ -19,9 +20,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -29,7 +33,6 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class GuestCartService {
 
-    private static final String GUEST_CART_KEY_PREFIX = "guest:cart:";
     private static final Duration GUEST_CART_TTL = Duration.ofDays(7);
     private static final int MAX_CART_ITEM_COUNT = 50;
     private static final int MAX_CART_ITEM_QUANTITY = 99;
@@ -37,14 +40,16 @@ public class GuestCartService {
     private final RedisTemplate<String, String> redisTemplate;
     private final ProductItemRepository productItemRepository;
     private final GuestCartCookieProvider guestCartCookieProvider;
+    private final GuestCartRedisKeyProvider guestCartRedisKeyProvider;
 
     /**
      * 비로그인 장바구니 담기
-     * - Redis Hash itemId → quantity 구조 사용
-     * - 동일 itemId 존재 시 수량 증가
-     * - 조회/담기/수정/삭제 시 Redis TTL과 쿠키 만료 시간 갱신
+     * - Redis Hash는 itemId → quantity 수량 저장용으로 사용
+     * - Redis ZSet은 itemId → 최초 담기 timestamp 순서 저장용으로 사용
+     * - 동일 itemId 존재 시 Hash quantity만 증가
+     * - 동일 itemId 재담기 시 ZSet score는 변경하지 않아 최초 담기 순서를 유지
+     * - 조회/담기/수정/삭제 시 Redis Hash/ZSet TTL과 쿠키 만료 시간 갱신
      */
-    @Transactional
     public CartItemResponse addCartItem(
         String guestCartId,
         HttpServletResponse response,
@@ -56,6 +61,7 @@ public class GuestCartService {
         );
 
         String redisKey = buildGuestCartKey(resolvedGuestCartId);
+        String orderKey = buildGuestCartOrderKey(resolvedGuestCartId);
         String itemIdField = request.itemId().toString();
 
         ProductItem productItem = productItemRepository.findById(request.itemId())
@@ -78,8 +84,16 @@ public class GuestCartService {
                 request.quantity().toString()
             );
 
+            // 신규 상품은 최초 담기 순서를 ZSet에 저장
+            redisTemplate.opsForZSet().add(
+                orderKey,
+                itemIdField,
+                System.currentTimeMillis()
+            );
+
             refreshExpiration(
                 redisKey,
+                orderKey,
                 resolvedGuestCartId,
                 response
             );
@@ -87,6 +101,20 @@ public class GuestCartService {
             return CartItemResponse.ofGuest(
                 productItem.getId(),
                 request.quantity()
+            );
+        }
+
+        // 기존 상품 재담기
+        // 원칙적으로 ZSet score는 변경하지 않지만,
+        // 2차 구현에서 생성된 Hash-only 데이터 호환을 위해 score가 없으면 추가
+        Double score = redisTemplate.opsForZSet()
+            .score(orderKey, itemIdField);
+
+        if (score == null) {
+            redisTemplate.opsForZSet().add(
+                orderKey,
+                itemIdField,
+                System.currentTimeMillis()
             );
         }
 
@@ -106,6 +134,7 @@ public class GuestCartService {
 
         refreshExpiration(
             redisKey,
+            orderKey,
             resolvedGuestCartId,
             response
         );
@@ -119,9 +148,10 @@ public class GuestCartService {
     /**
      * 비로그인 장바구니 조회
      * - Redis Hash에 저장된 itemId/quantity를 기반으로 상품 정보를 조회하여 응답 생성
-     * - Redis Hash는 담은 순서를 보장하지 않으므로 itemId DESC 기준으로 정렬
+     * - Redis ZSet에 저장된 담기 순서를 기준으로 조회 순서를 정렬
+     * - ZSet 데이터가 없는 과거 Hash 데이터는 itemId DESC 기준으로 fallback 처리
      * - totalPrice/itemCount는 전체 비로그인 장바구니 기준으로 계산
-     * - 조회 시 Redis TTL과 guest_cart_id 쿠키 만료 시간을 갱신
+     * - 조회 시 Redis Hash/ZSet TTL과 guest_cart_id 쿠키 만료 시간을 갱신
      */
     public CartPageResponse getCart(
         String guestCartId,
@@ -134,6 +164,7 @@ public class GuestCartService {
         );
 
         String redisKey = buildGuestCartKey(resolvedGuestCartId);
+        String orderKey = buildGuestCartOrderKey(resolvedGuestCartId);
 
         // 빈 장바구니 조회 시 Redis key가 없을 수 있음
         // 쿠키는 갱신하고, Redis TTL은 key가 존재하는 경우에만 적용됨
@@ -142,6 +173,7 @@ public class GuestCartService {
 
         refreshExpiration(
             redisKey,
+            orderKey,
             resolvedGuestCartId,
             response
         );
@@ -160,11 +192,12 @@ public class GuestCartService {
                 entry -> Integer.valueOf(entry.getValue().toString())
             ));
 
-        List<Long> itemIds = quantityMap.keySet()
-            .stream()
-            .toList();
+        List<Long> orderedItemIds = getOrderedItemIds(
+            orderKey,
+            quantityMap
+        );
 
-        if (itemIds.isEmpty()) {
+        if (orderedItemIds.isEmpty()) {
             return CartPageResponse.empty(
                 pageable.getPageNumber(),
                 pageable.getPageSize()
@@ -174,13 +207,19 @@ public class GuestCartService {
         // Redis에는 남아 있지만 DB에서 조회되지 않는 상품 옵션은 응답에서 제외됨
         // 추후 필요 시 조회 실패 itemId를 Redis에서 정리하는 로직 추가 가능
         List<ProductItem> productItems = productItemRepository.findAllByIdInWithProduct(
-            itemIds
+            orderedItemIds
         );
 
-        // Redis Hash는 담은 순서를 보장하지 않으므로 itemId DESC 기준으로 정렬
-        // 정확한 담기 순서가 필요하면 List/ZSet 등 별도 순서 저장 구조 필요
-        List<CartItemDetailResponse> allContent = productItems.stream()
-            .sorted(Comparator.comparing(ProductItem::getId).reversed())
+        Map<Long, ProductItem> productItemMap = productItems.stream()
+            .collect(Collectors.toMap(
+                ProductItem::getId,
+                Function.identity()
+            ));
+
+        // Redis ZSet 담기 순서 기준으로 응답 생성
+        List<CartItemDetailResponse> allContent = orderedItemIds.stream()
+            .map(productItemMap::get)
+            .filter(productItem -> productItem != null)
             .map(productItem -> CartItemDetailResponse.ofGuest(
                 productItem,
                 quantityMap.get(productItem.getId())
@@ -222,7 +261,6 @@ public class GuestCartService {
      * 비로그인 장바구니 수량 변경
      * - 요청 quantity는 변경 후 최종 수량
      */
-    @Transactional
     public UpdateCartItemResponse updateCartItemQuantity(
         String guestCartId,
         HttpServletResponse response,
@@ -235,6 +273,7 @@ public class GuestCartService {
         );
 
         String redisKey = buildGuestCartKey(resolvedGuestCartId);
+        String orderKey = buildGuestCartOrderKey(resolvedGuestCartId);
         String itemIdField = itemId.toString();
 
         boolean exists = redisTemplate.opsForHash()
@@ -260,6 +299,7 @@ public class GuestCartService {
 
         refreshExpiration(
             redisKey,
+            orderKey,
             resolvedGuestCartId,
             response
         );
@@ -272,8 +312,11 @@ public class GuestCartService {
 
     /**
      * 비로그인 장바구니 삭제
+     * - Redis Hash에서 itemId field 제거
+     * - Redis ZSet order key에서도 itemId member 제거
+     * - 마지막 상품 삭제 시 Hash key와 ZSet key를 모두 삭제
+     * - guest_cart_id 쿠키는 유지하여 이후 비로그인 장바구니 사용 시 동일 식별자를 재사용
      */
-    @Transactional
     public void deleteCartItem(
         String guestCartId,
         HttpServletResponse response,
@@ -285,6 +328,7 @@ public class GuestCartService {
         );
 
         String redisKey = buildGuestCartKey(resolvedGuestCartId);
+        String orderKey = buildGuestCartOrderKey(resolvedGuestCartId);
         String itemIdField = itemId.toString();
 
         boolean exists = redisTemplate.opsForHash()
@@ -299,11 +343,17 @@ public class GuestCartService {
             itemIdField
         );
 
+        redisTemplate.opsForZSet().remove(
+            orderKey,
+            itemIdField
+        );
+
         long remainingCount = redisTemplate.opsForHash()
             .size(redisKey);
 
         if (remainingCount <= 0) {
             redisTemplate.delete(redisKey);
+            redisTemplate.delete(orderKey);
 
             // 마지막 상품 삭제 시 Redis key는 제거하되 guest_cart_id 쿠키는 유지
             // 이후 비로그인 사용자가 다시 장바구니를 사용할 때 동일 식별자를 재사용
@@ -316,30 +366,54 @@ public class GuestCartService {
 
         refreshExpiration(
             redisKey,
+            orderKey,
             resolvedGuestCartId,
             response
         );
     }
 
     private String buildGuestCartKey(String guestCartId) {
-        return GUEST_CART_KEY_PREFIX + guestCartId;
+        if (guestCartId == null || guestCartId.isBlank()) {
+            throw new IllegalArgumentException("guestCartId는 필수입니다.");
+        }
+
+        return guestCartRedisKeyProvider.buildGuestCartKey(guestCartId);
+    }
+
+    private String buildGuestCartOrderKey(String guestCartId) {
+        if (guestCartId == null || guestCartId.isBlank()) {
+            throw new IllegalArgumentException("guestCartId는 필수입니다.");
+        }
+
+        return guestCartRedisKeyProvider.buildGuestCartOrderKey(guestCartId);
     }
 
     /**
      * 비로그인 장바구니 만료 시간 갱신
-     * - Redis key가 존재하면 TTL을 7일로 갱신
+     * - Redis Hash key가 존재하면 TTL을 7일로 갱신
+     * - Redis ZSet order key가 존재하면 TTL을 7일로 갱신
      * - guest_cart_id 쿠키도 함께 갱신하여 Redis TTL과 쿠키 만료 시간을 맞춤
      */
     private void refreshExpiration(
         String redisKey,
+        String orderKey,
         String guestCartId,
         HttpServletResponse response
     ) {
-        boolean hasKey = redisTemplate.hasKey(redisKey);
+        boolean hasCartKey = redisTemplate.hasKey(redisKey);
 
-        if (hasKey) {
+        if (hasCartKey) {
             redisTemplate.expire(
                 redisKey,
+                GUEST_CART_TTL
+            );
+        }
+
+        boolean hasOrderKey = redisTemplate.hasKey(orderKey);
+
+        if (hasOrderKey) {
+            redisTemplate.expire(
+                orderKey,
                 GUEST_CART_TTL
             );
         }
@@ -438,6 +512,63 @@ public class GuestCartService {
         }
 
         return (int) Math.ceil((double) totalElements / size);
+    }
+
+    /**
+     * 비로그인 장바구니 조회 순서 생성
+     * - Redis ZSet order key가 있으면 ZSet score ASC 기준으로 먼저 조회
+     * - ZSet에 없는 Hash-only 데이터는 itemId DESC 기준으로 뒤에 추가
+     * - ZSet이 없는 과거 Hash 데이터는 itemId DESC 기준으로 fallback 처리
+     */
+    private List<Long> getOrderedItemIds(
+        String orderKey,
+        Map<Long, Integer> quantityMap
+    ) {
+        Set<String> orderedItemFields = redisTemplate.opsForZSet()
+            .range(orderKey, 0, -1);
+
+        if (orderedItemFields == null || orderedItemFields.isEmpty()) {
+            return getFallbackOrderedItemIds(quantityMap);
+        }
+
+        List<Long> orderedItemIds = new ArrayList<>();
+
+        for (String itemIdField : orderedItemFields) {
+            Long itemId = parseItemIdOrNull(itemIdField);
+
+            if (itemId != null && quantityMap.containsKey(itemId)) {
+                orderedItemIds.add(itemId);
+            }
+        }
+
+        // ZSet에 없는 Hash-only 데이터 fallback 처리
+        // 2차 구현에서 생성된 기존 Hash 데이터가 남아있는 경우 뒤에 붙임
+        quantityMap.keySet()
+            .stream()
+            .sorted(Comparator.reverseOrder())
+            .filter(itemId -> !orderedItemIds.contains(itemId))
+            .forEach(orderedItemIds::add);
+
+        if (orderedItemIds.isEmpty()) {
+            return getFallbackOrderedItemIds(quantityMap);
+        }
+
+        return orderedItemIds;
+    }
+
+    private List<Long> getFallbackOrderedItemIds(Map<Long, Integer> quantityMap) {
+        return quantityMap.keySet()
+            .stream()
+            .sorted(Comparator.reverseOrder())
+            .toList();
+    }
+
+    private Long parseItemIdOrNull(String itemIdField) {
+        try {
+            return Long.valueOf(itemIdField);
+        } catch (NumberFormatException e) {
+            return null;
+        }
     }
 
 }

@@ -89,7 +89,8 @@ public class GuestCartCookieProvider {
 
     /**
      * guest_cart_id 쿠키 삭제
-     * - 로그인 후 Redis 장바구니를 DB 장바구니로 merge한 뒤 사용 예정
+     * - HttpServletResponse에 직접 만료 쿠키를 추가해야 하는 경우 사용
+     * - 로그인 후 Redis 장바구니 merge가 정상 처리된 경우 guest_cart_id 쿠키 삭제에 사용
      */
     public void deleteCookie(HttpServletResponse response) {
         String cookie = cookieUtil.createExpiredCookie(
@@ -102,6 +103,20 @@ public class GuestCartCookieProvider {
         response.addHeader(
             HttpHeaders.SET_COOKIE,
             cookie
+        );
+    }
+
+    /**
+     * guest_cart_id 만료 쿠키 문자열 생성
+     * - ResponseEntity header 방식으로 쿠키를 내려줘야 하는 컨트롤러에서 사용
+     * - 로그인 후 Redis 장바구니 merge가 끝난 뒤 guest_cart_id 쿠키 삭제에 사용
+     */
+    public String createExpiredCookie() {
+        return cookieUtil.createExpiredCookie(
+            GUEST_CART_COOKIE_NAME,
+            COOKIE_PATH,
+            COOKIE_SECURE,
+            COOKIE_SAME_SITE
         );
     }
 

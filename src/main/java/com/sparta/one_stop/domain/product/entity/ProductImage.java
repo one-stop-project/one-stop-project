@@ -6,7 +6,10 @@ import jakarta.persistence.*;
 import lombok.*;
 
 @Entity
-@Table(name = "product_image")
+@Table(name = "product_image",
+        indexes = {
+                @Index(name = "idx_pi_product_status_order", columnList = "product_id, status, display_order")
+        })
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class ProductImage extends BaseEntity {
