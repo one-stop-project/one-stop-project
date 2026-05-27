@@ -56,4 +56,12 @@ public class ProductViewCountScheduler {
 
         log.info("[ViewCount] sync done (success={}, failure={})", success, failure);
     }
+
+    // 매주 월요일 00:00 (KST) — product.view_count 일괄 0 초기화
+    // Redis 펜딩 카운터는 건드리지 않음. 미동기화 델타는 다음 5분 sync에 새 주차로 누적됨
+    @Scheduled(cron = "0 0 0 ? * MON", zone = "Asia/Seoul")
+    public void weeklyReset() {
+        int reset = syncService.resetAllViewCounts();
+        log.info("[ViewCount] weekly reset done (rows={})", reset);
+    }
 }

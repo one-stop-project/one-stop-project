@@ -21,4 +21,9 @@ public class ProductViewCountSyncService {
         productRepository.findById(productId)
             .ifPresent(product -> product.syncViewCount(count));
     }
+
+    @Transactional
+    public int resetAllViewCounts() {
+        return productRepository.resetAllViewCounts();
+    }
 }
