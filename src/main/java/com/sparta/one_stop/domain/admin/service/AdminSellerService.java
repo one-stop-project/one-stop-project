@@ -1,8 +1,12 @@
 package com.sparta.one_stop.domain.admin.service;
 
+import com.sparta.one_stop.domain.admin.entity.AdminActionHistory;
+import com.sparta.one_stop.domain.admin.repository.AdminActionHistoryRepository;
 import com.sparta.one_stop.domain.product.repository.ProductRepository;
 import com.sparta.one_stop.domain.user.entity.Seller;
 import com.sparta.one_stop.domain.user.repository.SellerRepository;
+import com.sparta.one_stop.global.enums.admin.AdminActionTarget;
+import com.sparta.one_stop.global.enums.admin.AdminActionType;
 import com.sparta.one_stop.global.enums.product.ProductStatus;
 import com.sparta.one_stop.global.enums.user.SellerStatus;
 import com.sparta.one_stop.global.exception.CustomException;
@@ -20,6 +24,7 @@ public class AdminSellerService {
 
     private final SellerRepository sellerRepository;
     private final ProductRepository productRepository;
+    private final AdminActionHistoryRepository adminActionHistoryRepository;
 
     // 대기 중인 판매자 목록 조회
     public List<Seller> getPendingSellers() {
@@ -28,7 +33,7 @@ public class AdminSellerService {
 
     // 판매자 승인
     @Transactional
-    public void approveSeller(Long sellerId) {
+    public void approveSeller(Long sellerId, Long actorId) {
         Seller seller = sellerRepository.findById(sellerId)
             .orElseThrow(() -> new CustomException(ErrorCode.SELLER_001));
 
@@ -37,11 +42,19 @@ public class AdminSellerService {
         }
 
         seller.approve();
+
+        // 승인 이력 저장 (reason 없음)
+        adminActionHistoryRepository.save(AdminActionHistory.builder()
+            .actorId(actorId)
+            .targetType(AdminActionTarget.SELLER)
+            .targetId(sellerId)
+            .action(AdminActionType.APPROVE)
+            .build());
     }
 
     // 판매자 반려
     @Transactional
-    public void rejectSeller(Long sellerId) {
+    public void rejectSeller(Long sellerId, Long actorId, String reason) {
         Seller seller = sellerRepository.findById(sellerId)
             .orElseThrow(() -> new CustomException(ErrorCode.SELLER_001));
 
@@ -50,11 +63,20 @@ public class AdminSellerService {
         }
 
         seller.reject();
+
+        // 반려 이력 저장 (reason 필수)
+        adminActionHistoryRepository.save(AdminActionHistory.builder()
+            .actorId(actorId)
+            .targetType(AdminActionTarget.SELLER)
+            .targetId(sellerId)
+            .action(AdminActionType.REJECT)
+            .reason(reason)
+            .build());
     }
 
     // 판매자 강제 비활성화
     @Transactional
-    public void forceInactiveSeller(Long sellerId) {
+    public void forceInactiveSeller(Long sellerId, Long actorId, String reason) {
         Seller seller = sellerRepository.findById(sellerId)
             .orElseThrow(() -> new CustomException(ErrorCode.SELLER_001));
 
@@ -63,8 +85,15 @@ public class AdminSellerService {
         }
 
         seller.getUser().suspend();
-
-        // 배치 업데이트로 N+1 해소
         productRepository.updateStatusBySellerId(seller.getId(), ProductStatus.FORCE_INACTIVE);
+
+        // 강제비활성화 이력 저장 (reason 필수)
+        adminActionHistoryRepository.save(AdminActionHistory.builder()
+            .actorId(actorId)
+            .targetType(AdminActionTarget.SELLER)
+            .targetId(sellerId)
+            .action(AdminActionType.FORCE_INACTIVE)
+            .reason(reason)
+            .build());
     }
 }
