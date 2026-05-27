@@ -4,6 +4,8 @@ import com.sparta.one_stop.domain.order.entity.OrderItem;
 import com.sparta.one_stop.domain.product.entity.Product;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.global.entity.BaseEntity;
+import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -12,7 +14,15 @@ import java.util.List;
 
 
 @Entity
-@Table(name = "review")
+@Table(
+    name = "review",
+    indexes = {
+        @Index(
+            name = "idx_review_product",
+            columnList = "product_id, created_at"
+        )
+    }
+)
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class Review extends BaseEntity {
@@ -61,5 +71,21 @@ public class Review extends BaseEntity {
     public void update(int rating, String content) {
         this.rating = rating;
         this.content = content;
+    }
+
+    public void addImage(ReviewImage image) {
+        this.images.add(image);
+    }
+
+    public void validateRating() {
+        if (rating < 1 || rating > 5) {
+            throw new CustomException(ErrorCode.REVIEW_003);
+        }
+    }
+
+    public void validateContent() {
+        if (content == null || content.length() < 10 || content.length() > 1000) {
+            throw new CustomException(ErrorCode.REVIEW_004);
+        }
     }
 }
