@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface OrderItemRepository extends JpaRepository<OrderItem, Long> {
 
@@ -47,4 +48,33 @@ public interface OrderItemRepository extends JpaRepository<OrderItem, Long> {
         OrderItemStatus status,
         Pageable pageable
     );
+
+    // 리뷰 도메인 - 리뷰 작성용 주문 상품 조회
+    // 주문자(Order → User), 상품(Product)까지 fetch join하여
+    // 리뷰 작성 시 발생하는 Lazy Loading 및 N+1 문제 방지
+    @Query("""
+        select oi
+        from OrderItem oi
+        join fetch oi.order o
+        join fetch o.user
+        join fetch oi.productItem pi
+        join fetch pi.product
+        where oi.id = :orderItemId
+    """)
+    Optional<OrderItem> findForReviewById(
+        @Param("orderItemId") Long orderItemId
+    );
+
+    // 리뷰 도메인 - 리뷰 작성 가능 목록 조회 (최적화 버전)
+    // 리뷰 화면에서 필요한 데이터(Product, Option, OrderUser)까지 한 번에 조회
+    @Query("""
+        select oi
+        from OrderItem oi
+        join fetch oi.order o
+        join fetch o.user
+        join fetch oi.productItem pi
+        join fetch pi.product
+        where o.user.id = :userId
+    """)
+    List<OrderItem> findAllReviewableByUserId(@Param("userId") Long userId);
 }
