@@ -77,11 +77,6 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
                                @Param("sellerStatus") SellerStatus sellerStatus,
                                Pageable pageable);
 
-    // 조회수 증가
-    @Modifying(clearAutomatically = true)
-    @Query("UPDATE Product p SET p.viewCount = p.viewCount + 1 WHERE p.id = :id")
-    void incrementViewCount(@Param("id") Long id);
-
     // 진행 중 주문 존재 여부 (상품 삭제 차단용 — PRODUCT_009)
     @Query("SELECT COUNT(oi) > 0 FROM OrderItem oi " +
            "WHERE oi.productItem.product.id = :productId " +

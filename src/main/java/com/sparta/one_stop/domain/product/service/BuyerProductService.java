@@ -26,6 +26,7 @@ public class BuyerProductService {
     private static final int RELATED_PRODUCT_LIMIT = 8;
 
     private final ProductRepository productRepository;
+    private final ProductViewCountService viewCountService;
 
     // GET /api/products — 검색/목록
     public Page<ProductSummaryResponse> search(String keyword, Long categoryId, Pageable pageable) {
@@ -36,10 +37,9 @@ public class BuyerProductService {
     }
 
     // GET /api/products/{productId} — 단건 상세
-    @Transactional
-    public ProductDetailResponse getDetail(Long productId) {
+    public ProductDetailResponse getDetail(Long productId, Long userId) {
         Product product = findApprovedProduct(productId);
-        productRepository.incrementViewCount(productId);
+        viewCountService.recordView(productId, userId);
         return ProductDetailResponse.from(product);
     }
 

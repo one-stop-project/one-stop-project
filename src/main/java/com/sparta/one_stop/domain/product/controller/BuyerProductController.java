@@ -4,6 +4,7 @@ import com.sparta.one_stop.domain.product.dto.response.ProductDetailResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductSummaryResponse;
 import com.sparta.one_stop.domain.product.service.BuyerProductService;
 import com.sparta.one_stop.global.response.ApiResponse;
+import com.sparta.one_stop.global.security.AuthUser;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -12,6 +13,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -51,8 +53,12 @@ public class BuyerProductController {
     // 단건 상세: GET /api/products/{productId}
     @Operation(summary = "상품 단건 상세 조회")
     @GetMapping("/{productId}")
-    public ResponseEntity<ApiResponse<ProductDetailResponse>> getDetail(@PathVariable Long productId) {
-        return ResponseEntity.ok(ApiResponse.success(buyerProductService.getDetail(productId)));
+    public ResponseEntity<ApiResponse<ProductDetailResponse>> getDetail(
+        @PathVariable Long productId,
+        @AuthenticationPrincipal AuthUser authUser
+    ) {
+        Long userId = authUser != null ? authUser.userId() : null;
+        return ResponseEntity.ok(ApiResponse.success(buyerProductService.getDetail(productId, userId)));
     }
 
     // 연관 상품: GET /api/products/{productId}/related
