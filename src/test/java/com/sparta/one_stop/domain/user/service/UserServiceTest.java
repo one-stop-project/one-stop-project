@@ -47,13 +47,15 @@ class UserServiceTest {
     private RedisTokenService redisTokenService;
     @Mock
     private ApplicationEventPublisher eventPublisher;
+    @Mock
+    private UserStatusCacheService userStatusCacheService;
 
     private User testUser;
     private final Long USER_ID = 1L;
 
     @BeforeEach
     void setUp() {
-        userService = new UserService(userRepository, passwordEncoder, eventPublisher);
+        userService = new UserService(userRepository, passwordEncoder, eventPublisher, userStatusCacheService);
 
         testUser = User.builder()
             .email("test@test.com")
