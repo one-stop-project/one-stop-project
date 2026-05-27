@@ -14,6 +14,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 @Service
@@ -62,6 +63,12 @@ public class CartMergeExecutor {
             itemIds
         );
 
+        Map<Long, ProductItem> productItemMap = productItems.stream()
+            .collect(Collectors.toMap(
+                ProductItem::getId,
+                Function.identity()
+            ));
+
         List<CartItem> existingCartItems = cartItemRepository.findAllByCartIdWithProductItem(
             cart.getId()
         );
@@ -74,18 +81,25 @@ public class CartMergeExecutor {
 
         int currentCartItemCount = existingCartItems.size();
 
-        for (ProductItem productItem : productItems) {
-            if (!isMergeable(productItem)) {
+        for (Map.Entry<Long, Integer> guestEntry : guestQuantityMap.entrySet()) {
+            Long itemId = guestEntry.getKey();
+            Integer guestQuantity = guestEntry.getValue();
+
+            ProductItem productItem = productItemMap.get(itemId);
+
+            if (productItem == null) {
                 continue;
             }
 
-            Integer guestQuantity = guestQuantityMap.get(productItem.getId());
+            if (!isMergeable(productItem)) {
+                continue;
+            }
 
             if (guestQuantity == null || guestQuantity <= 0) {
                 continue;
             }
 
-            CartItem existingCartItem = existingItemMap.get(productItem.getId());
+            CartItem existingCartItem = existingItemMap.get(itemId);
 
             if (existingCartItem != null) {
                 mergeExistingCartItem(
