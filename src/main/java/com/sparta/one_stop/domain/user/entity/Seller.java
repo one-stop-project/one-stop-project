@@ -69,4 +69,12 @@ public class Seller {
     public boolean isApproved() {
         return this.status == SellerStatus.APPROVED;
     }
+
+    public void suspend() {
+        this.status = SellerStatus.SUSPENDED;
+    }
+
+    public void reactivate() {
+        this.status = SellerStatus.APPROVED;
+    }
 }
