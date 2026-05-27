@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface CartItemRepository extends JpaRepository<CartItem, Long> {
@@ -58,5 +59,17 @@ public interface CartItemRepository extends JpaRepository<CartItem, Long> {
         where ci.cart.id = :cartId
     """)
     Long sumQuantityByCartId(@Param("cartId") Long cartId);
+
+    // 장바구니 merge용 기존 DB 장바구니 상품 조회
+    // CartItem → ProductItem을 fetch join하여 itemId 기준 Map 변환 시 N+1 방지
+    @Query("""
+        select ci
+        from CartItem ci
+        join fetch ci.productItem pi
+        where ci.cart.id = :cartId
+    """)
+    List<CartItem> findAllByCartIdWithProductItem(
+        @Param("cartId") Long cartId
+    );
 
 }
