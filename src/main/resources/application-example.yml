@@ -22,6 +22,20 @@ spring:
       host: localhost
       port: 6379
 
+  # ── Spring AI (Gemini) 설정 ──
+  # Gemini는 OpenAI 호환 엔드포인트를 제공해서 openai 스타터로 호출 가능
+  ai:
+    openai:
+      # Google AI Studio에서 발급: https://aistudio.google.com/app/apikey
+      api-key: ${GEMINI_API_KEY}
+      base-url: https://generativelanguage.googleapis.com/v1beta/openai
+      chat:
+        # base-url에 /openai가 포함돼 있어서 기본 경로와 겹치면 404 발생
+        # /v1/chat/completions 대신 /chat/completions로 덮어씀
+        completions-path: /chat/completions
+        options:
+          model: gemini-2.5-flash-lite
+
 jwt:
   secret:
     key: ${JWT_SECRET_KEY}
@@ -46,3 +60,27 @@ management:
       enabled: true
     health:
       show-details: when-authorized
+
+# ── Circuit Breaker 설정 ──
+# AI 서버가 죽거나 느릴 때 우리 서버 보호용
+resilience4j:
+  circuitbreaker:
+    instances:
+      ai-assistant:
+        failure-rate-threshold: 50         # 실패율 50% 넘으면 회로 오픈
+        minimum-number-of-calls: 10        # 최소 10번은 시도해야 통계 냄
+        wait-duration-in-open-state: 30s   # 차단 후 30초 뒤 재시도 허용
+        permitted-number-of-calls-in-half-open-state: 3
+        sliding-window-size: 10
+      ai-review:
+        failure-rate-threshold: 50
+        minimum-number-of-calls: 5
+        wait-duration-in-open-state: 60s
+        permitted-number-of-calls-in-half-open-state: 2
+        sliding-window-size: 10
+  timelimiter:
+    instances:
+      ai-assistant:
+        timeout-duration: 10s   # 10초 넘으면 강제 타임아웃
+      ai-review:
+        timeout-duration: 30s   # 30초 넘으면 강제 타임아웃
