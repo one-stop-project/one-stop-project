@@ -4,6 +4,8 @@ import com.sparta.one_stop.domain.admin.dto.AdminOrderResponse;
 import com.sparta.one_stop.domain.order.entity.Order;
 import com.sparta.one_stop.domain.order.repository.OrderRepository;
 import com.sparta.one_stop.global.enums.order.OrderStatus;
+import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -36,6 +38,12 @@ public class AdminOrderService {
         LocalDateTime fromDateTime = from != null ? from.atStartOfDay() : null;
         LocalDateTime toDateTime = to != null ? to.atTime(LocalTime.MAX) : null;
 
+        // from이 to보다 이후면 예외 처리
+        if (fromDateTime != null && toDateTime != null
+            && fromDateTime.isAfter(toDateTime)) {
+            throw new CustomException(ErrorCode.COMMON_001, "from은 to보다 이전이어야 합니다.");
+        }
+
         // 빈 문자열은 null로 처리 (검색 조건 미적용)
         String searchKeyword = (keyword != null && !keyword.isBlank()) ? keyword : null;
 
@@ -49,8 +57,11 @@ public class AdminOrderService {
             .toList();
 
         // 주문별 상품 수 일괄 조회 (N+1 방지)
-        Map<Long, Integer> itemCountMap = orderRepository.countItemsByOrderIds(orderIds)
-            .stream()
+        List<Object[]> countResult = orderIds.isEmpty()
+            ? List.of()
+            : orderRepository.countItemsByOrderIds(orderIds);
+
+        Map<Long, Integer> itemCountMap = countResult.stream()
             .collect(Collectors.toMap(
                 row -> (Long) row[0],
                 row -> ((Long) row[1]).intValue()
@@ -59,5 +70,7 @@ public class AdminOrderService {
         return orders.map(order ->
             AdminOrderResponse.from(order, itemCountMap.getOrDefault(order.getId(), 0))
         );
+
+
     }
 }
