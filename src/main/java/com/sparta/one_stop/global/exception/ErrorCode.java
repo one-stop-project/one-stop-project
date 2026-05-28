@@ -72,6 +72,9 @@ public enum ErrorCode {
     PRODUCT_011(HttpStatus.NOT_FOUND, "PRODUCT_011", "상품 이미지를 찾을 수 없습니다"),
     PRODUCT_012(HttpStatus.BAD_REQUEST, "PRODUCT_012", "상품 카테고리는 최소 1개 이상 매핑되어야 합니다"),
     PRODUCT_013(HttpStatus.BAD_REQUEST, "PRODUCT_013", "상품 카테고리는 최대 3개까지 매핑할 수 있습니다"),
+    PRODUCT_014(HttpStatus.BAD_REQUEST, "PRODUCT_014", "조회 페이지 크기가 허용 범위를 벗어났습니다"),
+    PRODUCT_015(HttpStatus.BAD_REQUEST, "PRODUCT_015", "가격 범위가 올바르지 않습니다"),
+    PRODUCT_016(HttpStatus.BAD_REQUEST, "PRODUCT_016", "상품 옵션 조합이 중복됩니다"),
 
     // ===== CATEGORY - 카테고리 =====
     CATEGORY_001(HttpStatus.NOT_FOUND, "CATEGORY_001", "카테고리를 찾을 수 없습니다"),

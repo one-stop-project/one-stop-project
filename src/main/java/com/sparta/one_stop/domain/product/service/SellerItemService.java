@@ -12,6 +12,9 @@ import com.sparta.one_stop.global.enums.product.InventoryHistoryType;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,6 +27,18 @@ public class SellerItemService {
 
     private final ProductItemRepository productItemRepository;
     private final InventoryHistoryRepository inventoryHistoryRepository;
+
+    // 옵션은 itemId로 들어오고 productId는 entity 조회 후 추출 → SpEL @CacheEvict 키 못 박음
+    // 메서드 종료 직전에 programmatic evict
+    @Qualifier("redisCacheManager")
+    private final CacheManager redisCacheManager;
+
+    private void evictProductDetail(Long productId) {
+        Cache cache = redisCacheManager.getCache("productDetail");
+        if (cache != null) {
+            cache.evict(productId);
+        }
+    }
 
     // 옵션 수정 (price / stock / status). stock 변경 시 ADJUSTMENT 이력 기록
     @Transactional
@@ -62,6 +77,7 @@ public class SellerItemService {
                     .build());
         }
 
+        evictProductDetail(item.getProduct().getId());
         return ItemUpdateResponse.from(item);
     }
 
@@ -92,6 +108,7 @@ public class SellerItemService {
                 .createdBy(userId)
                 .build());
 
+        evictProductDetail(item.getProduct().getId());
         return new InboundResponse(itemId, previousStock, request.quantity(), currentStock);
     }
 
