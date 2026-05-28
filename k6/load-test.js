@@ -32,11 +32,14 @@ const USER_EMAIL  = __ENV.USER_EMAIL  || 'testuser@example.com';
 const USER_PW     = __ENV.USER_PW     || 'Test1234!';
 const ADMIN_EMAIL = __ENV.ADMIN_EMAIL || 'admin@example.com';
 const ADMIN_PW    = __ENV.ADMIN_PW    || 'Admin1234!';
-const SELLER_ID = __ENV.SELLER_ID;
-const ITEM_ID   = __ENV.ITEM_ID;
+const SELLER_ID = Number(__ENV.SELLER_ID);
+const ITEM_ID   = Number(__ENV.ITEM_ID);
 
-if (!SELLER_ID || !ITEM_ID) {
+if (!__ENV.SELLER_ID || !__ENV.ITEM_ID) {
   throw new Error('SELLER_ID, ITEM_ID 환경변수는 필수입니다. (-e SELLER_ID=xxx -e ITEM_ID=xxx)');
+}
+if (isNaN(SELLER_ID) || isNaN(ITEM_ID)) {
+  throw new Error('SELLER_ID, ITEM_ID는 숫자여야 합니다.');
 }
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
