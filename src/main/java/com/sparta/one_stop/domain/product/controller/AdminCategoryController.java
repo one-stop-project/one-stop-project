@@ -25,9 +25,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class AdminCategoryController {
 
-    // TODO: M3 완료 후 @PreAuthorize("hasRole('ADMIN')") 또는
-    //       @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')") 추가 예정
-    // 현재는 SecurityConfig URL 패턴으로 ADMIN 권한 제어 중
+    // TODO: @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')") 추가 예정
+    // 현재 권한 제어는 SecurityConfig URL 패턴
 
     private final CategoryService categoryService;
 

@@ -3,6 +3,7 @@ package com.sparta.one_stop.domain.product.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -16,9 +17,12 @@ import com.sparta.one_stop.domain.product.dto.response.ProductSummaryResponse;
 import com.sparta.one_stop.domain.product.entity.Category;
 import com.sparta.one_stop.domain.product.entity.Product;
 import com.sparta.one_stop.domain.product.entity.ProductCategoryMapping;
+import com.sparta.one_stop.domain.product.entity.ProductItem;
 import com.sparta.one_stop.domain.product.repository.ProductRepository;
 import com.sparta.one_stop.domain.user.entity.Seller;
+import com.sparta.one_stop.global.enums.product.ProductItemStatus;
 import com.sparta.one_stop.global.enums.product.ProductStatus;
+import com.sparta.one_stop.global.enums.product.SortType;
 import com.sparta.one_stop.global.enums.user.SellerStatus;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
@@ -30,7 +34,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -53,6 +56,9 @@ class BuyerProductServiceTest {
 
     @Mock
     private ProductViewCountService viewCountService;
+
+    @Mock
+    private PopularProductService popularProductService;
 
     @InjectMocks
     private BuyerProductService buyerProductService;
@@ -111,12 +117,12 @@ class BuyerProductServiceTest {
                 .willReturn(Page.empty(pageable));
 
             // when
-            buyerProductService.search(null, null, pageable);
+            buyerProductService.search(null, null, SortType.LATEST, pageable);
 
             // then
             then(productRepository).should().searchApproved(
                 eq(ProductStatus.APPROVED), eq(SellerStatus.APPROVED),
-                isNull(), isNull(), eq(pageable));
+                isNull(), isNull(), any(Pageable.class));
         }
 
         @Test
@@ -127,7 +133,7 @@ class BuyerProductServiceTest {
                 .willReturn(Page.empty(pageable));
 
             // when
-            buyerProductService.search("", null, pageable);
+            buyerProductService.search("", null, SortType.LATEST, pageable);
 
             // then
             then(productRepository).should().searchApproved(
@@ -142,7 +148,7 @@ class BuyerProductServiceTest {
                 .willReturn(Page.empty(pageable));
 
             // when
-            buyerProductService.search("   ", null, pageable);
+            buyerProductService.search("   ", null, SortType.LATEST, pageable);
 
             // then
             then(productRepository).should().searchApproved(
@@ -157,13 +163,67 @@ class BuyerProductServiceTest {
                 .willReturn(Page.empty(pageable));
 
             // when
-            buyerProductService.search("맥북", 5L, pageable);
+            buyerProductService.search("맥북", 5L, SortType.LATEST, pageable);
 
             // then
             then(productRepository).should().searchApproved(
                 eq(ProductStatus.APPROVED), eq(SellerStatus.APPROVED),
-                eq("맥북"), eq(5L), eq(pageable));
+                eq("맥북"), eq(5L), any(Pageable.class));
         }
+    }
+
+    // ===== search - POPULAR 분기 =====
+
+    @Nested
+    @DisplayName("search - sort=POPULAR 분기")
+    class SearchPopular {
+
+        @Test
+        @DisplayName("ZSET이 비어있으면 DB fallback(sales_count DESC) 경로로 검색한다")
+        void emptyZSetFallsBackToDb() {
+            given(popularProductService.getPopularProductIds(anyInt())).willReturn(List.of());
+            given(productRepository.findApproved(any(), any(), any()))
+                .willReturn(Page.empty(pageable));
+
+            buyerProductService.search(null, null, SortType.POPULAR, pageable);
+
+            then(productRepository).should().findApproved(
+                eq(ProductStatus.APPROVED), eq(SellerStatus.APPROVED), any(Pageable.class));
+            then(productRepository).should(never())
+                .findAllByIdsWithItems(any());
+        }
+
+        @Test
+        @DisplayName("ZSET에 ID가 있으면 ZSET 순서대로 상품을 조립한다")
+        void validZSetUsesItsOrder() {
+            given(popularProductService.getPopularProductIds(anyInt()))
+                .willReturn(List.of(100L, 50L));
+
+            Product p1 = approvedProductWithOnSaleItem(100L);
+            Product p2 = approvedProductWithOnSaleItem(50L);
+            given(productRepository.findAllByIdsWithItems(List.of(100L, 50L)))
+                .willReturn(List.of(p1, p2));
+
+            Page<ProductSummaryResponse> result =
+                buyerProductService.search(null, null, SortType.POPULAR, pageable);
+
+            assertThat(result.getContent()).hasSize(2);
+            assertThat(result.getContent().get(0).getProductId()).isEqualTo(100L);
+            assertThat(result.getContent().get(1).getProductId()).isEqualTo(50L);
+            then(productRepository).should(never()).findApproved(any(), any(), any());
+        }
+    }
+
+    private Product approvedProductWithOnSaleItem(Long id) {
+        Seller seller = Seller.builder().shopName("shop").businessNumber("1234567890").build();
+        seller.approve();
+        Product product = Product.builder().seller(seller).name("p" + id).thumbnailUrl("url").build();
+        product.approve();
+        ReflectionTestUtils.setField(product, "id", id);
+        ProductItem item = ProductItem.builder().price(1000L).stock(10L).build();
+        ReflectionTestUtils.setField(item, "status", ProductItemStatus.ON_SALE);
+        product.getProductItems().add(item);
+        return product;
     }
 
     // ===== getDetail =====
@@ -316,25 +376,4 @@ class BuyerProductServiceTest {
         }
     }
 
-    // ===== getPopular =====
-
-    @Nested
-    @DisplayName("getPopular - 인기 상품")
-    class GetPopular {
-
-        @Test
-        @DisplayName("findApproved를 APPROVED 상태 + 전달된 pageable로 호출한다")
-        void delegatesToFindApproved() {
-            // given
-            given(productRepository.findApproved(any(), any(), any()))
-                .willReturn(new PageImpl<>(List.of(), pageable, 0));
-
-            // when
-            buyerProductService.getPopular(pageable);
-
-            // then
-            then(productRepository).should().findApproved(
-                eq(ProductStatus.APPROVED), eq(SellerStatus.APPROVED), eq(pageable));
-        }
-    }
 }

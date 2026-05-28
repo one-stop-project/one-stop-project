@@ -103,7 +103,7 @@ public class SellerProductService {
             throw new CustomException(ErrorCode.PRODUCT_008);
         }
 
-        // 정책: DISCONTINUED 상태만 수정 불가 (FORCE_INACTIVE는 판매자 소명/재승인을 위해 수정 허용)
+        // DISCONTINUED 상태만 수정 불가 (FORCE_INACTIVE는 판매자 소명/재승인을 위해 수정 허용)
         if (!product.isEditable()) {
             throw new CustomException(ErrorCode.PRODUCT_010);
         }
@@ -118,7 +118,7 @@ public class SellerProductService {
             attachCategoryMappings(product, categories);
         }
 
-        // 정책: REJECTED 상태에서 수정 시 APPROVE_REQUESTED로 재전환
+        // REJECTED 상태에서 수정 시 APPROVE_REQUESTED로 재전환
         if (product.getStatus() == ProductStatus.REJECTED) {
             product.resubmit();
         }
@@ -138,7 +138,7 @@ public class SellerProductService {
             throw new CustomException(ErrorCode.PRODUCT_008);
         }
 
-        // 정책: 진행 중 주문(PENDING_PAYMENT/ORDERED/CONFIRMED/SHIPPING) 존재 시 삭제 불가
+        // 진행 중 주문(PENDING_PAYMENT/ORDERED/CONFIRMED/SHIPPING) 존재 시 삭제 불가
         if (productRepository.existsActiveOrderItemByProductId(productId, ACTIVE_ORDER_ITEM_STATUSES)) {
             throw new CustomException(ErrorCode.PRODUCT_009);
         }
@@ -301,7 +301,7 @@ public class SellerProductService {
 
     // 카테고리 조회 + 존재 검증 + 매핑 개수 검증 (DTO @Size 외 방어 깊이)
     private List<Category> findAndValidateCategories(List<Long> categoryIds) {
-        // 정책: 상품당 카테고리 매핑 최소 1개, 최대 3개
+        // 상품당 카테고리 매핑 최소 1개, 최대 3개
         if (categoryIds == null || categoryIds.isEmpty()) {
             throw new CustomException(ErrorCode.PRODUCT_012);
         }

@@ -9,8 +9,7 @@ import lombok.NoArgsConstructor;
 
 import java.util.List;
 
-// 상품 이미지 추가 요청 DTO
-// 정책: 한 번에 1~10장, 10장 초과 불가
+// 상품 이미지 추가 요청 DTO (한 번에 1~10장, 10장 초과 불가)
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class ProductImageAddRequest {

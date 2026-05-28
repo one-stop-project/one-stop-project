@@ -1,8 +1,11 @@
 package com.sparta.one_stop.domain.product.controller;
 
+import com.sparta.one_stop.domain.product.dto.response.PopularProductResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductDetailResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductSummaryResponse;
 import com.sparta.one_stop.domain.product.service.BuyerProductService;
+import com.sparta.one_stop.domain.product.service.PopularProductService;
+import com.sparta.one_stop.global.enums.product.SortType;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import com.sparta.one_stop.global.response.ApiResponse;
@@ -12,7 +15,6 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -32,29 +34,32 @@ public class BuyerProductController {
 
     private static final int MIN_PAGE_SIZE = 10;
     private static final int MAX_PAGE_SIZE = 20;
+    private static final int POPULAR_MAX_LIMIT = 20;
 
     private final BuyerProductService buyerProductService;
+    private final PopularProductService popularProductService;
 
-    // 검색/목록: GET /api/products?keyword=&categoryId=&page=&size=&sort=
+    // 검색/목록: GET /api/products?keyword=&categoryId=&sort=&page=&size=
     @Operation(summary = "상품 검색/목록 조회")
     @GetMapping
     public ResponseEntity<ApiResponse<Page<ProductSummaryResponse>>> search(
         @RequestParam(required = false) String keyword,
         @RequestParam(required = false) Long categoryId,
-        @PageableDefault(size = 20, sort = "id", direction = Sort.Direction.DESC) Pageable pageable
+        @RequestParam(defaultValue = "LATEST") SortType sort,
+        @PageableDefault(size = 20) Pageable pageable
     ) {
         validatePageSize(pageable);
-        return ResponseEntity.ok(ApiResponse.success(buyerProductService.search(keyword, categoryId, pageable)));
+        return ResponseEntity.ok(ApiResponse.success(buyerProductService.search(keyword, categoryId, sort, pageable)));
     }
 
     // 인기 상품: GET /api/products/popular — /{productId} 보다 먼저 선언해야 우선 매핑됨
     @Operation(summary = "인기 상품 조회")
     @GetMapping("/popular")
-    public ResponseEntity<ApiResponse<Page<ProductSummaryResponse>>> getPopular(
-        @PageableDefault(size = 20, sort = "salesCount", direction = Sort.Direction.DESC) Pageable pageable
+    public ResponseEntity<ApiResponse<List<PopularProductResponse>>> getPopular(
+        @RequestParam(defaultValue = "20") int limit
     ) {
-        validatePageSize(pageable);
-        return ResponseEntity.ok(ApiResponse.success(buyerProductService.getPopular(pageable)));
+        validatePopularLimit(limit);
+        return ResponseEntity.ok(ApiResponse.success(popularProductService.getPopular(limit)));
     }
 
     private void validatePageSize(Pageable pageable) {
@@ -62,6 +67,13 @@ public class BuyerProductController {
         if (size < MIN_PAGE_SIZE || size > MAX_PAGE_SIZE) {
             throw new CustomException(ErrorCode.COMMON_001,
                 "page size는 " + MIN_PAGE_SIZE + "~" + MAX_PAGE_SIZE + " 범위여야 합니다 (요청 size=" + size + ")");
+        }
+    }
+
+    private void validatePopularLimit(int limit) {
+        if (limit < 1 || limit > POPULAR_MAX_LIMIT) {
+            throw new CustomException(ErrorCode.COMMON_001,
+                "limit은 1~" + POPULAR_MAX_LIMIT + " 범위여야 합니다 (요청 limit=" + limit + ")");
         }
     }
 
