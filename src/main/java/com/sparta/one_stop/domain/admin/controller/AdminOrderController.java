@@ -13,6 +13,7 @@ import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -26,12 +27,9 @@ import java.time.LocalDate;
 @RequiredArgsConstructor
 public class AdminOrderController {
 
-    // TODO: M3 완료 후 @PreAuthorize("hasRole('ADMIN')") 또는
-    //       @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')") 추가 예정
-    // 현재는 SecurityConfig URL 패턴으로 ADMIN 권한 제어 중
-
     private final AdminOrderService adminOrderService;
 
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
     @Operation(summary = "전체 주문 현황 조회")
     @GetMapping
     public ResponseEntity<ApiResponse<Page<AdminOrderResponse>>> getOrders(

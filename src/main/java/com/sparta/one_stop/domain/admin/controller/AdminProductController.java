@@ -14,6 +14,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -28,13 +29,10 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class AdminProductController {
 
-    // TODO: M3 완료 후 @PreAuthorize("hasRole('ADMIN')") 또는
-    //       @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')") 추가 예정
-    // 현재는 SecurityConfig URL 패턴으로 ADMIN 권한 제어 중
-
     private final AdminProductService adminProductService;
 
     // 승인 요청된 상품 목록 조회 (페이징)
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
     @Operation(summary = "승인 요청된 상품 목록 조회")
     @GetMapping
     public ResponseEntity<ApiResponse<Page<ProductResponse>>> getPendingProducts(
@@ -46,6 +44,7 @@ public class AdminProductController {
     }
 
     // 상품 승인 (PATCH로 변경)
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
     @Operation(summary = "상품 승인")
     @PatchMapping("/{productId}/approve")
     public ResponseEntity<ApiResponse<Void>> approveProduct(
@@ -57,6 +56,7 @@ public class AdminProductController {
     }
 
     // 상품 반려 (PATCH로 변경 + reason 필수)
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
     @Operation(summary = "상품 반려")
     @PatchMapping("/{productId}/reject")
     public ResponseEntity<ApiResponse<Void>> rejectProduct(
@@ -69,6 +69,7 @@ public class AdminProductController {
     }
 
     // 상품 강제 비활성화 (PATCH로 변경 + reason 필수)
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
     @Operation(summary = "상품 강제 비활성화")
     @PatchMapping("/{productId}/force-inactive")
     public ResponseEntity<ApiResponse<Void>> forceInactiveProduct(

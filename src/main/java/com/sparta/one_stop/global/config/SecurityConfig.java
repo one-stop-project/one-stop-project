@@ -21,6 +21,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.boot.autoconfigure.security.servlet.PathRequest;
 
 // 필터 체인 순서
 // 1. CORS -> Preflight OPTIONS 먼저 통과시켜야 함
@@ -95,6 +96,31 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
 
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
+                // 정적 리소스 허용 (JS, CSS, 이미지, favicon 등)[FE]
+                //    Spring Boot 기본 정적 위치(/static, /public 등) 자동 허용
+                .requestMatchers(PathRequest.toStaticResources().atCommonLocations()).permitAll()
+
+                // SPA 진입점 + 주요 페이지 경로 허용[FE]
+                //    React 화면이 뜨려면 index.html과 라우트 경로가 인증 없이 열려야 함
+                //    (실제 데이터는 각 /api/** 호출에서 인증 처리됨)
+                .requestMatchers(
+                    "/",                    // 루트 (index.html)
+                    "/index.html",
+                    "/assets/**",           // Vite 빌드 산출물 (JS/CSS 청크)
+                    "/favicon.ico",
+                    "/vite.svg"
+                ).permitAll()
+
+                // SPA 라우트 경로 허용 (점이 없는 경로 = 화면 라우트)[FE]
+                //    /products, /cart, /login 등 React Router 경로
+                //    이 경로들은 SpaForwardController가 index.html로 forward
+                .requestMatchers(
+                    "/login", "/signup",
+                    "/products/**", "/cart", "/checkout",
+                    "/orders/**", "/payment/**",
+                    "/mypage/**", "/seller/**", "/admin/**"
+                ).permitAll()
 
                 // logout 별도 구성 / 인증 반드시 필요
                 .requestMatchers(HttpMethod.POST,"/api/auth/logout").authenticated()

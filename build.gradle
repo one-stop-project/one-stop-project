@@ -2,6 +2,7 @@ plugins {
 	id 'java'
 	id 'org.springframework.boot' version '3.5.14'
 	id 'io.spring.dependency-management' version '1.1.7'
+    id "com.github.node-gradle.node" version "7.0.2"
 }
 
 group = 'com.sparta'
@@ -92,4 +93,40 @@ clean.doLast {
 
 tasks.named('test') {
 	useJUnitPlatform()
+}
+
+// FE 빌드
+node {
+    version = '20.11.0'
+    npmVersion = '10.2.4'
+    download = true
+    nodeProjectDir = file("${projectDir}/frontend")
+}
+
+// ★ npmInstall 은 플러그인이 자동 제공하므로 새로 만들지 않음
+// ★ FE 빌드 태스크만 새로 정의 (이름을 npmBuild → buildFrontend 로)
+task buildFrontend(type: com.github.gradle.node.npm.task.NpmTask) {
+    dependsOn npmInstall          // 플러그인 기본 태스크에 의존
+    args = ['run', 'build']
+    inputs.dir("frontend/src")
+    inputs.file("frontend/package.json")
+    outputs.dir(file("frontend/dist"))
+}
+
+// 빌드된 정적 파일들을 Spring Boot의 static 폴더로 복사
+task copyFrontendToStatic(type: Copy) {
+    dependsOn buildFrontend
+
+    // 기존에 남아있던 구버전 static 파일 삭제 (선택적 클린업)
+    doFirst {
+        delete "$projectDir/src/main/resources/static"
+    }
+
+    from "$projectDir/frontend/dist"
+    into "$projectDir/src/main/resources/static"
+}
+
+// 3. Spring Boot가 리소스를 복사하기 전에 FE 빌드 및 복사 작업을 먼저 수행
+processResources {
+    dependsOn copyFrontendToStatic
 }
