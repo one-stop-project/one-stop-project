@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -47,6 +48,20 @@ public interface OrderItemRepository extends JpaRepository<OrderItem, Long> {
         Long sellerId,
         OrderItemStatus status,
         Pageable pageable
+    );
+
+    // 판매자 정지 처리 - 해당 판매자의 특정 상태 주문 상품 일괄 조회
+    @Query("""
+        select oi
+        from OrderItem oi
+        join fetch oi.productItem
+        join fetch oi.order
+        where oi.seller.id = :sellerId
+        and oi.status in :statuses
+    """)
+    List<OrderItem> findBySellerIdAndStatusIn(
+        @Param("sellerId") Long sellerId,
+        @Param("statuses") Collection<OrderItemStatus> statuses
     );
 
     // 리뷰 도메인 - 리뷰 작성용 주문 상품 조회
