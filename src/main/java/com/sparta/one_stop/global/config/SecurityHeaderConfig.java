@@ -21,7 +21,7 @@ public class SecurityHeaderConfig {
     private boolean hstsEnabled;
 
     // CSP 정책
-    @Value("{app.security.csp.policy:default-src 'self'}")
+    @Value("${app.security.csp.policy:default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:;}")
     private String cspPolicy;
 
     // HttpSecurity에 적용할 헤더 커스터마이저
