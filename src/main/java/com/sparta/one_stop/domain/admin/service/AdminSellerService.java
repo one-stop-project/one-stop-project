@@ -2,11 +2,18 @@ package com.sparta.one_stop.domain.admin.service;
 
 import com.sparta.one_stop.domain.admin.entity.AdminActionHistory;
 import com.sparta.one_stop.domain.admin.repository.AdminActionHistoryRepository;
+import com.sparta.one_stop.domain.order.entity.OrderCancelHistory;
+import com.sparta.one_stop.domain.order.entity.OrderItem;
+import com.sparta.one_stop.domain.order.repository.OrderCancelHistoryRepository;
+import com.sparta.one_stop.domain.order.repository.OrderItemRepository;
 import com.sparta.one_stop.domain.product.repository.ProductRepository;
 import com.sparta.one_stop.domain.user.entity.Seller;
 import com.sparta.one_stop.domain.user.repository.SellerRepository;
 import com.sparta.one_stop.global.enums.admin.AdminActionTarget;
 import com.sparta.one_stop.global.enums.admin.AdminActionType;
+import com.sparta.one_stop.global.enums.order.CancelActorType;
+import com.sparta.one_stop.global.enums.order.OrderCancelType;
+import com.sparta.one_stop.global.enums.order.OrderItemStatus;
 import com.sparta.one_stop.global.enums.product.ProductStatus;
 import com.sparta.one_stop.global.enums.user.SellerStatus;
 import com.sparta.one_stop.global.exception.CustomException;
@@ -22,9 +29,14 @@ import java.util.List;
 @Transactional(readOnly = true)
 public class AdminSellerService {
 
+    private static final String SELLER_SUSPEND_CANCEL_REASON = "판매자 계정 정지로 인한 자동 취소";
+    private static final int NOT_RESTORED_POINT = 0;
+
     private final SellerRepository sellerRepository;
     private final ProductRepository productRepository;
     private final AdminActionHistoryRepository adminActionHistoryRepository;
+    private final OrderItemRepository orderItemRepository;
+    private final OrderCancelHistoryRepository orderCancelHistoryRepository;
 
     // 대기 중인 판매자 목록 조회
     public List<Seller> getPendingSellers() {
@@ -88,6 +100,8 @@ public class AdminSellerService {
         seller.suspend();
         productRepository.updateStatusBySellerId(seller.getId(), ProductStatus.FORCE_INACTIVE);
 
+        cancelActiveOrdersBySeller(sellerId, actorId);
+
         // 강제비활성화 이력 저장 (reason 필수)
         adminActionHistoryRepository.save(AdminActionHistory.builder()
             .actorId(actorId)
@@ -96,5 +110,29 @@ public class AdminSellerService {
             .action(AdminActionType.FORCE_INACTIVE)
             .reason(reason)
             .build());
+    }
+
+    // 판매자 정지 시 ORDERED/CONFIRMED 상태 주문 자동 취소 및 재고 복구
+    private void cancelActiveOrdersBySeller(Long sellerId, Long actorId) {
+        List<OrderItem> activeItems = orderItemRepository.findBySellerIdAndStatusIn(
+            sellerId,
+            List.of(OrderItemStatus.ORDERED, OrderItemStatus.CONFIRMED)
+        );
+
+        for (OrderItem orderItem : activeItems) {
+            orderItem.getProductItem().increaseStock(orderItem.getQuantity());
+            orderItem.cancel();
+
+            orderCancelHistoryRepository.save(new OrderCancelHistory(
+                orderItem.getOrder(),
+                orderItem,
+                CancelActorType.ADMIN,
+                actorId,
+                OrderCancelType.ADMIN_CANCEL,
+                SELLER_SUSPEND_CANCEL_REASON,
+                orderItem.getPrice() * orderItem.getQuantity(),
+                NOT_RESTORED_POINT
+            ));
+        }
     }
 }
