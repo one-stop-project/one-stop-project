@@ -3,6 +3,8 @@ package com.sparta.one_stop.domain.product.controller;
 import com.sparta.one_stop.domain.product.dto.response.ProductDetailResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductSummaryResponse;
 import com.sparta.one_stop.domain.product.service.BuyerProductService;
+import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import com.sparta.one_stop.global.response.ApiResponse;
 import com.sparta.one_stop.global.security.AuthUser;
 import io.swagger.v3.oas.annotations.Operation;
@@ -28,6 +30,9 @@ import java.util.List;
 @RequiredArgsConstructor
 public class BuyerProductController {
 
+    private static final int MIN_PAGE_SIZE = 10;
+    private static final int MAX_PAGE_SIZE = 20;
+
     private final BuyerProductService buyerProductService;
 
     // 검색/목록: GET /api/products?keyword=&categoryId=&page=&size=&sort=
@@ -38,6 +43,7 @@ public class BuyerProductController {
         @RequestParam(required = false) Long categoryId,
         @PageableDefault(size = 20, sort = "id", direction = Sort.Direction.DESC) Pageable pageable
     ) {
+        validatePageSize(pageable);
         return ResponseEntity.ok(ApiResponse.success(buyerProductService.search(keyword, categoryId, pageable)));
     }
 
@@ -47,7 +53,16 @@ public class BuyerProductController {
     public ResponseEntity<ApiResponse<Page<ProductSummaryResponse>>> getPopular(
         @PageableDefault(size = 20, sort = "salesCount", direction = Sort.Direction.DESC) Pageable pageable
     ) {
+        validatePageSize(pageable);
         return ResponseEntity.ok(ApiResponse.success(buyerProductService.getPopular(pageable)));
+    }
+
+    private void validatePageSize(Pageable pageable) {
+        int size = pageable.getPageSize();
+        if (size < MIN_PAGE_SIZE || size > MAX_PAGE_SIZE) {
+            throw new CustomException(ErrorCode.COMMON_001,
+                "page size는 " + MIN_PAGE_SIZE + "~" + MAX_PAGE_SIZE + " 범위여야 합니다 (요청 size=" + size + ")");
+        }
     }
 
     // 단건 상세: GET /api/products/{productId}

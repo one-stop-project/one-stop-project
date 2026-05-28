@@ -4,11 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 
 import com.sparta.one_stop.domain.product.entity.Product;
 import com.sparta.one_stop.domain.product.repository.ProductRepository;
 import com.sparta.one_stop.domain.user.entity.Seller;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -87,5 +89,36 @@ class ProductViewCountSyncServiceTest {
         ReflectionTestUtils.setField(product, "id", PRODUCT_ID);
         ReflectionTestUtils.setField(product, "viewCount", initialViewCount);
         return product;
+    }
+
+    @Nested
+    @DisplayName("resetAllViewCounts - 주간 일괄 초기화")
+    class ResetAllViewCounts {
+
+        @Test
+        @DisplayName("repository.resetAllViewCounts 결과(영향 row 수)를 그대로 반환한다")
+        void returnsRowCountFromRepository() {
+            // given
+            given(productRepository.resetAllViewCounts()).willReturn(42);
+
+            // when
+            int result = syncService.resetAllViewCounts();
+
+            // then
+            assertThat(result).isEqualTo(42);
+        }
+
+        @Test
+        @DisplayName("repository.resetAllViewCounts를 정확히 1회 호출한다")
+        void invokesRepositoryOnce() {
+            // given
+            given(productRepository.resetAllViewCounts()).willReturn(0);
+
+            // when
+            syncService.resetAllViewCounts();
+
+            // then
+            then(productRepository).should(times(1)).resetAllViewCounts();
+        }
     }
 }
