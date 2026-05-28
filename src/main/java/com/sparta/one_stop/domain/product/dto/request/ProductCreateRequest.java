@@ -11,10 +11,7 @@ import lombok.NoArgsConstructor;
 import java.util.List;
 
 // 상품 등록 요청 DTO
-// 정책 검증:
-// 카테고리: 1~3개
-// 이미지: 1~10개
-// 옵션: 1~5개
+// 등록 제약: 카테고리 1~3개 / 이미지 1~10장 / 옵션 1~5개
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class ProductCreateRequest {

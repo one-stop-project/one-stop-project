@@ -27,7 +27,8 @@ import lombok.NoArgsConstructor;
     name = "order_items",
     indexes = {
         @Index(name = "idx_oi_order", columnList = "order_id"),
-        @Index(name = "idx_oi_seller", columnList = "seller_id, status")
+        @Index(name = "idx_oi_seller", columnList = "seller_id, status"),
+        @Index(name = "idx_oi_status", columnList = "status, created_at")
     }
 )
 public class OrderItem extends BaseEntity {
