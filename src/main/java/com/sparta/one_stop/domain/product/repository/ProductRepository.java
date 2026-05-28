@@ -94,7 +94,8 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     @Query("SELECT DISTINCT p FROM Product p LEFT JOIN FETCH p.productItems WHERE p.id IN :ids")
     List<Product> findAllByIdsWithItems(@Param("ids") List<Long> ids);
 
-    // 인기 상품 판매수 시간 가중 집계 — 3일 윈도우, 1일 단위 3구간
+    // 인기 상품 판매수 시간 가중 집계 — 3일 윈도우, 1일 단위 3구간 (recent/middle/oldest)
+    // CASE WHEN으로 구간별 quantity 합산 후 productId별 GROUP BY → 호출자가 가중치 적용
     @Query("SELECT pi.product.id AS productId, " +
            "SUM(CASE WHEN oi.createdAt >= :recentSince THEN oi.quantity ELSE 0 END) AS recent, " +
            "SUM(CASE WHEN oi.createdAt >= :middleSince AND oi.createdAt < :recentSince THEN oi.quantity ELSE 0 END) AS middle, " +

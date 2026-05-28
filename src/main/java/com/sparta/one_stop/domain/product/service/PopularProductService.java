@@ -45,14 +45,14 @@ public class PopularProductService {
     private static final String SALES_WEIGHTED_KEY = "popular:sales:weighted:tmp";
 
     private static final int TOP_N = 20;
-    private static final long ZSET_TTL_SECONDS = 600L;
-    public static final long VIEW_BUCKET_TTL_SECONDS = 4 * 3600L;
+    private static final long ZSET_TTL_SECONDS = 600L;            // 10분 — 5분 갱신보다 길게 잡아 안전 마진
+    public static final long VIEW_BUCKET_TTL_SECONDS = 4 * 3600L; // 4시간 = 3시간 윈도우 + 안전 마진 1시간
 
-    // 점수 가중치
+    // 조회수 vs 판매수 영향력 비율
     private static final double VIEW_WEIGHT = 0.7;
     private static final double SALES_WEIGHT = 0.3;
 
-    // 시간 구간 가중치 (오래된 → 최근)
+    // 시간 구간 가중치 (오래된 → 최근). 최근일수록 큰 영향
     private static final double WEIGHT_OLDEST = 0.1;
     private static final double WEIGHT_MIDDLE = 0.3;
     private static final double WEIGHT_RECENT = 0.6;
@@ -71,7 +71,11 @@ public class PopularProductService {
     private final RedisTemplate<String, String> redisTemplate;
     private final ProductRepository productRepository;
 
-    // 인기 상품 ZSET 갱신 (Redis 예외는 다음 주기 재시도)
+    // 인기 상품 ZSET 갱신 — 3단계 파이프라인:
+    //   1) 조회수 시간 버킷 가중 합산 (3시간 윈도우)
+    //   2) 판매수 시간 가중 집계 (3일 윈도우)
+    //   3) 두 결과를 0.7 / 0.3 비율로 합쳐 TOP N 추출 후 atomic 교체
+    // Redis 예외 발생 시 catch — 다음 주기에 자동 재시도
     public void refresh() {
         LocalDateTime now = LocalDateTime.now(KST);
         try {
@@ -125,6 +129,7 @@ public class PopularProductService {
 
     // ===== 내부 구현 =====
 
+    // 시간 단위 3개 버킷(현재/-1h/-2h)을 가중 합산해 view-weighted ZSET 생성
     private void buildViewWeighted(LocalDateTime now) {
         String oldest = viewBucketKey(now.minusHours(2));
         String middle = viewBucketKey(now.minusHours(1));
@@ -139,6 +144,7 @@ public class PopularProductService {
         );
     }
 
+    // 3일 윈도우 OrderItem 집계 SQL → 일별 가중치 적용 후 sales-weighted ZSET에 ZADD
     private void buildSalesWeighted(LocalDateTime now) {
         LocalDateTime recentSince = now.minusDays(1);
         LocalDateTime middleSince = now.minusDays(2);
@@ -161,6 +167,7 @@ public class PopularProductService {
         }
     }
 
+    // view-weighted + sales-weighted ZSET을 0.7/0.3 비율로 합산 → TOP N → RENAME으로 atomic 교체
     private void mergeAndRename() {
         redisTemplate.opsForZSet().unionAndStore(
             VIEW_WEIGHTED_KEY,
@@ -170,10 +177,17 @@ public class PopularProductService {
             Weights.of(VIEW_WEIGHT, SALES_WEIGHT)
         );
 
+        // 모든 소스 ZSET이 비어있으면 ZUNIONSTORE는 결과 키를 생성하지 않음
+        // → RENAME "no such key" 방지 + 기존 랭킹은 무효화하여 DB fallback 경로로 떨어뜨림
+        Boolean exists = redisTemplate.hasKey(POPULAR_BUILDING_KEY);
+        if (!Boolean.TRUE.equals(exists)) {
+            redisTemplate.delete(POPULAR_KEY);
+            return;
+        }
+
         // TOP N 만 남기고 하위 점수 제거
         redisTemplate.opsForZSet().removeRange(POPULAR_BUILDING_KEY, 0, -TOP_N - 1L);
 
-        // atomic 교체
         redisTemplate.rename(POPULAR_BUILDING_KEY, POPULAR_KEY);
         redisTemplate.expire(POPULAR_KEY, Duration.ofSeconds(ZSET_TTL_SECONDS));
     }
