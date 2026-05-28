@@ -83,4 +83,9 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
            "AND oi.status IN :statuses")
     boolean existsActiveOrderItemByProductId(@Param("productId") Long productId,
                                              @Param("statuses") List<OrderItemStatus> statuses);
+
+    // 조회수 주간 일괄 초기화 (이미 0인 행은 건너뜀)
+    @Modifying(clearAutomatically = true)
+    @Query("update Product p set p.viewCount = 0 where p.viewCount > 0")
+    int resetAllViewCounts();
 }
