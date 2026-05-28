@@ -9,7 +9,8 @@ public enum SellerStatus {
 
     PENDING("승인대기"),
     APPROVED("승인완료"),
-    REJECTED("반려");
+    REJECTED("반려"),
+    SUSPENDED("정지");
 
     private final String description;
 
