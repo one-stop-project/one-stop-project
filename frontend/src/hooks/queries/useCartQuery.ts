@@ -4,7 +4,6 @@ import {
   cartApi,
   CartResponse,
   AddCartItemRequest,
-  UpdateCartItemRequest,
 } from '@/domains/cart/cartApi';
 import { useAuthStore } from '@/store/useAuthStore';
 
@@ -35,9 +34,7 @@ export function useAddToCartMutation() {
 
 /**
  * 수량 변경 — 낙관적 업데이트
- *
- * 즉시 UI 반영 후 서버 응답 대기
- * 실패 시 롤백
+ * ★ 기준값은 itemId (백엔드 옵션 ID)
  */
 export function useUpdateCartItemMutation() {
   const queryClient = useQueryClient();
@@ -46,44 +43,38 @@ export function useUpdateCartItemMutation() {
     mutationFn: ({ itemId, quantity }: { itemId: number; quantity: number }) =>
       cartApi.updateQuantity(itemId, { quantity }),
 
-    // 1. 낙관적 업데이트
     onMutate: async ({ itemId, quantity }) => {
       await queryClient.cancelQueries({ queryKey: CART_KEY });
       const previous = queryClient.getQueryData<CartResponse>(CART_KEY);
 
       if (previous) {
-        const newItems = previous.items.map((item) =>
-          item.cartItemId === itemId
-            ? {
-                ...item,
-                quantity,
-                subtotal: item.price * quantity,
-              }
-            : item
+        // content 배열에서 itemId로 찾아 수량 변경
+        const newContent = previous.content.map((item) =>
+          item.itemId === itemId ? { ...item, quantity } : item
         );
 
-        const newTotalPrice = newItems.reduce((sum, i) => sum + i.subtotal, 0);
-        const newTotalItems = newItems.length;
+        // totalPrice 재계산
+        const newTotalPrice = newContent.reduce(
+          (sum: number, i) => sum + i.price * i.quantity,
+          0
+        );
 
         queryClient.setQueryData<CartResponse>(CART_KEY, {
           ...previous,
-          items: newItems,
+          content: newContent,
           totalPrice: newTotalPrice,
-          totalItems: newTotalItems,
         });
       }
 
       return { previous };
     },
 
-    // 2. 실패 시 롤백
     onError: (_err, _vars, context) => {
       if (context?.previous) {
         queryClient.setQueryData(CART_KEY, context.previous);
       }
     },
 
-    // 3. 성공/실패 후 서버 데이터로 동기화
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: CART_KEY });
     },
@@ -96,18 +87,19 @@ export function useRemoveCartItemMutation() {
   return useMutation({
     mutationFn: (itemId: number) => cartApi.removeItem(itemId),
 
-    // 낙관적 삭제
     onMutate: async (itemId) => {
       await queryClient.cancelQueries({ queryKey: CART_KEY });
       const previous = queryClient.getQueryData<CartResponse>(CART_KEY);
 
       if (previous) {
-        const newItems = previous.items.filter((i) => i.cartItemId !== itemId);
+        const newContent = previous.content.filter((i) => i.itemId !== itemId);
         queryClient.setQueryData<CartResponse>(CART_KEY, {
           ...previous,
-          items: newItems,
-          totalItems: newItems.length,
-          totalPrice: newItems.reduce((sum, i) => sum + i.subtotal, 0),
+          content: newContent,
+          totalPrice: newContent.reduce(
+            (sum: number, i) => sum + i.price * i.quantity,
+            0
+          ),
         });
       }
 

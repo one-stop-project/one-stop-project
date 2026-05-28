@@ -22,12 +22,13 @@ export default function CartPage() {
 
   if (isLoading) return <PageSpinner />;
 
-  const items = cart?.items ?? [];
+  // ★ 백엔드는 content 배열, 기준값은 itemId
+  const items = cart?.content ?? [];
   const allSelected = items.length > 0 && selectedIds.size === items.length;
 
   const toggleAll = () => {
     if (allSelected) setSelectedIds(new Set());
-    else setSelectedIds(new Set(items.map((i) => i.cartItemId)));
+    else setSelectedIds(new Set(items.map((i) => i.itemId)));
   };
 
   const toggleOne = (id: number) => {
@@ -37,8 +38,9 @@ export default function CartPage() {
     setSelectedIds(next);
   };
 
-  const selectedItems = items.filter((i) => selectedIds.has(i.cartItemId));
-  const subtotal = selectedItems.reduce((sum, i) => sum + i.subtotal, 0);
+  const selectedItems = items.filter((i) => selectedIds.has(i.itemId));
+  // subtotal은 price × quantity로 계산 (백엔드에 subtotal 필드 없음)
+  const subtotal = selectedItems.reduce((sum, i) => sum + i.price * i.quantity, 0);
   const shippingFee = subtotal >= FREE_SHIPPING_THRESHOLD || subtotal === 0 ? 0 : SHIPPING_FEE;
   const total = subtotal + shippingFee;
 
@@ -47,7 +49,7 @@ export default function CartPage() {
     navigate('/checkout', {
       state: {
         items: selectedItems.map((i) => ({
-          productItemId: i.productItemId,
+          productItemId: i.itemId,    // 주문 시 itemId를 productItemId로 전달
           quantity: i.quantity,
         })),
       },
@@ -86,95 +88,100 @@ export default function CartPage() {
                 onChange={toggleAll}
                 className="w-5 h-5 rounded text-primary-600 focus:ring-primary-500"
               />
-              <span className="text-sm font-medium">전체 선택 ({selectedIds.size}/{items.length})</span>
+              <span className="text-sm font-medium">
+                전체 선택 ({selectedIds.size}/{items.length})
+              </span>
             </label>
           </div>
 
-          {items.map((item) => (
-            <div key={item.cartItemId} className="card p-4">
-              <div className="flex gap-4">
-                <input
-                  type="checkbox"
-                  checked={selectedIds.has(item.cartItemId)}
-                  onChange={() => toggleOne(item.cartItemId)}
-                  className="w-5 h-5 rounded text-primary-600 focus:ring-primary-500 self-start mt-1"
-                />
+          {items.map((item) => {
+            const itemSubtotal = item.price * item.quantity;
+            return (
+              <div key={item.itemId} className="card p-4">
+                <div className="flex gap-4">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.has(item.itemId)}
+                    onChange={() => toggleOne(item.itemId)}
+                    className="w-5 h-5 rounded text-primary-600 focus:ring-primary-500 self-start mt-1"
+                  />
 
-                <Link to={`/products/${item.productId}`} className="shrink-0">
-                  <div className="w-20 h-20 md:w-24 md:h-24 bg-gray-100 rounded-lg overflow-hidden">
-                    {item.thumbnailUrl ? (
-                      <img
-                        src={item.thumbnailUrl}
-                        alt={item.productName}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">
-                        이미지
-                      </div>
-                    )}
-                  </div>
-                </Link>
-
-                <div className="flex-1 min-w-0">
-                  <Link
-                    to={`/products/${item.productId}`}
-                    className="block text-sm font-medium text-gray-900 hover:text-primary-600 truncate"
-                  >
-                    {item.productName}
-                  </Link>
-                  <p className="text-xs text-gray-500 mt-0.5">{item.itemName}</p>
-
-                  {item.stock < item.quantity && (
-                    <p className="text-xs text-primary-600 mt-1 font-medium">
-                      재고 부족 (남은 수량: {item.stock})
-                    </p>
-                  )}
-
-                  <div className="flex items-center justify-between mt-3">
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() =>
-                          updateMutation.mutate({
-                            itemId: item.cartItemId,
-                            quantity: Math.max(1, item.quantity - 1),
-                          })
-                        }
-                        disabled={item.quantity <= 1}
-                        className="w-7 h-7 border border-gray-300 rounded flex items-center justify-center hover:bg-gray-50 disabled:opacity-50"
-                      >
-                        <Minus size={12} />
-                      </button>
-                      <span className="text-sm font-semibold w-8 text-center">
-                        {item.quantity}
-                      </span>
-                      <button
-                        onClick={() =>
-                          updateMutation.mutate({
-                            itemId: item.cartItemId,
-                            quantity: Math.min(item.stock, item.quantity + 1),
-                          })
-                        }
-                        disabled={item.quantity >= item.stock}
-                        className="w-7 h-7 border border-gray-300 rounded flex items-center justify-center hover:bg-gray-50 disabled:opacity-50"
-                      >
-                        <Plus size={12} />
-                      </button>
+                  <Link to={`/products/${item.productId}`} className="shrink-0">
+                    <div className="w-20 h-20 md:w-24 md:h-24 bg-gray-100 rounded-lg overflow-hidden">
+                      {item.thumbnailUrl ? (
+                        <img
+                          src={item.thumbnailUrl}
+                          alt={item.productName}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">
+                          이미지
+                        </div>
+                      )}
                     </div>
-                    <p className="font-bold text-gray-900">{formatPrice(item.subtotal)}</p>
-                  </div>
-                </div>
+                  </Link>
 
-                <button
-                  onClick={() => removeMutation.mutate(item.cartItemId)}
-                  className="text-gray-400 hover:text-gray-600 self-start"
-                  title="삭제"
-                >
-                  <X size={18} />
-                </button>
+                  <div className="flex-1 min-w-0">
+                    <Link
+                      to={`/products/${item.productId}`}
+                      className="block text-sm font-medium text-gray-900 hover:text-primary-600 truncate"
+                    >
+                      {item.productName}
+                    </Link>
+                    <p className="text-xs text-gray-500 mt-0.5">{item.optionName}</p>
+
+                    {!item.available && (
+                      <p className="text-xs text-primary-600 mt-1 font-medium">
+                        품절 또는 판매 중지된 상품입니다
+                      </p>
+                    )}
+
+                    <div className="flex items-center justify-between mt-3">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() =>
+                            updateMutation.mutate({
+                              itemId: item.itemId,
+                              quantity: Math.max(1, item.quantity - 1),
+                            })
+                          }
+                          disabled={item.quantity <= 1}
+                          className="w-7 h-7 border border-gray-300 rounded flex items-center justify-center hover:bg-gray-50 disabled:opacity-50"
+                        >
+                          <Minus size={12} />
+                        </button>
+                        <span className="text-sm font-semibold w-8 text-center">
+                          {item.quantity}
+                        </span>
+                        <button
+                          onClick={() =>
+                            updateMutation.mutate({
+                              itemId: item.itemId,
+                              quantity: Math.min(item.stock, item.quantity + 1),
+                            })
+                          }
+                          disabled={item.quantity >= item.stock}
+                          className="w-7 h-7 border border-gray-300 rounded flex items-center justify-center hover:bg-gray-50 disabled:opacity-50"
+                        >
+                          <Plus size={12} />
+                        </button>
+                      </div>
+                      <p className="font-bold text-gray-900">{formatPrice(itemSubtotal)}</p>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => removeMutation.mutate(item.itemId)}
+                    className="text-gray-400 hover:text-gray-600 self-start"
+                    title="삭제"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* 결제 요약 */}

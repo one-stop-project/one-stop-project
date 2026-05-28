@@ -1,27 +1,45 @@
 import { apiClient, ApiResponse } from '@/api/client';
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  타입
+//  타입 — 백엔드 실제 DTO와 1:1 매칭
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+// 백엔드 CartItemDetailResponse 와 1:1
 export interface CartItem {
-  cartItemId: number;
+  cartItemId: number | null;   // 비로그인 시 null
+  itemId: number;              // ★ 수정/삭제 기준값 (productItemId 아님)
   productId: number;
-  productItemId: number;
   productName: string;
-  itemName: string; // 옵션명
-  thumbnailUrl: string | null;
+  optionName: string;          // ★ itemName 아님
   price: number;
   quantity: number;
-  stock: number; // 재고 (품절 표시용)
-  subtotal: number;
+  thumbnailUrl: string | null;
+  stock: number;
+  available: boolean;          // 재고>0 && 판매중
 }
 
+// 백엔드 CartPageResponse 와 1:1
 export interface CartResponse {
   cartId: number;
-  items: CartItem[];
-  totalItems: number;
+  content: CartItem[];         // ★ items 아님!
   totalPrice: number;
+  page: number;
+  size: number;
+  totalPages: number;
+}
+
+// 백엔드 CartItemResponse (담기 응답)
+export interface AddCartItemResponse {
+  cartItemId: number | null;
+  itemId: number;
+  quantity: number;
+  message: string;
+}
+
+// 백엔드 UpdateCartItemResponse (수정 응답)
+export interface UpdateCartItemResponse {
+  itemId: number;
+  quantity: number;
 }
 
 export interface AddCartItemRequest {
@@ -43,13 +61,20 @@ export const cartApi = {
     return res.data.data;
   },
 
-  addItem: async (data: AddCartItemRequest): Promise<CartItem> => {
-    const res = await apiClient.post<ApiResponse<CartItem>>('/carts/items', data);
+  addItem: async (data: AddCartItemRequest): Promise<AddCartItemResponse> => {
+    const res = await apiClient.post<ApiResponse<AddCartItemResponse>>('/carts/items', data);
     return res.data.data;
   },
 
-  updateQuantity: async (itemId: number, data: UpdateCartItemRequest): Promise<CartItem> => {
-    const res = await apiClient.patch<ApiResponse<CartItem>>(`/carts/items/${itemId}`, data);
+  // ★ 수정/삭제 기준은 itemId (옵션 ID)
+  updateQuantity: async (
+    itemId: number,
+    data: UpdateCartItemRequest
+  ): Promise<UpdateCartItemResponse> => {
+    const res = await apiClient.patch<ApiResponse<UpdateCartItemResponse>>(
+      `/carts/items/${itemId}`,
+      data
+    );
     return res.data.data;
   },
 

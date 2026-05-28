@@ -8,7 +8,6 @@ export default function HomePage() {
   const { data: latest, isLoading: latestLoading } = useProductListQuery({
     page: 0,
     size: 8,
-    sort: 'id,desc',
   });
 
   return (

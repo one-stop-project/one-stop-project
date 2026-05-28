@@ -13,7 +13,7 @@ export function Header() {
   const [searchKeyword, setSearchKeyword] = useState('');
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const cartCount = cart?.totalItems ?? 0;
+  const cartCount = cart?.content.length ?? 0;
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();

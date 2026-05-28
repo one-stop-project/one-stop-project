@@ -13,7 +13,7 @@ export default defineConfig({
   build: {
     // Spring Boot 정적 리소스 폴더로 직접 출력
     // frontend/ 기준 상대경로 → ../src/main/resources/static
-    outDir: '../src/main/resources/static',
+    outDir: '../src/main/resources/static/dist',
     emptyOutDir: true,
   },
   server: {
