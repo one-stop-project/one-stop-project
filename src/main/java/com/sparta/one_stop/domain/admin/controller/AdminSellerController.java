@@ -77,4 +77,15 @@ public class AdminSellerController {
         adminSellerService.forceInactiveSeller(sellerId, authUser.userId(), request.reason());
         return ResponseEntity.ok(ApiResponse.success());
     }
+
+    // 판매자 정지 해제
+    @Operation(summary = "판매자 정지 해제")
+    @PatchMapping("/{sellerId}/reactivate")
+    public ResponseEntity<ApiResponse<Void>> reactivateSeller(
+        @PathVariable Long sellerId,
+        @AuthenticationPrincipal AuthUser authUser
+    ) {
+        adminSellerService.reactivateSeller(sellerId, authUser.userId());
+        return ResponseEntity.ok(ApiResponse.success());
+    }
 }
