@@ -97,4 +97,26 @@ public class AdminSellerService {
             .reason(reason)
             .build());
     }
+
+    // 판매자 정지 해제
+    @Transactional
+    public void reactivateSeller(Long sellerId, Long actorId) {
+        Seller seller = sellerRepository.findById(sellerId)
+            .orElseThrow(() -> new CustomException(ErrorCode.SELLER_001));
+
+        if (seller.getStatus() != SellerStatus.SUSPENDED) {
+            throw new CustomException(ErrorCode.ADMIN_010);
+        }
+
+        seller.reactivate();
+        seller.getUser().reactivate();
+
+        // 정지 해제 이력 저장 (상품은 정책상 자동 복구하지 않음)
+        adminActionHistoryRepository.save(AdminActionHistory.builder()
+            .actorId(actorId)
+            .targetType(AdminActionTarget.SELLER)
+            .targetId(sellerId)
+            .action(AdminActionType.REACTIVATE)
+            .build());
+    }
 }
