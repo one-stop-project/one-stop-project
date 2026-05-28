@@ -167,7 +167,7 @@ public class Product extends BaseEntity {
         this.categoryMappings.add(mapping);
     }
 
-    // 정책: REJECTED 상품 수정 시 APPROVE_REQUESTED로 변경 후 재승인 요청
+    // REJECTED 상품 수정 시 APPROVE_REQUESTED로 변경 후 재승인 요청
     public void resubmit() {
         this.status = ProductStatus.APPROVE_REQUESTED;
     }

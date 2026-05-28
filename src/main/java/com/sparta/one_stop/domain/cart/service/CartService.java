@@ -336,9 +336,10 @@ public class CartService {
 
     /**
      * 장바구니 담기 가능 여부 검증
-     * - STOP 상품 담기 불가
-     * - 품절/재고 초과 상품 담기 불가
-     * - 본인 상품 담기 불가
+     * 검증 우선순위:
+     * 1. 본인 상품 담기 불가
+     * 2. STOP 상품 담기 불가
+     * 3. 품절/재고 초과 상품 담기 불가
      */
     private void validateAddableProductItem(
         Long userId,
@@ -346,15 +347,7 @@ public class CartService {
         Integer quantity
     ) {
 
-        if (!productItem.isOnSale()) {
-            throw new CustomException(ErrorCode.CART_001);
-        }
-
-        validateStockLimit(
-            productItem,
-            quantity
-        );
-
+        // 1. 본인 상품 먼저
         if (productItem.getProduct()
             .getSeller()
             .getUser()
@@ -363,6 +356,18 @@ public class CartService {
 
             throw new CustomException(ErrorCode.CART_005);
         }
+
+        // 2. STOP
+        if (!productItem.isOnSale()) {
+            throw new CustomException(ErrorCode.CART_001);
+        }
+
+        // 3. 재고
+        validateStockLimit(
+            productItem,
+            quantity
+        );
+
     }
 
     /**

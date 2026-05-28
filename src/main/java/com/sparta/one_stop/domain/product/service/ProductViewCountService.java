@@ -6,6 +6,8 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Set;
 
@@ -19,21 +21,27 @@ public class ProductViewCountService {
     private static final String COUNTER_KEY_PREFIX = "viewcount:product:";
     private static final String DEDUP_KEY_PREFIX = "viewcount:dedup:";
     private static final String DIRTY_KEY = "viewcount:dirty";
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
-    // dedup 신규 진입 시에만 INCR + dirty 마킹, dedup 충돌이면 0 반환
+    // dedup 신규 진입 시에만 INCR + dirty 마킹 + 인기상품 시간 버킷 ZINCRBY
+    // dedup 충돌이면 0 반환
     private static final RedisScript<Long> RECORD_VIEW_LOGIN_SCRIPT = RedisScript.of("""
         if redis.call('SET', KEYS[1], '1', 'NX', 'EX', ARGV[2]) then
             redis.call('INCR', KEYS[2])
             redis.call('SADD', KEYS[3], ARGV[1])
+            redis.call('ZINCRBY', KEYS[4], 1, ARGV[1])
+            redis.call('EXPIRE', KEYS[4], ARGV[3])
             return 1
         end
         return 0
         """, Long.class);
 
-    // 비로그인은 dedup 없이 매번 카운트
+    // 비로그인은 dedup 없이 매번 카운트 + 인기상품 시간 버킷 ZINCRBY
     private static final RedisScript<Long> RECORD_VIEW_GUEST_SCRIPT = RedisScript.of("""
         redis.call('INCR', KEYS[1])
         redis.call('SADD', KEYS[2], ARGV[1])
+        redis.call('ZINCRBY', KEYS[3], 1, ARGV[1])
+        redis.call('EXPIRE', KEYS[3], ARGV[2])
         return 1
         """, Long.class);
 
@@ -53,27 +61,34 @@ public class ProductViewCountService {
     // Redis 장애가 상품 조회 자체를 막지 않도록 catch 후 skip
     public void recordView(Long productId, Long userId) {
         try {
+            String bucketKey = PopularProductService.viewBucketKey(LocalDateTime.now(KST));
+            String bucketTtl = String.valueOf(PopularProductService.VIEW_BUCKET_TTL_SECONDS);
+
             if (userId != null) {
                 List<String> keys = List.of(
                     DEDUP_KEY_PREFIX + productId + ":" + userId,
                     COUNTER_KEY_PREFIX + productId,
-                    DIRTY_KEY
+                    DIRTY_KEY,
+                    bucketKey
                 );
                 redisTemplate.execute(
                     RECORD_VIEW_LOGIN_SCRIPT,
                     keys,
                     productId.toString(),
-                    String.valueOf(DEDUP_TTL_SECONDS)
+                    String.valueOf(DEDUP_TTL_SECONDS),
+                    bucketTtl
                 );
             } else {
                 List<String> keys = List.of(
                     COUNTER_KEY_PREFIX + productId,
-                    DIRTY_KEY
+                    DIRTY_KEY,
+                    bucketKey
                 );
                 redisTemplate.execute(
                     RECORD_VIEW_GUEST_SCRIPT,
                     keys,
-                    productId.toString()
+                    productId.toString(),
+                    bucketTtl
                 );
             }
         } catch (Exception e) {

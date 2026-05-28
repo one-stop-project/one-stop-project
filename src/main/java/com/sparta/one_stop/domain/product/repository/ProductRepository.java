@@ -14,6 +14,7 @@ import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -77,7 +78,7 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
                                @Param("sellerStatus") SellerStatus sellerStatus,
                                Pageable pageable);
 
-    // 진행 중 주문 존재 여부 (상품 삭제 차단용 — PRODUCT_009)
+    // 진행 중 주문 존재 여부 (상품 삭제 차단용)
     @Query("SELECT COUNT(oi) > 0 FROM OrderItem oi " +
            "WHERE oi.productItem.product.id = :productId " +
            "AND oi.status IN :statuses")
@@ -88,4 +89,25 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     @Modifying(clearAutomatically = true)
     @Query("update Product p set p.viewCount = 0 where p.viewCount > 0")
     int resetAllViewCounts();
+
+    // 인기 상품 응답용 배치 fetch (productItems 같이 로드)
+    @Query("SELECT DISTINCT p FROM Product p LEFT JOIN FETCH p.productItems WHERE p.id IN :ids")
+    List<Product> findAllByIdsWithItems(@Param("ids") List<Long> ids);
+
+    // 인기 상품 판매수 시간 가중 집계 — 3일 윈도우, 1일 단위 3구간 (recent/middle/oldest)
+    // CASE WHEN으로 구간별 quantity 합산 후 productId별 GROUP BY → 호출자가 가중치 적용
+    @Query("SELECT pi.product.id AS productId, " +
+           "SUM(CASE WHEN oi.createdAt >= :recentSince THEN oi.quantity ELSE 0 END) AS recent, " +
+           "SUM(CASE WHEN oi.createdAt >= :middleSince AND oi.createdAt < :recentSince THEN oi.quantity ELSE 0 END) AS middle, " +
+           "SUM(CASE WHEN oi.createdAt < :middleSince THEN oi.quantity ELSE 0 END) AS oldest " +
+           "FROM OrderItem oi JOIN oi.productItem pi " +
+           "WHERE oi.createdAt >= :oldestSince " +
+           "AND oi.status IN :statuses " +
+           "GROUP BY pi.product.id")
+    List<SalesWeightedRow> aggregateSalesByTimeWindow(
+        @Param("recentSince") LocalDateTime recentSince,
+        @Param("middleSince") LocalDateTime middleSince,
+        @Param("oldestSince") LocalDateTime oldestSince,
+        @Param("statuses") List<OrderItemStatus> statuses
+    );
 }
