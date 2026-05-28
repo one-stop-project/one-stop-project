@@ -132,6 +132,8 @@ public class AdminSellerService {
             .targetId(sellerId)
             .action(AdminActionType.REACTIVATE)
             .build());
+    }
+
     // 판매자 정지 시 ORDERED/CONFIRMED 상태 주문 자동 취소 및 재고 복구
     private void cancelActiveOrdersBySeller(Long sellerId, Long actorId) {
         List<OrderItem> activeItems = orderItemRepository.findBySellerIdAndStatusIn(
