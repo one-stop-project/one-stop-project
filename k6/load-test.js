@@ -32,8 +32,12 @@ const USER_EMAIL  = __ENV.USER_EMAIL  || 'testuser@example.com';
 const USER_PW     = __ENV.USER_PW     || 'Test1234!';
 const ADMIN_EMAIL = __ENV.ADMIN_EMAIL || 'admin@example.com';
 const ADMIN_PW    = __ENV.ADMIN_PW    || 'Admin1234!';
-const SELLER_ID   = __ENV.SELLER_ID   || '1';
-const ITEM_ID     = __ENV.ITEM_ID     || '1';
+const SELLER_ID = __ENV.SELLER_ID;
+const ITEM_ID   = __ENV.ITEM_ID;
+
+if (!SELLER_ID || !ITEM_ID) {
+  throw new Error('SELLER_ID, ITEM_ID 환경변수는 필수입니다. (-e SELLER_ID=xxx -e ITEM_ID=xxx)');
+}
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
