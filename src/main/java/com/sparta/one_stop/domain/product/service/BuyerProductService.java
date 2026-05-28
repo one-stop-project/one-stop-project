@@ -49,12 +49,17 @@ public class BuyerProductService {
     }
 
     private Page<ProductSummaryResponse> searchPopular(Pageable pageable) {
+        // 인기 상품 ZSET은 TOP N(상한 20)만 보관
+        if (pageable.getPageNumber() > 0) {
+            return Page.empty(pageable);
+        }
+
         int limit = pageable.getPageSize();
         List<Long> popularIds = popularProductService.getPopularProductIds(limit);
 
         // Redis ZSET 비어있음/장애 → DB fallback (sales_count DESC)
         if (popularIds.isEmpty()) {
-            Pageable salesDesc = PageRequest.of(pageable.getPageNumber(), limit,
+            Pageable salesDesc = PageRequest.of(0, limit,
                 Sort.by(Sort.Direction.DESC, "salesCount"));
             return productRepository.findApproved(
                 ProductStatus.APPROVED, SellerStatus.APPROVED, salesDesc
@@ -82,8 +87,11 @@ public class BuyerProductService {
     private Pageable applySorting(Pageable pageable, SortType sort) {
         Sort sortBy = switch (sort) {
             case LATEST -> Sort.by(Sort.Direction.DESC, "id");
-            // TODO: 가격 정렬 도입 — product_item.price 기반 MIN
-            case PRICE_ASC, PRICE_DESC -> Sort.by(Sort.Direction.DESC, "id");
+            // 가격 정렬은 product_item.price 기반 MIN 정렬이 필요해 추후 구현
+            // 현재는 명시적 400으로 사용자에게 미지원 사실 전달
+            case PRICE_ASC, PRICE_DESC -> throw new CustomException(
+                ErrorCode.COMMON_001,
+                sort + " 정렬은 아직 지원되지 않습니다 (LATEST 또는 POPULAR 사용)");
             case POPULAR -> Sort.unsorted();
         };
         return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sortBy);
