@@ -22,14 +22,12 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
-/**
- * Spring Security 설정
- * - JWT 기반 Stateless 인증
- * - BUYER / SELLER / ADMIN 3-Role 접근 제어
- * - CSRF 비활성화 (REST API이므로)
- * - Session 비활성화 (JWT 사용이므로)
- *
- */
+// 필터 체인 순서
+// 1. CORS -> Preflight OPTIONS 먼저 통과시켜야 함
+// 2. 헤더 -> 모든 응답에 보안 헤더 적용(CORS 응답)
+// 3. CRSF -> REST API는 비활성화
+// 4. 인증 -> 토큰 검증
+// 5. 권한 -> URL별 접근 제어
 
 @Configuration
 @EnableWebSecurity
@@ -42,6 +40,7 @@ public class SecurityConfig {
     private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
     private final JwtAccessDeniedHandler jwtAccessDeniedHandler;
     private final UrlBasedCorsConfigurationSource corsConfigurationSource;
+    private final SecurityHeaderConfig securityHeadersConfig;
 
 
     // @Component 필터의 서블릿 자동 등록 비활성화 (Security 체인에서만 실행되도록)
@@ -70,6 +69,9 @@ public class SecurityConfig {
         http
             // CORS 활성화(필터 체인의 가장 앞에서 처리되어야 함. * 수정시 참고바람)
             .cors(cors -> cors.configurationSource(corsConfigurationSource))
+
+            // 보안 헤더 적용
+            .headers(securityHeadersConfig.headers())
 
             // CSRF 비활성화 (REST API + JWT 사용)
             .csrf(AbstractHttpConfigurer::disable)
@@ -142,3 +144,4 @@ public class SecurityConfig {
         return config.getAuthenticationManager();
     }
 }
+
