@@ -1,5 +1,6 @@
 package com.sparta.one_stop.domain.product.service;
 
+import com.sparta.one_stop.domain.product.dto.response.CacheableProductList;
 import com.sparta.one_stop.domain.product.dto.response.ProductDetailResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductSummaryResponse;
 import com.sparta.one_stop.domain.product.entity.Product;
@@ -11,6 +12,7 @@ import com.sparta.one_stop.global.enums.user.SellerStatus;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -35,16 +37,50 @@ public class BuyerProductService {
     private final ProductViewCountService viewCountService;
     private final PopularProductService popularProductService;
 
-    // sort=POPULAR은 ZSET 순서 그대로 반환 (keyword/categoryId 필터 미적용)
-    public Page<ProductSummaryResponse> search(String keyword, Long categoryId, SortType sort, Pageable pageable) {
+    // sort=POPULAR은 ZSET 순서 그대로 반환 (keyword/categoryId/가격 필터 미적용)
+    // 응답 캐시 productList TTL 5분 — 키는 모든 필터 조합
+    // Page<T> 자체는 Jackson 역직렬화 불가 → CacheableProductList(record)에 담아 캐시
+    @Cacheable(
+        value = "productList",
+        key = "T(java.util.Objects).toString(#keyword,'') + ':' + T(java.util.Objects).toString(#categoryId,'') + ':' + " +
+              "T(java.util.Objects).toString(#minPrice,'') + ':' + T(java.util.Objects).toString(#maxPrice,'') + ':' + " +
+              "#sort + ':' + #pageable.pageNumber + ':' + #pageable.pageSize",
+        cacheManager = "redisCacheManager",
+        condition = "#sort != T(com.sparta.one_stop.global.enums.product.SortType).POPULAR"
+    )
+    public CacheableProductList search(
+        String keyword, Long categoryId, Long minPrice, Long maxPrice, SortType sort, Pageable pageable
+    ) {
+        Page<ProductSummaryResponse> page = doSearch(keyword, categoryId, minPrice, maxPrice, sort, pageable);
+        return new CacheableProductList(
+            page.getContent(), pageable.getPageNumber(), pageable.getPageSize(), page.getTotalElements()
+        );
+    }
+
+    private Page<ProductSummaryResponse> doSearch(
+        String keyword, Long categoryId, Long minPrice, Long maxPrice, SortType sort, Pageable pageable
+    ) {
         if (sort == SortType.POPULAR) {
             return searchPopular(pageable);
         }
 
         String kw = (keyword != null && !keyword.isBlank()) ? keyword : null;
+        Pageable plainPage = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
+
+        if (sort == SortType.PRICE_ASC) {
+            return productRepository.searchApprovedOrderByMinPriceAsc(
+                ProductStatus.APPROVED, SellerStatus.APPROVED, kw, categoryId, minPrice, maxPrice, plainPage
+            ).map(ProductSummaryResponse::from);
+        }
+        if (sort == SortType.PRICE_DESC) {
+            return productRepository.searchApprovedOrderByMinPriceDesc(
+                ProductStatus.APPROVED, SellerStatus.APPROVED, kw, categoryId, minPrice, maxPrice, plainPage
+            ).map(ProductSummaryResponse::from);
+        }
+
         Pageable sorted = applySorting(pageable, sort);
         return productRepository.searchApproved(
-            ProductStatus.APPROVED, SellerStatus.APPROVED, kw, categoryId, sorted
+            ProductStatus.APPROVED, SellerStatus.APPROVED, kw, categoryId, minPrice, maxPrice, sorted
         ).map(ProductSummaryResponse::from);
     }
 
@@ -84,23 +120,27 @@ public class BuyerProductService {
         return p.getProductItems().stream().anyMatch(ProductItem::isOnSale);
     }
 
+    // PRICE_*는 별도 JPQL(searchApprovedOrderByMinPriceAsc/Desc)에서 처리, 여기 도달 X
+    // POPULAR은 search() 진입부에서 분기 처리됨
     private Pageable applySorting(Pageable pageable, SortType sort) {
         Sort sortBy = switch (sort) {
             case LATEST -> Sort.by(Sort.Direction.DESC, "id");
-            // 가격 정렬은 product_item.price 기반 MIN 정렬이 필요해 추후 구현
-            // 현재는 명시적 400으로 사용자에게 미지원 사실 전달
-            case PRICE_ASC, PRICE_DESC -> throw new CustomException(
-                ErrorCode.COMMON_001,
-                sort + " 정렬은 아직 지원되지 않습니다 (LATEST 또는 POPULAR 사용)");
-            case POPULAR -> Sort.unsorted();
+            case PRICE_ASC, PRICE_DESC, POPULAR -> Sort.unsorted();
         };
         return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sortBy);
     }
 
-    public ProductDetailResponse getDetail(Long productId, Long userId) {
+    // 단건 응답만 캐시 (productDetail TTL 10분, default)
+    // 조회수 카운트는 캐시 hit 여부와 무관해야 하므로 컨트롤러에서 recordView를 별도 호출
+    @Cacheable(value = "productDetail", key = "#productId", cacheManager = "redisCacheManager")
+    public ProductDetailResponse getDetail(Long productId) {
         Product product = findApprovedProduct(productId);
-        viewCountService.recordView(productId, userId);
         return ProductDetailResponse.from(product);
+    }
+
+    // 조회수 카운트 — 컨트롤러에서 getDetail 성공 후 호출
+    public void recordView(Long productId, Long userId) {
+        viewCountService.recordView(productId, userId);
     }
 
     public List<ProductSummaryResponse> getRelated(Long productId) {

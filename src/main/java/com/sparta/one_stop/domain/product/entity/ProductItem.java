@@ -27,7 +27,8 @@ import java.util.stream.Stream;
 @Entity
 @Table(name = "product_item",
         indexes = {
-                @Index(name = "idx_item_product", columnList = "product_id, status")
+                @Index(name = "idx_item_product", columnList = "product_id, status"),
+                @Index(name = "idx_item_status_price", columnList = "status, price")
         })
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
