@@ -271,6 +271,9 @@ public class PointHistory extends BaseEntity {
         this.remainingAmount -= amount;
     }
 
+
+    // == 검증 메서드 ==
+
     // 잔여 포인트 만료 처리
     // 만료 스케줄러 또는 배치에서 호출하며, 만료된 금액을 반환한다
     public Integer expireRemainingAmount() {
@@ -283,8 +286,6 @@ public class PointHistory extends BaseEntity {
 
         return expiredAmount;
     }
-
-    // == 검증 메서드 ==
 
     // 차감 가능한 원본 포인트 이력 여부
     // CHARGE / EARN / REFUND 이력만 remainingAmount를 가지고 차감 대상이 될 수 있다
