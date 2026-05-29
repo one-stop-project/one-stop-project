@@ -35,10 +35,11 @@ public class SearchHistory {
     @Column(name = "searched_at", nullable = false)
     private LocalDateTime searchedAt;
 
+    // searchedAt이 null이면 호출 시점으로 폴백 — 5분 지연 batch INSERT에서 raw 시각 보존
     @Builder
-    private SearchHistory(String keyword, User user) {
+    private SearchHistory(String keyword, User user, LocalDateTime searchedAt) {
         this.keyword = keyword;
         this.user = user;
-        this.searchedAt = LocalDateTime.now();
+        this.searchedAt = (searchedAt != null) ? searchedAt : LocalDateTime.now();
     }
 }
