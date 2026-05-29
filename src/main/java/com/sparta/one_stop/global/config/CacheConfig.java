@@ -49,8 +49,9 @@ import java.util.concurrent.TimeUnit;
 @EnableCaching
 public class CacheConfig implements CachingConfigurer {
 
-    // Redis 장애 시 캐시 예외를 사용자에게 전달하지 않고 메서드 실행으로 자연스럽게 fallback
-    // get/put/evict 모두 로그만 남기고 swallow → 캐시 미스로 간주되어 원본 메서드 호출
+    // Redis 장애 처리:
+    //   - get/put: swallow (캐시 미스로 자연 fallback, 사용자 응답 정상)
+    //   - evict/clear: propagate (실패 시 stale 데이터가 TTL 동안 남으므로 알려야 함)
     @Override
     public CacheErrorHandler errorHandler() {
         return new CacheErrorHandler() {
@@ -64,11 +65,13 @@ public class CacheConfig implements CachingConfigurer {
             }
             @Override
             public void handleCacheEvictError(RuntimeException ex, Cache cache, Object key) {
-                log.warn("[Cache] evict failed (cache={}, key={}): {}", cache.getName(), key, ex.getMessage());
+                log.error("[Cache] evict failed (cache={}, key={}): {}", cache.getName(), key, ex.getMessage());
+                throw ex;
             }
             @Override
             public void handleCacheClearError(RuntimeException ex, Cache cache) {
-                log.warn("[Cache] clear failed (cache={}): {}", cache.getName(), ex.getMessage());
+                log.error("[Cache] clear failed (cache={}): {}", cache.getName(), ex.getMessage());
+                throw ex;
             }
         };
     }

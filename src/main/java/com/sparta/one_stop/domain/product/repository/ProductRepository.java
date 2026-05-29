@@ -40,16 +40,16 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
     // 구매자용 조회
 
     // 검색/목록 (LATEST 등 가격 무관 정렬용)
-    // 가격 필터: 옵션 가격 중 하나라도 [minPrice, maxPrice] 범위 포함 시 노출
+    // 가격 필터: 동일 ProductItem 한 건이 [minPrice, maxPrice] 범위에 들어가야 노출
     @Query("SELECT p FROM Product p JOIN p.seller s " +
            "WHERE p.status = :productStatus AND s.status = :sellerStatus " +
            "AND (:keyword IS NULL OR LOWER(p.name) LIKE LOWER(CONCAT('%', :keyword, '%'))) " +
            "AND (:categoryId IS NULL OR EXISTS (" +
            "    SELECT m FROM ProductCategoryMapping m WHERE m.product = p AND m.category.id = :categoryId)) " +
-           "AND (:minPrice IS NULL OR EXISTS (" +
-           "    SELECT 1 FROM ProductItem pi WHERE pi.product = p AND pi.price >= :minPrice)) " +
-           "AND (:maxPrice IS NULL OR EXISTS (" +
-           "    SELECT 1 FROM ProductItem pi WHERE pi.product = p AND pi.price <= :maxPrice))")
+           "AND ((:minPrice IS NULL AND :maxPrice IS NULL) OR EXISTS (" +
+           "    SELECT 1 FROM ProductItem pi WHERE pi.product = p " +
+           "      AND (:minPrice IS NULL OR pi.price >= :minPrice) " +
+           "      AND (:maxPrice IS NULL OR pi.price <= :maxPrice)))")
     Page<Product> searchApproved(@Param("productStatus") ProductStatus productStatus,
                                  @Param("sellerStatus") SellerStatus sellerStatus,
                                  @Param("keyword") String keyword,
