@@ -14,8 +14,8 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.ArrayList;
 import java.util.List;
 
-// Redis LIST에 누적된 raw 검색 이벤트를 batch로 DB INSERT
-// Scheduler가 호출 — 트랜잭션 커밋 성공 후에만 ack(LTRIM)
+// Redis 큐에 쌓인 검색 로그를 모아서 DB에 한 번에 저장
+// 저장(커밋) 성공 후에만 호출자가 큐를 비운다
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -35,7 +35,7 @@ public class SearchHistorySyncService {
                 try {
                     userRef = userRepository.getReferenceById(e.userId());
                 } catch (EntityNotFoundException ex) {
-                    // 탈퇴/삭제된 유저는 user_id=null 로 저장 — raw 로그 유실 방지
+                    // 탈퇴 유저는 user_id=null로 저장 (로그 유실 방지)
                     log.warn("[SearchHistory] missing user (userId={}), saving as anonymous", e.userId());
                 }
             }

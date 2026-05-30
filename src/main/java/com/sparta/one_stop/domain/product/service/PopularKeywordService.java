@@ -41,6 +41,7 @@ public class PopularKeywordService {
     private static final long ARCHIVE_TTL_SECONDS       = 7 * 86400L;
 
     private static final int MIN_KEYWORD_LENGTH = 2;
+    private static final int MAX_KEYWORD_LENGTH = 100; // SearchHistory.keyword 컬럼 length=100 과 일치
     private static final int TOP_N              = 50;
 
     private static final double WEIGHT_OLDEST = 0.1;
@@ -50,21 +51,24 @@ public class PopularKeywordService {
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
     private static final DateTimeFormatter HOUR_FMT = DateTimeFormatter.ofPattern("yyyyMMddHH");
     private static final DateTimeFormatter DAY_FMT  = DateTimeFormatter.ofPattern("yyyyMMdd");
-    // 전각 공백(　) 등 Unicode whitespace까지 매칭해야 "검정　운동화" → "검정 운동화"로 압축됨
+    // 전각 공백 등 유니코드 공백까지 매칭 (UNICODE 플래그)
     private static final Pattern MULTI_WHITESPACE = Pattern.compile("\\s+", Pattern.UNICODE_CHARACTER_CLASS);
 
-    // ZINCRBY 버킷 + EXPIRE + RPUSH queue 를 원자적으로 처리
+    private static final long QUEUE_MAX_LEN = 500_000L; // 큐에 쌓아둘 최대 개수
+
+    // 검색 1건 집계 + 큐 적재. LTRIM으로 상한 유지 (sync 멈춰도 무한 증식 방지)
     private static final RedisScript<Long> RECORD_KEYWORD_SCRIPT = RedisScript.of("""
         redis.call('ZINCRBY', KEYS[1], 1, ARGV[1])
         redis.call('EXPIRE', KEYS[1], ARGV[2])
         redis.call('RPUSH', KEYS[2], ARGV[3])
+        redis.call('LTRIM', KEYS[2], -tonumber(ARGV[4]), -1)
         return 1
         """, Long.class);
 
     private final RedisTemplate<String, String> redisTemplate;
     private final ObjectMapper objectMapper;
 
-    // 검색 발생 시 컨트롤러에서 후처리 호출 — Redis 장애가 검색 자체를 막지 않도록 catch
+    // Redis 장애가 검색 자체를 막지 않도록 catch 후 skip
     public void recordKeyword(String rawKeyword, Long userId) {
         String normalized = normalize(rawKeyword);
         if (normalized == null) {
@@ -80,7 +84,8 @@ public class PopularKeywordService {
                 List.of(keywordBucketKey(now), SEARCH_HISTORY_QUEUE),
                 normalized,
                 String.valueOf(KEYWORD_BUCKET_TTL_SECONDS),
-                payload
+                payload,
+                String.valueOf(QUEUE_MAX_LEN)
             );
         } catch (JsonProcessingException e) {
             log.warn("[PopularKeyword] event serialize failed (keyword={}): {}", normalized, e.getMessage());
@@ -114,7 +119,7 @@ public class PopularKeywordService {
         return new PopularKeywordAdminResponse(date.toString(), keywords);
     }
 
-    // 5분 주기 — 3시간 윈도우 가중 합산 후 TOP_N 잘라 final로 atomic 교체
+    // 5분마다 최근 3시간 가중 합산 → TOP_N → 노출용 키로 RENAME 교체
     public void refresh() {
         LocalDateTime now = LocalDateTime.now(KST);
         try {
@@ -122,8 +127,7 @@ public class PopularKeywordService {
 
             Boolean exists = redisTemplate.hasKey(WEIGHTED_TMP_KEY);
             if (!Boolean.TRUE.equals(exists)) {
-                // 모든 버킷이 비어있어 ZUNIONSTORE가 결과 키를 만들지 않음
-                // 기존 final 무효화 → 빈 인기검색어 노출
+                // 최근 3시간 검색이 없으면 합산 키가 안 생김 → 노출용 키 삭제해 빈 결과로
                 redisTemplate.delete(FINAL_KEY);
                 return;
             }
@@ -154,25 +158,28 @@ public class PopularKeywordService {
         refresh();
     }
 
-    // SearchHistoryScheduler가 peek/ack 용도로 호출 — LIST 조작은 service 일관성 유지를 위해 한 곳에서
-    public List<SearchHistoryEvent> peekHistoryBatch(int batchSize) {
+    // rawCount=꺼낸 개수, events=정상 파싱분. 큐는 rawCount만큼 비운다 (깨진 게 앞을 막지 않게)
+    public record HistoryBatch(int rawCount, List<SearchHistoryEvent> events) {
+    }
+
+    public HistoryBatch peekHistoryBatch(int batchSize) {
         List<String> raws = redisTemplate.opsForList().range(SEARCH_HISTORY_QUEUE, 0, batchSize - 1L);
         if (raws == null || raws.isEmpty()) {
-            return List.of();
+            return new HistoryBatch(0, List.of());
         }
         List<SearchHistoryEvent> events = new ArrayList<>(raws.size());
         for (String raw : raws) {
             try {
                 events.add(objectMapper.readValue(raw, SearchHistoryEvent.class));
             } catch (JsonProcessingException e) {
-                // 잘못된 페이로드는 큐에 남아있으면 무한 재시도되므로 drop 로그만 남기고 스킵
+                // 깨진 건 버림 (rawCount엔 포함돼 큐에선 같이 제거됨)
                 log.warn("[PopularKeyword] history payload parse failed, dropping: {}", e.getMessage());
             }
         }
-        return events;
+        return new HistoryBatch(raws.size(), events);
     }
 
-    // LTRIM은 ack 의미 — DB INSERT 성공 후 호출
+    // DB 저장 성공 후 호출 — 처리한 개수만큼 큐 앞에서 제거
     public void ackHistoryBatch(int processedCount) {
         if (processedCount <= 0) return;
         redisTemplate.opsForList().trim(SEARCH_HISTORY_QUEUE, processedCount, -1);
@@ -182,17 +189,21 @@ public class PopularKeywordService {
         return KEYWORD_BUCKET_PREFIX + kstTime.format(HOUR_FMT);
     }
 
-    // null/공백/길이 미달은 null 반환 (집계 스킵 신호)
+    // 집계용 정규화. 집계 제외 대상(빈 값/2자 미만)은 null 반환
     static String normalize(String raw) {
         if (raw == null) return null;
-        // strip()은 trim()과 달리 Unicode whitespace(전각 공백 등)까지 제거
+        // strip()은 trim()과 달리 전각 공백까지 제거
         String stripped = raw.strip();
         if (stripped.isEmpty()) return null;
-        // 한글 대소문자 개념 없음 — ROOT 로케일로 안전한 lowercase
+        // 소문자 통일. ROOT 로케일이라 환경 무관 동일 결과
         String lower = stripped.toLowerCase(java.util.Locale.ROOT);
-        // 모든 종류의 공백(전각 포함)을 단일 스페이스로 압축
+        // 가운데 연속 공백 → 한 칸
         String compact = MULTI_WHITESPACE.matcher(lower).replaceAll(" ");
-        return compact.length() < MIN_KEYWORD_LENGTH ? null : compact;
+        if (compact.length() < MIN_KEYWORD_LENGTH) {
+            return null;
+        }
+        // DB 컬럼 100자 제한 — 초과 시 잘라서 저장 실패 방지
+        return compact.length() > MAX_KEYWORD_LENGTH ? compact.substring(0, MAX_KEYWORD_LENGTH) : compact;
     }
 
     // ===== 내부 구현 =====

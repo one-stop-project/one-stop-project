@@ -28,8 +28,8 @@ public class SellerItemService {
     private final ProductItemRepository productItemRepository;
     private final InventoryHistoryRepository inventoryHistoryRepository;
 
-    // 옵션은 itemId로 들어오고 productId는 entity 조회 후 추출 → SpEL @CacheEvict 키 못 박음
-    // 메서드 종료 직전에 programmatic evict
+    // productId를 옵션 조회 후에야 알 수 있어 @CacheEvict 어노테이션으로는 키를 못 잡음
+    // 그래서 메서드 끝에서 캐시를 직접 비운다
     @Qualifier("redisCacheManager")
     private final CacheManager redisCacheManager;
 

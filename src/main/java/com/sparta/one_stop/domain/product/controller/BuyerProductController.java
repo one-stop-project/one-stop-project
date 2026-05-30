@@ -47,7 +47,7 @@ public class BuyerProductController {
     private final PopularKeywordService popularKeywordService;
 
     // 검색/목록: GET /api/products?keyword=&categoryId=&minPrice=&maxPrice=&sort=&page=&size=
-    // 인기 검색어 집계는 캐시 hit 여부와 무관해야 하므로 컨트롤러에서 별도 호출 (recordView 패턴)
+    // 캐시 hit이어도 인기검색어 집계는 매번 — 컨트롤러에서 호출
     @Operation(summary = "상품 검색/목록 조회")
     @GetMapping
     public ResponseEntity<ApiResponse<Page<ProductSummaryResponse>>> search(

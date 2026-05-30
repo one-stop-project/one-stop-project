@@ -143,6 +143,28 @@ class PopularKeywordServiceTest {
         void mixedWhitespace() {
             assertThat(PopularKeywordService.normalize("검정\t\n운동화")).isEqualTo("검정 운동화");
         }
+
+        @Test
+        @DisplayName("100자 초과 → 정확히 100자로 잘림 (DB length=100 방어)")
+        void clampsOver100() {
+            String over = "a".repeat(150);
+            String result = PopularKeywordService.normalize(over);
+            assertThat(result).hasSize(100);
+        }
+
+        @Test
+        @DisplayName("정확히 100자 → 그대로 유지")
+        void exactly100() {
+            String exact = "a".repeat(100);
+            assertThat(PopularKeywordService.normalize(exact)).hasSize(100);
+        }
+
+        @Test
+        @DisplayName("99자 → 그대로 유지 (자르지 않음)")
+        void under100() {
+            String under = "a".repeat(99);
+            assertThat(PopularKeywordService.normalize(under)).hasSize(99);
+        }
     }
 
     // ===== recordKeyword =====
@@ -176,8 +198,10 @@ class PopularKeywordServiceTest {
         @DisplayName("2자 키워드 → Lua 스크립트 호출 (정규화된 'ab'가 ARGV[1]로 전달)")
         void recordValid() {
             service.recordKeyword("AB", 1L);
+            // ARGV: keyword, bucketTtl, payload, queueMaxLen (4개)
             then(redisTemplate).should()
-                .execute(any(RedisScript.class), anyList(), eq("ab"), anyString(), anyString());
+                .execute(any(RedisScript.class), anyList(),
+                    eq("ab"), anyString(), anyString(), anyString());
         }
 
         @Test
@@ -185,14 +209,15 @@ class PopularKeywordServiceTest {
         void recordAnonymous() {
             service.recordKeyword("Macbook", null);
             then(redisTemplate).should()
-                .execute(any(RedisScript.class), anyList(), eq("macbook"), anyString(), anyString());
+                .execute(any(RedisScript.class), anyList(),
+                    eq("macbook"), anyString(), anyString(), anyString());
         }
 
         @Test
         @DisplayName("Redis 예외 → swallow (호출자에 전파 X)")
         void swallowRedisError() {
             given(redisTemplate.execute(
-                any(RedisScript.class), anyList(), any(), any(), any()))
+                any(RedisScript.class), anyList(), any(), any(), any(), any()))
                 .willThrow(new RuntimeException("Redis down"));
             // 예외 전파 안 됨 = 정상 종료
             service.recordKeyword("Macbook", 1L);
@@ -388,16 +413,66 @@ class PopularKeywordServiceTest {
     // ===== peek/ack History batch =====
 
     @Nested
-    @DisplayName("peekHistoryBatch/ackHistoryBatch: LIST 조회 + LTRIM")
+    @DisplayName("peekHistoryBatch/ackHistoryBatch: rawCount 기반 ack로 큐 정체 방지")
     class HistoryQueue {
 
         @Test
-        @DisplayName("빈 LIST → 빈 리스트 반환")
+        @DisplayName("빈 LIST → rawCount=0, events 비어있음")
         void emptyQueue() {
             given(redisTemplate.opsForList()).willReturn(listOperations);
             given(listOperations.range("search:history:queue", 0, 499L)).willReturn(List.of());
 
-            assertThat(service.peekHistoryBatch(500)).isEmpty();
+            PopularKeywordService.HistoryBatch batch = service.peekHistoryBatch(500);
+            assertThat(batch.rawCount()).isZero();
+            assertThat(batch.events()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("정상 N개 → rawCount=N, events=N")
+        void allValid() throws Exception {
+            String j1 = objectMapper.writeValueAsString(
+                new SearchHistoryEvent("macbook", 1L, java.time.LocalDateTime.now()));
+            String j2 = objectMapper.writeValueAsString(
+                new SearchHistoryEvent("airpods", null, java.time.LocalDateTime.now()));
+            given(redisTemplate.opsForList()).willReturn(listOperations);
+            given(listOperations.range("search:history:queue", 0, 499L))
+                .willReturn(List.of(j1, j2));
+
+            PopularKeywordService.HistoryBatch batch = service.peekHistoryBatch(500);
+            assertThat(batch.rawCount()).isEqualTo(2);
+            assertThat(batch.events()).hasSize(2);
+        }
+
+        @Test
+        @DisplayName("일부 파싱 실패 → rawCount=raw 전체, events는 성공분만 (ack은 rawCount 기준이라 깨진 것도 제거됨)")
+        void partialFail() throws Exception {
+            String valid = objectMapper.writeValueAsString(
+                new SearchHistoryEvent("macbook", 1L, java.time.LocalDateTime.now()));
+            String invalid = "{this-is-not-valid-json";
+            given(redisTemplate.opsForList()).willReturn(listOperations);
+            given(listOperations.range("search:history:queue", 0, 499L))
+                .willReturn(List.of(valid, invalid));
+
+            PopularKeywordService.HistoryBatch batch = service.peekHistoryBatch(500);
+            // rawCount는 읽은 원소 수(2) — 깨진 1개도 포함해야 ack 시 큐에서 제거됨
+            assertThat(batch.rawCount()).isEqualTo(2);
+            assertThat(batch.events()).hasSize(1);
+            assertThat(batch.events().get(0).keyword()).isEqualTo("macbook");
+        }
+
+        @Test
+        @DisplayName("전부 파싱 실패(all-fail) → rawCount=raw, events 비어있음 (정체 방지의 핵심)")
+        void allFail() {
+            String bad1 = "{broken-1";
+            String bad2 = "{broken-2";
+            given(redisTemplate.opsForList()).willReturn(listOperations);
+            given(listOperations.range("search:history:queue", 0, 499L))
+                .willReturn(List.of(bad1, bad2));
+
+            PopularKeywordService.HistoryBatch batch = service.peekHistoryBatch(500);
+            // events는 비었지만 rawCount=2 → scheduler가 ack(2)로 깨진 2개를 큐에서 제거 → 정체 안 남
+            assertThat(batch.rawCount()).isEqualTo(2);
+            assertThat(batch.events()).isEmpty();
         }
 
         @Test
@@ -413,22 +488,6 @@ class PopularKeywordServiceTest {
             given(redisTemplate.opsForList()).willReturn(listOperations);
             service.ackHistoryBatch(100);
             then(listOperations).should().trim("search:history:queue", 100, -1);
-        }
-
-        @Test
-        @DisplayName("잘못된 JSON 페이로드는 drop (다른 정상 페이로드는 살림)")
-        void dropsInvalidPayload() throws Exception {
-            String validJson = objectMapper.writeValueAsString(
-                new SearchHistoryEvent("macbook", 1L, java.time.LocalDateTime.now()));
-            String invalid = "{this-is-not-valid-json";
-            given(redisTemplate.opsForList()).willReturn(listOperations);
-            given(listOperations.range("search:history:queue", 0, 499L))
-                .willReturn(List.of(validJson, invalid));
-
-            // 정상 1개만 통과
-            List<SearchHistoryEvent> result = service.peekHistoryBatch(500);
-            assertThat(result).hasSize(1);
-            assertThat(result.get(0).keyword()).isEqualTo("macbook");
         }
     }
 }
