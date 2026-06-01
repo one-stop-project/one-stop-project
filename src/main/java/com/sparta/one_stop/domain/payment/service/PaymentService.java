@@ -12,6 +12,7 @@ import com.sparta.one_stop.domain.payment.dto.request.ApprovePaymentRequest;
 import com.sparta.one_stop.domain.payment.dto.response.ApprovePaymentResponse;
 import com.sparta.one_stop.domain.payment.entity.Payment;
 import com.sparta.one_stop.domain.payment.repository.PaymentRepository;
+import com.sparta.one_stop.domain.point.service.PointService;
 import com.sparta.one_stop.global.enums.delivery.DeliveryStatus;
 import com.sparta.one_stop.global.enums.order.OrderStatus;
 import com.sparta.one_stop.global.enums.payment.PaymentMethod;
@@ -34,11 +35,13 @@ public class PaymentService {
     private final PaymentRepository paymentRepository;
     private final DeliveryRepository deliveryRepository;
     private final DeliveryHistoryRepository deliveryHistoryRepository;
+    private final PointService pointService;
 
     /**
      * 결제 승인
      * - Mock 결제 승인 처리
      * - 결제 금액과 주문 금액 일치 여부 검증
+     * - 결제 승인 전 사용 포인트 실제 차감
      * - Order / Payment 상태를 동일 트랜잭션 내에서 PAID 처리
      * - 결제 승인 완료 시 OrderItem 접수 처리 및 Delivery 생성
      * - 최초 배송 상태는 ACCEPT
@@ -58,6 +61,13 @@ public class PaymentService {
         validatePayableOrder(
             order,
             request.amount()
+        );
+
+        // 결제 승인 전 포인트 실제 차감
+        pointService.usePoint(
+            userId,
+            order,
+            order.getUsedPoint()
         );
 
         Payment payment = createApprovedPayment(

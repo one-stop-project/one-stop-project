@@ -1,5 +1,6 @@
 package com.sparta.one_stop.domain.point.service;
 
+import com.sparta.one_stop.domain.order.entity.Order;
 import com.sparta.one_stop.domain.point.dto.request.PointChargeRequest;
 import com.sparta.one_stop.domain.point.dto.response.ExpiringSoonPointResponse;
 import com.sparta.one_stop.domain.point.dto.response.PointChargeResponse;
@@ -8,8 +9,10 @@ import com.sparta.one_stop.domain.point.dto.response.PointHistoryResponse;
 import com.sparta.one_stop.domain.point.dto.response.PointResponse;
 import com.sparta.one_stop.domain.point.entity.Point;
 import com.sparta.one_stop.domain.point.entity.PointHistory;
+import com.sparta.one_stop.domain.point.entity.PointUsageDetail;
 import com.sparta.one_stop.domain.point.repository.PointHistoryRepository;
 import com.sparta.one_stop.domain.point.repository.PointRepository;
+import com.sparta.one_stop.domain.point.repository.PointUsageDetailRepository;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.UserRepository;
 import com.sparta.one_stop.global.enums.point.PointHistoryType;
@@ -22,6 +25,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -43,6 +47,7 @@ public class PointService {
 
     private final PointRepository pointRepository;
     private final PointHistoryRepository pointHistoryRepository;
+    private final PointUsageDetailRepository pointUsageDetailRepository;
     private final UserRepository userRepository;
 
     /**
@@ -136,6 +141,57 @@ public class PointService {
             amount,
             expireAt
         );
+    }
+
+    /**
+     * 포인트 사용 / 차감
+     * - 결제 승인 시 호출
+     * - usedPoint가 0이면 차감하지 않음
+     * - Point balance 기준으로 1차 잔액 검증
+     * - FEFO + FIFO 기준으로 원본 포인트 이력 차감
+     * - PointHistory USE 이력 생성
+     * - PointUsageDetail에 어떤 원본 이력에서 얼마를 차감했는지 기록
+     */
+    @Transactional
+    public void usePoint(
+        Long userId,
+        Order order,
+        Integer usedPoint
+    ) {
+        validateUsePointAmount(usedPoint);
+
+        if (usedPoint == 0) {
+            return;
+        }
+
+        if (order == null) {
+            throw new CustomException(ErrorCode.COMMON_001);
+        }
+
+        Point point = pointRepository.findByUserId(userId)
+            .orElseThrow(() -> new CustomException(ErrorCode.POINT_001));
+
+        validateEnoughBalance(
+            point,
+            usedPoint
+        );
+
+        PointHistory useHistory = PointHistory.use(
+            point,
+            order,
+            usedPoint,
+            "주문 결제 포인트 사용"
+        );
+
+        pointHistoryRepository.save(useHistory);
+
+        deductPointHistories(
+            point,
+            useHistory,
+            usedPoint
+        );
+
+        point.decreaseBalance(usedPoint);
     }
 
     /**
@@ -248,6 +304,85 @@ public class PointService {
             0,
             0
         );
+    }
+
+    /**
+     * 포인트 사용 금액 검증
+     * - 주문 생성 시 0원 입력은 허용
+     * - 실제 차감 메서드에서도 0원은 허용
+     * - 음수 또는 null은 허용하지 않음
+     */
+    private void validateUsePointAmount(Integer usedPoint) {
+        if (usedPoint == null || usedPoint < 0) {
+            throw new CustomException(ErrorCode.POINT_003);
+        }
+    }
+
+    /**
+     * 포인트 잔액 검증
+     */
+    private void validateEnoughBalance(
+        Point point,
+        Integer usedPoint
+    ) {
+        if (point.getBalance() < usedPoint) {
+            throw new CustomException(ErrorCode.POINT_002);
+        }
+    }
+
+    /**
+     * FEFO + FIFO 기준 포인트 원본 이력 차감
+     * - CHARGE / EARN / REFUND 이력 중 remainingAmount가 남아 있고 만료되지 않은 이력만 대상
+     * - Repository 조회 정렬 기준:
+     *   1. expireAt ASC
+     *   2. createdAt ASC
+     * - PointUsageDetail 생성 후 sourceHistory.remainingAmount를 차감해야 함
+     */
+    private void deductPointHistories(
+        Point point,
+        PointHistory useHistory,
+        Integer usedPoint
+    ) {
+        LocalDate today = LocalDate.now();
+
+        List<PointHistory> sourceHistories =
+            pointHistoryRepository.findDeductibleHistories(
+                point.getId(),
+                DEDUCTIBLE_TYPES,
+                today
+            );
+
+        int remainingPoint = usedPoint;
+        List<PointUsageDetail> usageDetails = new ArrayList<>();
+
+        for (PointHistory sourceHistory : sourceHistories) {
+            if (remainingPoint == 0) {
+                break;
+            }
+
+            int usedAmount = Math.min(
+                sourceHistory.getRemainingAmount(),
+                remainingPoint
+            );
+
+            PointUsageDetail usageDetail = new PointUsageDetail(
+                useHistory,
+                sourceHistory,
+                usedAmount
+            );
+
+            usageDetails.add(usageDetail);
+
+            sourceHistory.decreaseRemainingAmount(usedAmount);
+
+            remainingPoint -= usedAmount;
+        }
+
+        if (remainingPoint > 0) {
+            throw new CustomException(ErrorCode.POINT_002);
+        }
+
+        pointUsageDetailRepository.saveAll(usageDetails);
     }
 
 }
