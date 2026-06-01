@@ -1,12 +1,15 @@
 package com.sparta.one_stop.domain.coupon.service;
 
+import com.sparta.one_stop.domain.coupon.dto.CouponRestoreResult;
 import com.sparta.one_stop.domain.coupon.dto.response.IssueCouponResponse;
 import com.sparta.one_stop.domain.coupon.entity.Coupon;
 import com.sparta.one_stop.domain.coupon.entity.UserCoupon;
 import com.sparta.one_stop.domain.coupon.repository.CouponRepository;
 import com.sparta.one_stop.domain.coupon.repository.UserCouponRepository;
+import com.sparta.one_stop.domain.order.entity.Order;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.UserRepository;
+import com.sparta.one_stop.global.enums.order.OrderStatus;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -240,4 +243,70 @@ public class CouponCommandService {
         }
     }
 
+    /**
+     * 결제 성공 시 쿠폰 사용 처리
+     * - 주문에 적용된 쿠폰이 없으면 처리하지 않음
+     * - 결제 승인 성공 시점에 최종 사용 가능 여부를 검증
+     * - UserCoupon 상태를 AVAILABLE → USED로 변경
+     * - usedAt, usedOrder 저장
+     */
+    @Transactional
+    public void useCouponByOrder(Order order) {
+        if (order == null) {
+            throw new CustomException(ErrorCode.ORDER_006);
+        }
+
+        UserCoupon userCoupon = order.getUserCoupon();
+
+        if (userCoupon == null) {
+            return;
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+
+        userCoupon.validateUsable(
+            order.getUser().getId(),
+            now
+        );
+
+        userCoupon.use(
+            order,
+            now
+        );
+    }
+
+    /**
+     * 주문 취소 시 쿠폰 복구
+     * - 주문에 적용된 쿠폰이 없으면 null 반환
+     * - USED 상태 쿠폰만 복구 대상
+     * - 쿠폰 만료 전이면 AVAILABLE로 복구
+     * - 쿠폰 만료 후이면 EXPIRED로 변경
+     * - 주문 취소 응답 생성을 위해 쿠폰 복구 결과 반환
+     */
+    @Transactional
+    public CouponRestoreResult restoreCouponByOrder(Order order) {
+        if (order == null) {
+            throw new CustomException(ErrorCode.ORDER_006);
+        }
+
+        UserCoupon userCoupon = order.getUserCoupon();
+
+        if (userCoupon == null) {
+            return null;
+        }
+
+        if (order.getStatus() == OrderStatus.PENDING_PAYMENT) {
+            return null;
+        }
+
+        LocalDateTime now = LocalDateTime.now();
+
+        userCoupon.restore(now);
+
+        return new CouponRestoreResult(
+            userCoupon.getId(),
+            userCoupon.getCoupon().getName(),
+            userCoupon.getStatus()
+        );
+    }
 }

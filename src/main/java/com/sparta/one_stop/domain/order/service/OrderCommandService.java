@@ -3,6 +3,8 @@ package com.sparta.one_stop.domain.order.service;
 import com.sparta.one_stop.domain.cart.entity.CartItem;
 import com.sparta.one_stop.domain.cart.repository.CartItemRepository;
 import com.sparta.one_stop.domain.coupon.dto.CouponDiscountResult;
+import com.sparta.one_stop.domain.coupon.dto.CouponRestoreResult;
+import com.sparta.one_stop.domain.coupon.service.CouponCommandService;
 import com.sparta.one_stop.domain.coupon.service.CouponQueryService;
 import com.sparta.one_stop.domain.delivery.entity.Delivery;
 import com.sparta.one_stop.domain.delivery.entity.DeliveryHistory;
@@ -58,6 +60,7 @@ public class OrderCommandService {
     private final DeliveryHistoryRepository deliveryHistoryRepository;
     private final PointService pointService;
     private final CouponQueryService couponQueryService;
+    private final CouponCommandService couponCommandService;
 
     /**
      * 주문 생성 1단계
@@ -153,11 +156,11 @@ public class OrderCommandService {
      * - 이미 취소된 주문 중복 취소 방지
      * - 배송 상태 기준 취소 가능 여부 검증
      * - 재고 복구
+     * - 사용 쿠폰 복구
      * - 사용 포인트 복구
      * - Order / OrderItem / Delivery 상태 취소 처리
      * - 주문 취소 이력 저장
      * - 배송 취소 이력 저장
-     * TODO: 쿠폰은 MVP 이후 연동
      */
     public CancelOrderResponse cancelOrder(
         Long userId,
@@ -213,10 +216,11 @@ public class OrderCommandService {
             deliveryHistoryRepository.saveAll(deliveryHistories);
         }
 
-        order.cancel();
+        CouponRestoreResult couponRestoreResult = couponCommandService.restoreCouponByOrder(order);
 
-        // MVP 단계에서는 쿠폰 복구 미구현이므로 null
-        RestoredCouponResponse restoredCoupon = null;
+        RestoredCouponResponse restoredCoupon = RestoredCouponResponse.of(couponRestoreResult);
+
+        order.cancel();
 
         Integer restoredPoint = pointService.refundPointByOrder(order);
 
