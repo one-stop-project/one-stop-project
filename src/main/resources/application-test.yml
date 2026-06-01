@@ -64,3 +64,5 @@ resilience4j:
         timeout-duration: 30s
       ai-assistant:
         timeout-duration: 10s
+  test-data:
+    init: true
