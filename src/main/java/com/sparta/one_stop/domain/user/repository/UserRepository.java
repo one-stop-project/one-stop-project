@@ -1,12 +1,16 @@
 package com.sparta.one_stop.domain.user.repository;
 
 import com.sparta.one_stop.domain.user.entity.User;
+import com.sparta.one_stop.global.enums.user.UserRole;
 import com.sparta.one_stop.global.enums.user.UserStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface UserRepository extends JpaRepository<User, Long> {
@@ -33,4 +37,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     // ── 관리자/통계 ──
     long countByStatus(UserStatus status);
+
+    Page<User> findAllByRoleIn(List<UserRole> roles, Pageable pageable);
 }

@@ -1,4 +1,6 @@
 spring:
+  config:
+    import: "optional:classpath:prompts.yml"
   datasource:
     url: jdbc:h2:mem:testdb;MODE=MySQL;NON_KEYWORDS=USER
     username: sa
@@ -18,6 +20,14 @@ spring:
       host: localhost
       port: 6379
 
+  ai:
+    openai:
+      api-key: "test-api-key"
+      base-url: "https://api.openai.com"
+      chat:
+        options:
+          model: "gpt-4o-mini"
+
   autoconfigure:
     exclude:
       - org.redisson.spring.starter.RedissonAutoConfigurationV2
@@ -32,3 +42,5 @@ jwt:
 app:
   cors:
     allowed-origins: "*"
+  test-data:
+    init: true
