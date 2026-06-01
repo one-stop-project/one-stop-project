@@ -5,6 +5,7 @@ import com.sparta.one_stop.global.security.JwtAuthenticationEntryPoint;
 import com.sparta.one_stop.global.security.JwtAuthenticationFilter;
 import com.sparta.one_stop.global.security.JwtExceptionFilter;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.security.servlet.PathRequest;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -135,15 +136,16 @@ public class SecurityConfig {
                 .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
                 .requestMatchers("/actuator/**").permitAll()
 
-                // User 공통(BUYER + SELLER 모두 접근 가능)
-                // 마이페이지는 모두 조회
-                .requestMatchers("/api/users/me/**").authenticated()
-
                 // 구매자만 접근가능
                 .requestMatchers("/api/orders/**").hasRole("BUYER")
                 .requestMatchers("/api/reviews/**").hasRole("BUYER")
                 .requestMatchers("/api/subscriptions/**").hasRole("BUYER")
                 .requestMatchers("/api/coupons/**").hasRole("BUYER")
+                .requestMatchers("/api/users/me/points", "/api/users/me/points/**").hasRole("BUYER")
+
+                // User 공통(BUYER + SELLER 모두 접근 가능)
+                // 마이페이지는 모두 조회
+                .requestMatchers("/api/users/me/**").authenticated()
 
                 // 관리자만 접근 가능
                 .requestMatchers("/api/admin/**").hasAnyRole("ADMIN", "SUPER_ADMIN")

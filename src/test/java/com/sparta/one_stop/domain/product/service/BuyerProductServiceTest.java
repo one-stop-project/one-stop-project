@@ -12,6 +12,7 @@ import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 
+import com.sparta.one_stop.domain.product.dto.response.CacheableProductList;
 import com.sparta.one_stop.domain.product.dto.response.ProductDetailResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductSummaryResponse;
 import com.sparta.one_stop.domain.product.entity.Category;
@@ -113,62 +114,62 @@ class BuyerProductServiceTest {
         @DisplayName("keyword가 null이면 repository에 null 키워드로 전달된다")
         void nullKeyword_passesNullToRepository() {
             // given
-            given(productRepository.searchApproved(any(), any(), any(), any(), any()))
+            given(productRepository.searchApproved(any(), any(), any(), any(), any(), any(), any()))
                 .willReturn(Page.empty(pageable));
 
             // when
-            buyerProductService.search(null, null, SortType.LATEST, pageable);
+            buyerProductService.search(null, null, null, null, SortType.LATEST, pageable);
 
             // then
             then(productRepository).should().searchApproved(
                 eq(ProductStatus.APPROVED), eq(SellerStatus.APPROVED),
-                isNull(), isNull(), any(Pageable.class));
+                isNull(), isNull(), isNull(), isNull(), any(Pageable.class));
         }
 
         @Test
         @DisplayName("keyword가 빈 문자열이면 repository에 null로 정규화되어 전달된다")
         void blankKeyword_normalizedToNull() {
             // given
-            given(productRepository.searchApproved(any(), any(), any(), any(), any()))
+            given(productRepository.searchApproved(any(), any(), any(), any(), any(), any(), any()))
                 .willReturn(Page.empty(pageable));
 
             // when
-            buyerProductService.search("", null, SortType.LATEST, pageable);
+            buyerProductService.search("", null, null, null, SortType.LATEST, pageable);
 
             // then
             then(productRepository).should().searchApproved(
-                any(), any(), isNull(), any(), any());
+                any(), any(), isNull(), any(), any(), any(), any());
         }
 
         @Test
         @DisplayName("keyword가 공백만 있으면 repository에 null로 정규화되어 전달된다")
         void whitespaceKeyword_normalizedToNull() {
             // given
-            given(productRepository.searchApproved(any(), any(), any(), any(), any()))
+            given(productRepository.searchApproved(any(), any(), any(), any(), any(), any(), any()))
                 .willReturn(Page.empty(pageable));
 
             // when
-            buyerProductService.search("   ", null, SortType.LATEST, pageable);
+            buyerProductService.search("   ", null, null, null, SortType.LATEST, pageable);
 
             // then
             then(productRepository).should().searchApproved(
-                any(), any(), isNull(), any(), any());
+                any(), any(), isNull(), any(), any(), any(), any());
         }
 
         @Test
         @DisplayName("정상 keyword는 repository에 그대로 전달된다")
         void validKeyword_passedAsIs() {
             // given
-            given(productRepository.searchApproved(any(), any(), any(), any(), any()))
+            given(productRepository.searchApproved(any(), any(), any(), any(), any(), any(), any()))
                 .willReturn(Page.empty(pageable));
 
             // when
-            buyerProductService.search("맥북", 5L, SortType.LATEST, pageable);
+            buyerProductService.search("맥북", 5L, null, null, SortType.LATEST, pageable);
 
             // then
             then(productRepository).should().searchApproved(
                 eq(ProductStatus.APPROVED), eq(SellerStatus.APPROVED),
-                eq("맥북"), eq(5L), any(Pageable.class));
+                eq("맥북"), eq(5L), isNull(), isNull(), any(Pageable.class));
         }
     }
 
@@ -185,7 +186,7 @@ class BuyerProductServiceTest {
             given(productRepository.findApproved(any(), any(), any()))
                 .willReturn(Page.empty(pageable));
 
-            buyerProductService.search(null, null, SortType.POPULAR, pageable);
+            buyerProductService.search(null, null, null, null, SortType.POPULAR, pageable);
 
             then(productRepository).should().findApproved(
                 eq(ProductStatus.APPROVED), eq(SellerStatus.APPROVED), any(Pageable.class));
@@ -204,12 +205,12 @@ class BuyerProductServiceTest {
             given(productRepository.findAllByIdsWithItems(List.of(100L, 50L)))
                 .willReturn(List.of(p1, p2));
 
-            Page<ProductSummaryResponse> result =
-                buyerProductService.search(null, null, SortType.POPULAR, pageable);
+            CacheableProductList result =
+                buyerProductService.search(null, null, null, null, SortType.POPULAR, pageable);
 
-            assertThat(result.getContent()).hasSize(2);
-            assertThat(result.getContent().get(0).getProductId()).isEqualTo(100L);
-            assertThat(result.getContent().get(1).getProductId()).isEqualTo(50L);
+            assertThat(result.content()).hasSize(2);
+            assertThat(result.content().get(0).getProductId()).isEqualTo(100L);
+            assertThat(result.content().get(1).getProductId()).isEqualTo(50L);
             then(productRepository).should(never()).findApproved(any(), any(), any());
         }
     }
@@ -233,82 +234,73 @@ class BuyerProductServiceTest {
     class GetDetail {
 
         @Test
-        @DisplayName("상품이 없으면 PRODUCT_001 예외가 발생하고 recordView는 호출되지 않는다")
-        void productNotFound_throwsAndNoRecordView() {
-            // given
+        @DisplayName("상품이 없으면 PRODUCT_001 예외가 발생한다")
+        void productNotFound_throws() {
             given(productRepository.findWithCollectionsById(PRODUCT_ID))
                 .willReturn(Optional.empty());
 
-            // when & then
-            assertThatThrownBy(() -> buyerProductService.getDetail(PRODUCT_ID, USER_ID))
+            assertThatThrownBy(() -> buyerProductService.getDetail(PRODUCT_ID))
                 .isInstanceOf(CustomException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.PRODUCT_001);
-
-            then(viewCountService).should(never()).recordView(any(), any());
         }
 
         @Test
         @DisplayName("상품 상태가 APPROVED가 아니면 PRODUCT_002 예외가 발생한다")
         void productNotApproved_throwsProduct002() {
-            // given
             Product rejected = product(seller(SellerStatus.APPROVED), ProductStatus.REJECTED);
             given(productRepository.findWithCollectionsById(PRODUCT_ID))
                 .willReturn(Optional.of(rejected));
 
-            // when & then
-            assertThatThrownBy(() -> buyerProductService.getDetail(PRODUCT_ID, USER_ID))
+            assertThatThrownBy(() -> buyerProductService.getDetail(PRODUCT_ID))
                 .isInstanceOf(CustomException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.PRODUCT_002);
-
-            then(viewCountService).should(never()).recordView(any(), any());
         }
 
         @Test
         @DisplayName("판매자 상태가 APPROVED가 아니면 PRODUCT_002 예외가 발생한다")
         void sellerNotApproved_throwsProduct002() {
-            // given - 상품은 APPROVED이지만 판매자 status는 PENDING
             Product productWithPendingSeller =
                 product(seller(SellerStatus.PENDING), ProductStatus.APPROVED);
             given(productRepository.findWithCollectionsById(PRODUCT_ID))
                 .willReturn(Optional.of(productWithPendingSeller));
 
-            // when & then
-            assertThatThrownBy(() -> buyerProductService.getDetail(PRODUCT_ID, USER_ID))
+            assertThatThrownBy(() -> buyerProductService.getDetail(PRODUCT_ID))
                 .isInstanceOf(CustomException.class)
                 .extracting("errorCode").isEqualTo(ErrorCode.PRODUCT_002);
-
-            then(viewCountService).should(never()).recordView(any(), any());
         }
 
         @Test
-        @DisplayName("정상 조회 시 recordView가 (productId, userId)로 호출되고 응답이 반환된다")
-        void approved_callsRecordViewAndReturnsResponse() {
-            // given
+        @DisplayName("정상 조회 시 응답이 반환된다")
+        void approved_returnsResponse() {
             Product product = approvedProduct();
             given(productRepository.findWithCollectionsById(PRODUCT_ID))
                 .willReturn(Optional.of(product));
 
-            // when
-            ProductDetailResponse response =
-                buyerProductService.getDetail(PRODUCT_ID, USER_ID);
+            ProductDetailResponse response = buyerProductService.getDetail(PRODUCT_ID);
 
-            // then
             assertThat(response).isNotNull();
+        }
+    }
+
+    // ===== recordView (캐시와 무관하게 매 호출마다 위임) =====
+
+    @Nested
+    @DisplayName("recordView - 조회수 카운트 위임")
+    class RecordView {
+
+        @Test
+        @DisplayName("(productId, userId) 그대로 viewCountService에 위임한다")
+        void delegatesToViewCountService() {
+            buyerProductService.recordView(PRODUCT_ID, USER_ID);
+
             then(viewCountService).should(times(1)).recordView(PRODUCT_ID, USER_ID);
         }
 
         @Test
-        @DisplayName("비로그인(userId=null) 조회 시에도 recordView가 호출된다")
-        void guestUser_stillCallsRecordView() {
-            // given
-            Product product = approvedProduct();
-            given(productRepository.findWithCollectionsById(PRODUCT_ID))
-                .willReturn(Optional.of(product));
+        @DisplayName("비로그인(userId=null)도 그대로 위임한다")
+        void delegatesNullUserId() {
+            buyerProductService.recordView(PRODUCT_ID, null);
 
-            // when
-            buyerProductService.getDetail(PRODUCT_ID, null);
-
-            // then
             then(viewCountService).should(times(1)).recordView(PRODUCT_ID, null);
         }
     }

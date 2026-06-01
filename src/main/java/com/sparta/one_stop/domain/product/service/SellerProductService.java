@@ -28,6 +28,7 @@ import com.sparta.one_stop.global.enums.user.SellerStatus;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -93,6 +94,7 @@ public class SellerProductService {
 
     // 상품 수정
     @Transactional
+    @CacheEvict(value = "productDetail", key = "#productId", cacheManager = "redisCacheManager")
     public ProductDetailResponse update(Long userId, Long productId, ProductUpdateRequest request) {
         Seller seller = findApprovedSeller(userId);
 
@@ -128,6 +130,7 @@ public class SellerProductService {
 
     // 상품 삭제
     @Transactional
+    @CacheEvict(value = "productDetail", key = "#productId", cacheManager = "redisCacheManager")
     public ProductDeleteResponse delete(Long userId, Long productId) {
         Seller seller = findApprovedSeller(userId);
 
@@ -150,6 +153,7 @@ public class SellerProductService {
 
     // 상품 이미지 삭제 (Soft Delete + display_order 재정렬 + 썸네일 동기화)
     @Transactional
+    @CacheEvict(value = "productDetail", key = "#productId", cacheManager = "redisCacheManager")
     public ProductImageDeleteResponse deleteImage(Long userId, Long productId, Long imageId) {
         Seller seller = findApprovedSeller(userId);
 
@@ -201,6 +205,7 @@ public class SellerProductService {
 
     // 상품 이미지 추가
     @Transactional
+    @CacheEvict(value = "productDetail", key = "#productId", cacheManager = "redisCacheManager")
     public ProductImageAddResponse addImages(Long userId, Long productId, ProductImageAddRequest request) {
         Seller seller = findApprovedSeller(userId);
 
@@ -226,7 +231,7 @@ public class SellerProductService {
             throw new CustomException(ErrorCode.PRODUCT_006);
         }
 
-        // 기존 이미지는 1..N 연속 정렬 유지 -> 마지막 순서 다음부터 배치
+        // 기존 이미지 순서(1,2,3...)는 그대로 두고, 새 이미지는 맨 뒤에 이어 붙임
         int nextOrder = activeImages.size();
         for (int i = 0; i < imageUrls.size(); i++) {
             ProductImage image = ProductImage.builder()
@@ -246,6 +251,7 @@ public class SellerProductService {
 
     // 대표 이미지(썸네일) 변경 (선택 이미지를 display_order=1로 승격 + 재정렬 + 썸네일 동기화)
     @Transactional
+    @CacheEvict(value = "productDetail", key = "#productId", cacheManager = "redisCacheManager")
     public ProductImageThumbnailResponse changeThumbnail(Long userId, Long productId, Long imageId) {
         Seller seller = findApprovedSeller(userId);
 
@@ -322,10 +328,7 @@ public class SellerProductService {
         Set<String> keys = new HashSet<>();
         for (ProductItemCreateRequest item : items) {
             if (!keys.add(item.getOptionCombinationKey())) {
-                throw new CustomException(
-                    ErrorCode.COMMON_001,
-                    "옵션 조합이 중복됩니다"
-                );
+                throw new CustomException(ErrorCode.PRODUCT_016);
             }
         }
     }

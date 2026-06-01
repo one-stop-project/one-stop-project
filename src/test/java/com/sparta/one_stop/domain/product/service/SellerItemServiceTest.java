@@ -45,6 +45,9 @@ class SellerItemServiceTest {
     @Mock
     private InventoryHistoryRepository inventoryHistoryRepository;
 
+    @Mock
+    private org.springframework.cache.CacheManager redisCacheManager;
+
     @InjectMocks
     private SellerItemService sellerItemService;
 

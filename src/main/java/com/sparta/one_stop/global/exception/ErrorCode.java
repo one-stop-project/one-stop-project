@@ -72,6 +72,9 @@ public enum ErrorCode {
     PRODUCT_011(HttpStatus.NOT_FOUND, "PRODUCT_011", "상품 이미지를 찾을 수 없습니다"),
     PRODUCT_012(HttpStatus.BAD_REQUEST, "PRODUCT_012", "상품 카테고리는 최소 1개 이상 매핑되어야 합니다"),
     PRODUCT_013(HttpStatus.BAD_REQUEST, "PRODUCT_013", "상품 카테고리는 최대 3개까지 매핑할 수 있습니다"),
+    PRODUCT_014(HttpStatus.BAD_REQUEST, "PRODUCT_014", "조회 페이지 크기가 허용 범위를 벗어났습니다"),
+    PRODUCT_015(HttpStatus.BAD_REQUEST, "PRODUCT_015", "가격 범위가 올바르지 않습니다"),
+    PRODUCT_016(HttpStatus.BAD_REQUEST, "PRODUCT_016", "상품 옵션 조합이 중복됩니다"),
 
     // ===== CATEGORY - 카테고리 =====
     CATEGORY_001(HttpStatus.NOT_FOUND, "CATEGORY_001", "카테고리를 찾을 수 없습니다"),
@@ -109,6 +112,13 @@ public enum ErrorCode {
     PAYMENT_006(HttpStatus.BAD_REQUEST, "PAYMENT_006", "결제 대기 시간이 초과되었습니다"),
     PAYMENT_007(HttpStatus.BAD_REQUEST, "PAYMENT_007", "지원하지 않는 결제 수단입니다"),
     PAYMENT_008(HttpStatus.BAD_REQUEST, "PAYMENT_008", "취소된 주문은 결제할 수 없습니다"),
+
+    // ===== POINT - 포인트 =====
+    POINT_001(HttpStatus.NOT_FOUND, "POINT_001", "포인트 계정을 찾을 수 없습니다"),
+    POINT_002(HttpStatus.BAD_REQUEST, "POINT_002", "포인트가 부족합니다"),
+    POINT_003(HttpStatus.BAD_REQUEST, "POINT_003", "포인트 금액은 1 이상이어야 합니다"),
+    POINT_004(HttpStatus.BAD_REQUEST, "POINT_004", "포인트 충전 금액은 1,000원 이상 1,000,000원 이하여야 합니다"),
+    POINT_005(HttpStatus.CONFLICT, "POINT_005", "포인트 처리 중 충돌이 발생했습니다. 다시 시도해주세요"),
 
     // ===== SHIPPING - 배송 =====
     SHIPPING_001(HttpStatus.BAD_REQUEST, "SHIPPING_001", "주문 확인 전에는 배송을 시작할 수 없습니다"),

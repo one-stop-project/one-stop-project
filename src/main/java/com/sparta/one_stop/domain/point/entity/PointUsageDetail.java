@@ -1,0 +1,114 @@
+package com.sparta.one_stop.domain.point.entity;
+
+import com.sparta.one_stop.global.entity.BaseEntity;
+import com.sparta.one_stop.global.enums.point.PointHistoryType;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Index;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.Table;
+import lombok.AccessLevel;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
+import java.time.LocalDate;
+
+@Entity
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+@Table(
+    name = "point_usage_detail",
+    indexes = {
+        @Index(name = "idx_pud_use_history", columnList = "use_history_id"),
+        @Index(name = "idx_pud_source_history", columnList = "source_history_id")
+    }
+)
+public class PointUsageDetail extends BaseEntity {
+
+    // 포인트 사용 상세 ID
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "usage_detail_id")
+    private Long id;
+
+    // 포인트 사용 이력
+    // 반드시 PointHistoryType.USE 타입의 이력과 연결된다
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "use_history_id", nullable = false)
+    private PointHistory useHistory;
+
+    // 실제 차감된 원본 포인트 이력
+    // CHARGE / EARN / REFUND 타입의 PointHistory와 연결된다
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "source_history_id", nullable = false)
+    private PointHistory sourceHistory;
+
+    // 해당 원본 포인트 이력에서 실제 차감한 금액
+    @Column(name = "used_amount", nullable = false)
+    private Integer usedAmount;
+
+    // 원본 포인트의 만료일
+    // 주문 취소 시 원래 만료일 기준으로 복구 가능 여부를 판단하기 위해 저장한다
+    @Column(name = "source_expire_at", nullable = false)
+    private LocalDate sourceExpireAt;
+
+    // == 생성자 ==
+    public PointUsageDetail(
+        PointHistory useHistory,
+        PointHistory sourceHistory,
+        Integer usedAmount
+    ) {
+        validate(
+            useHistory,
+            sourceHistory,
+            usedAmount
+        );
+
+        this.useHistory = useHistory;
+        this.sourceHistory = sourceHistory;
+        this.usedAmount = usedAmount;
+        this.sourceExpireAt = sourceHistory.getExpireAt();
+    }
+
+    // == 검증 메서드 ==
+
+    private void validate(
+        PointHistory useHistory,
+        PointHistory sourceHistory,
+        Integer usedAmount
+    ) {
+        if (useHistory == null) {
+            throw new IllegalArgumentException("포인트 사용 이력은 필수입니다.");
+        }
+
+        if (sourceHistory == null) {
+            throw new IllegalArgumentException("차감 대상 포인트 이력은 필수입니다.");
+        }
+
+        if (useHistory.getType() != PointHistoryType.USE) {
+            throw new IllegalArgumentException("USE 이력만 사용 상세 이력과 연결할 수 있습니다.");
+        }
+
+        if (!sourceHistory.isDeductibleSource()) {
+            throw new IllegalArgumentException("차감 대상은 CHARGE/EARN/REFUND 이력이어야 합니다.");
+        }
+
+        if (usedAmount == null || usedAmount <= 0) {
+            throw new IllegalArgumentException("차감 금액은 1 이상이어야 합니다.");
+        }
+
+        if (sourceHistory.getRemainingAmount() < usedAmount) {
+            throw new IllegalArgumentException("차감 금액은 원본 이력의 잔여 포인트를 초과할 수 없습니다.");
+        }
+
+        if (sourceHistory.getExpireAt() == null) {
+            throw new IllegalArgumentException("원본 포인트 만료일은 필수입니다.");
+        }
+    }
+
+}

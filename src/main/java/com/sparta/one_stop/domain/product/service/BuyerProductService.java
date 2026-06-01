@@ -1,5 +1,6 @@
 package com.sparta.one_stop.domain.product.service;
 
+import com.sparta.one_stop.domain.product.dto.response.CacheableProductList;
 import com.sparta.one_stop.domain.product.dto.response.ProductDetailResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductSummaryResponse;
 import com.sparta.one_stop.domain.product.entity.Product;
@@ -11,6 +12,7 @@ import com.sparta.one_stop.global.enums.user.SellerStatus;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -35,21 +37,55 @@ public class BuyerProductService {
     private final ProductViewCountService viewCountService;
     private final PopularProductService popularProductService;
 
-    // sort=POPULAR은 ZSET 순서 그대로 반환 (keyword/categoryId 필터 미적용)
-    public Page<ProductSummaryResponse> search(String keyword, Long categoryId, SortType sort, Pageable pageable) {
+    // 인기순 정렬은 랭킹 순서 그대로 반환 (keyword/categoryId/가격 필터 미적용)
+    // 응답 캐시 5분 — 키는 모든 필터 조합
+    // Page는 그대로 캐시 직렬화가 안 돼서 CacheableProductList에 담아 저장
+    @Cacheable(
+        value = "productList",
+        key = "T(java.util.Objects).toString(#keyword,'') + ':' + T(java.util.Objects).toString(#categoryId,'') + ':' + " +
+              "T(java.util.Objects).toString(#minPrice,'') + ':' + T(java.util.Objects).toString(#maxPrice,'') + ':' + " +
+              "#sort + ':' + #pageable.pageNumber + ':' + #pageable.pageSize",
+        cacheManager = "redisCacheManager",
+        condition = "#sort != T(com.sparta.one_stop.global.enums.product.SortType).POPULAR"
+    )
+    public CacheableProductList search(
+        String keyword, Long categoryId, Long minPrice, Long maxPrice, SortType sort, Pageable pageable
+    ) {
+        Page<ProductSummaryResponse> page = doSearch(keyword, categoryId, minPrice, maxPrice, sort, pageable);
+        return new CacheableProductList(
+            page.getContent(), pageable.getPageNumber(), pageable.getPageSize(), page.getTotalElements()
+        );
+    }
+
+    private Page<ProductSummaryResponse> doSearch(
+        String keyword, Long categoryId, Long minPrice, Long maxPrice, SortType sort, Pageable pageable
+    ) {
         if (sort == SortType.POPULAR) {
             return searchPopular(pageable);
         }
 
         String kw = (keyword != null && !keyword.isBlank()) ? keyword : null;
+        Pageable plainPage = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
+
+        if (sort == SortType.PRICE_ASC) {
+            return productRepository.searchApprovedOrderByMinPriceAsc(
+                ProductStatus.APPROVED, SellerStatus.APPROVED, kw, categoryId, minPrice, maxPrice, plainPage
+            ).map(ProductSummaryResponse::from);
+        }
+        if (sort == SortType.PRICE_DESC) {
+            return productRepository.searchApprovedOrderByMinPriceDesc(
+                ProductStatus.APPROVED, SellerStatus.APPROVED, kw, categoryId, minPrice, maxPrice, plainPage
+            ).map(ProductSummaryResponse::from);
+        }
+
         Pageable sorted = applySorting(pageable, sort);
         return productRepository.searchApproved(
-            ProductStatus.APPROVED, SellerStatus.APPROVED, kw, categoryId, sorted
+            ProductStatus.APPROVED, SellerStatus.APPROVED, kw, categoryId, minPrice, maxPrice, sorted
         ).map(ProductSummaryResponse::from);
     }
 
     private Page<ProductSummaryResponse> searchPopular(Pageable pageable) {
-        // 인기 상품 ZSET은 TOP N(상한 20)만 보관
+        // 인기 상품은 상위 20개만 보관 → 2페이지부터는 빈 결과
         if (pageable.getPageNumber() > 0) {
             return Page.empty(pageable);
         }
@@ -57,7 +93,7 @@ public class BuyerProductService {
         int limit = pageable.getPageSize();
         List<Long> popularIds = popularProductService.getPopularProductIds(limit);
 
-        // Redis ZSET 비어있음/장애 → DB fallback (sales_count DESC)
+        // 랭킹이 비었거나 Redis 장애면 DB에서 판매수 높은 순으로 대체
         if (popularIds.isEmpty()) {
             Pageable salesDesc = PageRequest.of(0, limit,
                 Sort.by(Sort.Direction.DESC, "salesCount"));
@@ -84,23 +120,26 @@ public class BuyerProductService {
         return p.getProductItems().stream().anyMatch(ProductItem::isOnSale);
     }
 
+    // 가격 정렬은 별도 쿼리, 인기순은 진입부에서 분기 — 여기는 최신순만 처리
     private Pageable applySorting(Pageable pageable, SortType sort) {
         Sort sortBy = switch (sort) {
             case LATEST -> Sort.by(Sort.Direction.DESC, "id");
-            // 가격 정렬은 product_item.price 기반 MIN 정렬이 필요해 추후 구현
-            // 현재는 명시적 400으로 사용자에게 미지원 사실 전달
-            case PRICE_ASC, PRICE_DESC -> throw new CustomException(
-                ErrorCode.COMMON_001,
-                sort + " 정렬은 아직 지원되지 않습니다 (LATEST 또는 POPULAR 사용)");
-            case POPULAR -> Sort.unsorted();
+            case PRICE_ASC, PRICE_DESC, POPULAR -> Sort.unsorted();
         };
         return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sortBy);
     }
 
-    public ProductDetailResponse getDetail(Long productId, Long userId) {
+    // 단건 응답만 캐시 (10분)
+    // 조회수는 캐시 hit이어도 매번 세야 해서 컨트롤러에서 따로 호출
+    @Cacheable(value = "productDetail", key = "#productId", cacheManager = "redisCacheManager")
+    public ProductDetailResponse getDetail(Long productId) {
         Product product = findApprovedProduct(productId);
-        viewCountService.recordView(productId, userId);
         return ProductDetailResponse.from(product);
+    }
+
+    // 조회수 카운트 — 단건 조회 성공 후 컨트롤러에서 호출
+    public void recordView(Long productId, Long userId) {
+        viewCountService.recordView(productId, userId);
     }
 
     public List<ProductSummaryResponse> getRelated(Long productId) {
