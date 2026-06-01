@@ -11,6 +11,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -25,12 +26,10 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class AdminCategoryController {
 
-    // TODO: @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')") 추가 예정
-    // 현재 권한 제어는 SecurityConfig URL 패턴
-
     private final CategoryService categoryService;
 
     // 카테고리 생성
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
     @Operation(summary = "카테고리 생성")
     @PostMapping
     public ResponseEntity<ApiResponse<CategoryResponse>> create(
@@ -43,6 +42,7 @@ public class AdminCategoryController {
     }
 
     // 카테고리 이름 수정
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
     @Operation(summary = "카테고리 이름 수정")
     @PatchMapping("/{categoryId}")
     public ResponseEntity<ApiResponse<CategoryResponse>> update(
@@ -54,6 +54,7 @@ public class AdminCategoryController {
     }
 
     // 카테고리 삭제 (하위 포함 일괄 삭제)
+    @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
     @Operation(summary = "카테고리 삭제")
     @DeleteMapping("/{categoryId}")
     public ResponseEntity<ApiResponse<Void>> delete(
