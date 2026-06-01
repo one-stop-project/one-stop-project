@@ -1,34 +1,26 @@
 package com.sparta.one_stop.domain.coupon.service;
 
-import com.sparta.one_stop.domain.coupon.dto.response.AvailableCouponResponse;
 import com.sparta.one_stop.domain.coupon.dto.response.IssueCouponResponse;
-import com.sparta.one_stop.domain.coupon.dto.response.MyCouponPageResponse;
-import com.sparta.one_stop.domain.coupon.dto.response.MyCouponResponse;
 import com.sparta.one_stop.domain.coupon.entity.Coupon;
 import com.sparta.one_stop.domain.coupon.entity.UserCoupon;
 import com.sparta.one_stop.domain.coupon.repository.CouponRepository;
 import com.sparta.one_stop.domain.coupon.repository.UserCouponRepository;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.UserRepository;
-import com.sparta.one_stop.global.enums.coupon.CouponStatus;
-import com.sparta.one_stop.global.enums.coupon.UserCouponStatus;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.List;
 
 @Service
 @RequiredArgsConstructor
-public class CouponService {
+public class CouponCommandService {
 
     private static final String COUPON_STOCK_KEY_PREFIX = "coupon:stock:";
     private static final String COUPON_ISSUED_USERS_KEY_PREFIX = "coupon:issued-users:";
@@ -38,22 +30,18 @@ public class CouponService {
     private final UserRepository userRepository;
     private final StringRedisTemplate redisTemplate;
 
-    // 발급 가능 쿠폰 목록 조회
-    @Transactional(readOnly = true)
-    public List<AvailableCouponResponse> getAvailableCoupons() {
-        LocalDateTime now = LocalDateTime.now();
-
-        List<Coupon> coupons = couponRepository.findAvailableCoupons(
-            CouponStatus.ACTIVE,
-            now
-        );
-
-        return coupons.stream()
-            .map(this::toAvailableCouponResponse)
-            .toList();
-    }
-
-    // 선착순 쿠폰 발급
+    /**
+     * 선착순 쿠폰 발급
+     * - 사용자 / 쿠폰 ID 필수값 검증
+     * - 쿠폰 존재 여부 및 발급 가능 상태 검증
+     * - Redis Set 기준 중복 발급 1차 검증
+     * - Redis DECR 기반 선착순 잔여 수량 차감
+     * - DB Unique 제약 기반 중복 발급 2차 검증
+     * - UserCoupon 저장
+     * - Coupon.issuedQuantity 원자 증가
+     * - DB 저장 성공 후 Redis Set에 발급 사용자 기록
+     * - DB 처리 실패 시 Redis 수량 보상 증가
+     */
     @Transactional
     public IssueCouponResponse issueCoupon(
         Long userId,
@@ -75,16 +63,8 @@ public class CouponService {
         String issuedUsersKey = getCouponIssuedUsersKey(couponId);
         String userIdValue = String.valueOf(userId);
 
-        validateNotIssuedInRedis(
-            issuedUsersKey,
-            userIdValue
-        );
-
-        initializeCouponStockIfAbsent(
-            coupon,
-            stockKey,
-            now
-        );
+        validateNotIssuedInRedis(issuedUsersKey, userIdValue);
+        initializeCouponStockIfAbsent(coupon, stockKey, now);
 
         Long remainingStock = decreaseRedisStock(stockKey);
 
@@ -103,11 +83,7 @@ public class CouponService {
                 throw new CustomException(ErrorCode.COUPON_002);
             }
 
-            UserCoupon userCoupon = new UserCoupon(
-                user,
-                coupon
-            );
-
+            UserCoupon userCoupon = new UserCoupon(user, coupon);
             UserCoupon savedUserCoupon = userCouponRepository.saveAndFlush(userCoupon);
 
             int updatedCount = couponRepository.increaseIssuedQuantity(couponId);
@@ -118,10 +94,7 @@ public class CouponService {
             }
 
             redisTemplate.opsForSet()
-                .add(
-                    issuedUsersKey,
-                    userIdValue
-                );
+                .add(issuedUsersKey, userIdValue);
 
             applyExpireAtToRedisKey(
                 issuedUsersKey,
@@ -141,49 +114,15 @@ public class CouponService {
         }
     }
 
-    // 내 쿠폰 목록 조회
-    @Transactional(readOnly = true)
-    public MyCouponPageResponse getMyCoupons(
-        Long userId,
-        UserCouponStatus status,
-        Pageable pageable
-    ) {
-        if (userId == null) {
-            throw new CustomException(ErrorCode.AUTH_007);
-        }
-
-        Page<UserCoupon> userCouponPage;
-
-        if (status == null) {
-            userCouponPage = userCouponRepository.findAllByUserId(
-                userId,
-                pageable
-            );
-        } else {
-            userCouponPage = userCouponRepository.findAllByUserIdAndStatus(
-                userId,
-                status,
-                pageable
-            );
-        }
-
-        List<MyCouponResponse> content = userCouponPage.getContent()
-            .stream()
-            .map(this::toMyCouponResponse)
-            .toList();
-
-        return new MyCouponPageResponse(
-            content,
-            userCouponPage.getNumber(),
-            userCouponPage.getSize(),
-            userCouponPage.getTotalElements(),
-            userCouponPage.getTotalPages()
-        );
-    }
-
     // == Redis 처리 메서드 ==
 
-    // Redis에 쿠폰 잔여 수량이 없으면 DB 기준 잔여 수량으로 초기화
+    /**
+     * Redis 쿠폰 잔여 수량 초기화
+     * - Redis stock key가 없을 때만 DB 기준 잔여 수량으로 초기화
+     * - 잔여 수량 = totalQuantity - issuedQuantity
+     * - 쿠폰 만료 시각까지 TTL 설정
+     * - 이미 Redis key가 있으면 기존 값을 유지
+     */
     private void initializeCouponStockIfAbsent(
         Coupon coupon,
         String stockKey,
@@ -195,10 +134,7 @@ public class CouponService {
             throw new CustomException(ErrorCode.COUPON_001);
         }
 
-        Duration ttl = Duration.between(
-            now,
-            coupon.getExpiredAt()
-        );
+        Duration ttl = Duration.between(now, coupon.getExpiredAt());
 
         if (ttl.isNegative() || ttl.isZero()) {
             throw new CustomException(ErrorCode.COUPON_007);
@@ -212,7 +148,11 @@ public class CouponService {
             );
     }
 
-    // Redis Set 기준 중복 발급 여부 확인
+    /**
+     * Redis Set 기준 중복 발급 여부 검증
+     * - coupon:issued-users:{couponId} Set에 userId가 있으면 이미 발급된 사용자로 판단
+     * - DB Unique 제약 전 빠른 중복 발급 차단 용도
+     */
     private void validateNotIssuedInRedis(
         String issuedUsersKey,
         String userIdValue
@@ -228,47 +168,65 @@ public class CouponService {
         }
     }
 
-    // Redis 잔여 수량 차감
+    /**
+     * Redis 쿠폰 잔여 수량 차감
+     * - Redis DECR 명령으로 원자적 차감 처리
+     * - 반환값이 0 이상이면 발급 가능
+     * - 반환값이 음수이면 수량 소진으로 판단하고 보상 증가 필요
+     */
     private Long decreaseRedisStock(String stockKey) {
         return redisTemplate.opsForValue()
             .decrement(stockKey);
     }
 
-    // Redis 잔여 수량 보상 증가
+    /**
+     * Redis 쿠폰 잔여 수량 보상 증가
+     * - Redis DECR 이후 DB 저장 실패, 중복 발급, 수량 초과 상황에서 호출
+     * - Redis 수량과 DB 발급 결과의 정합성을 맞추기 위한 보상 처리
+     */
     private void increaseRedisStock(String stockKey) {
         redisTemplate.opsForValue()
             .increment(stockKey);
     }
 
-    // Redis Set 만료 시간 설정
+    /**
+     * Redis key 만료 시간 설정
+     * - 쿠폰 만료 시각 기준으로 Redis Set TTL 설정
+     * - 이미 만료되었거나 TTL이 0 이하이면 만료 시간을 설정하지 않음
+     */
     private void applyExpireAtToRedisKey(
         String key,
         LocalDateTime expiredAt,
         LocalDateTime now
     ) {
-        Duration ttl = Duration.between(
-            now,
-            expiredAt
-        );
+        Duration ttl = Duration.between(now, expiredAt);
 
         if (!ttl.isNegative() && !ttl.isZero()) {
-            redisTemplate.expire(
-                key,
-                ttl
-            );
+            redisTemplate.expire(key, ttl);
         }
     }
 
+    /**
+     * 쿠폰 잔여 수량 Redis key 생성
+     */
     private String getCouponStockKey(Long couponId) {
         return COUPON_STOCK_KEY_PREFIX + couponId;
     }
 
+    /**
+     * 쿠폰 발급 사용자 Redis Set key 생성
+     */
     private String getCouponIssuedUsersKey(Long couponId) {
         return COUPON_ISSUED_USERS_KEY_PREFIX + couponId;
     }
 
     // == 검증 메서드 ==
 
+    /**
+     * 쿠폰 발급 요청 필수 ID 검증
+     * - 인증 사용자 ID가 없으면 인증 예외 처리
+     * - 쿠폰 ID가 없으면 쿠폰 조회 실패 예외 처리
+     */
     private void validateRequiredId(
         Long userId,
         Long couponId
@@ -284,20 +242,12 @@ public class CouponService {
 
     // == 응답 변환 메서드 ==
 
-    private AvailableCouponResponse toAvailableCouponResponse(Coupon coupon) {
-        return new AvailableCouponResponse(
-            coupon.getId(),
-            coupon.getName(),
-            coupon.getDiscountType(),
-            coupon.getDiscountValue(),
-            coupon.getMinOrderPrice(),
-            coupon.getMaxDiscountPrice(),
-            coupon.getTotalQuantity() - coupon.getIssuedQuantity(),
-            coupon.getStartAt(),
-            coupon.getExpiredAt()
-        );
-    }
-
+    /**
+     * 쿠폰 발급 응답 DTO 변환
+     * - 발급된 UserCoupon 기준으로 응답 생성
+     * - createdAt은 쿠폰 발급일로 사용
+     * - expiredAt은 쿠폰 마스터의 발급/사용 만료일을 사용
+     */
     private IssueCouponResponse toIssueCouponResponse(UserCoupon userCoupon) {
         Coupon coupon = userCoupon.getCoupon();
 
@@ -307,24 +257,6 @@ public class CouponService {
             coupon.getName(),
             userCoupon.getStatus(),
             userCoupon.getCreatedAt(),
-            coupon.getExpiredAt()
-        );
-    }
-
-    private MyCouponResponse toMyCouponResponse(UserCoupon userCoupon) {
-        Coupon coupon = userCoupon.getCoupon();
-
-        return new MyCouponResponse(
-            userCoupon.getId(),
-            coupon.getId(),
-            coupon.getName(),
-            coupon.getDiscountType(),
-            coupon.getDiscountValue(),
-            coupon.getMinOrderPrice(),
-            coupon.getMaxDiscountPrice(),
-            userCoupon.getStatus(),
-            userCoupon.getCreatedAt(),
-            userCoupon.getUsedAt(),
             coupon.getExpiredAt()
         );
     }

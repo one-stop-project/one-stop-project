@@ -3,7 +3,8 @@ package com.sparta.one_stop.domain.coupon.controller;
 import com.sparta.one_stop.domain.coupon.dto.response.AvailableCouponResponse;
 import com.sparta.one_stop.domain.coupon.dto.response.IssueCouponResponse;
 import com.sparta.one_stop.domain.coupon.dto.response.MyCouponPageResponse;
-import com.sparta.one_stop.domain.coupon.service.CouponService;
+import com.sparta.one_stop.domain.coupon.service.CouponCommandService;
+import com.sparta.one_stop.domain.coupon.service.CouponQueryService;
 import com.sparta.one_stop.global.enums.coupon.UserCouponStatus;
 import com.sparta.one_stop.global.response.ApiResponse;
 import com.sparta.one_stop.global.security.AuthUser;
@@ -27,12 +28,13 @@ import java.util.List;
 @RequestMapping("/api")
 public class CouponController {
 
-    private final CouponService couponService;
+    private final CouponQueryService couponQueryService;
+    private final CouponCommandService couponCommandService;
 
     // 발급 가능 쿠폰 목록 조회
     @GetMapping("/coupons/available")
     public ResponseEntity<ApiResponse<List<AvailableCouponResponse>>> getAvailableCoupons() {
-        List<AvailableCouponResponse> response = couponService.getAvailableCoupons();
+        List<AvailableCouponResponse> response = couponQueryService.getAvailableCoupons();
 
         return ResponseEntity.ok(
             ApiResponse.success(response)
@@ -45,10 +47,8 @@ public class CouponController {
         @AuthenticationPrincipal AuthUser authUser,
         @PathVariable Long couponId
     ) {
-        Long userId = authUser.userId();
-
-        IssueCouponResponse response = couponService.issueCoupon(
-            userId,
+        IssueCouponResponse response = couponCommandService.issueCoupon(
+            authUser.userId(),
             couponId
         );
 
@@ -68,10 +68,8 @@ public class CouponController {
             direction = Sort.Direction.DESC
         ) Pageable pageable
     ) {
-        Long userId = authUser.userId();
-
-        MyCouponPageResponse response = couponService.getMyCoupons(
-            userId,
+        MyCouponPageResponse response = couponQueryService.getMyCoupons(
+            authUser.userId(),
             status,
             pageable
         );
