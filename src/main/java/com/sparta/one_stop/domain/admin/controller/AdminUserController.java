@@ -29,7 +29,7 @@ public class AdminUserController {
     private final AdminUserService adminUserService;
 
     @PreAuthorize("hasRole('SUPER_ADMIN')")
-    @Operation(summary = "관리자 목록 조회 (ADMIN/SUPER_ADMIN 계정만)")
+    @Operation(summary = "관리자 목록 조회 (SUPER_ADMIN 전용 — ADMIN/SUPER_ADMIN 계정 반환)")
     @GetMapping
     public ResponseEntity<ApiResponse<Page<AdminUserResponse>>> getAdminUsers(
         @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable

@@ -58,11 +58,11 @@ public class AdminUserService {
         User target = userRepository.findById(targetUserId)
             .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_001));
 
-        if (target.getRole() == UserRole.SUPER_ADMIN) {
-            throw new CustomException(ErrorCode.ADMIN_013);
-        }
         if (targetUserId.equals(actorId)) {
             throw new CustomException(ErrorCode.ADMIN_014);
+        }
+        if (target.getRole() == UserRole.SUPER_ADMIN) {
+            throw new CustomException(ErrorCode.ADMIN_013);
         }
         if (target.getRole() != UserRole.ADMIN) {
             throw new CustomException(ErrorCode.ADMIN_015);

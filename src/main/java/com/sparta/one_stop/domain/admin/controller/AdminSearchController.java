@@ -1,4 +1,4 @@
-package com.sparta.one_stop.domain.product.controller;
+package com.sparta.one_stop.domain.admin.controller;
 
 import com.sparta.one_stop.domain.product.dto.response.PopularKeywordAdminResponse;
 import com.sparta.one_stop.domain.product.service.PopularKeywordService;
@@ -31,8 +31,6 @@ public class AdminSearchController {
 
     private final PopularKeywordService popularKeywordService;
 
-    // GET /api/admin/search/popular?date=YYYY-MM-DD&limit=20
-    // date 미지정 시 오늘(KST), 과거 날짜는 archive 키 조회 — 미존재면 keywords=[]
     @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
     @Operation(summary = "관리자 인기 검색어 조회 (특정일)")
     @GetMapping("/popular")
