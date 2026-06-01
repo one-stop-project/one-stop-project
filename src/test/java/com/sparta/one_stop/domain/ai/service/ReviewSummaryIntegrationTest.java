@@ -4,6 +4,7 @@ import com.sparta.one_stop.domain.ai.dto.ReviewCategoryType;
 import com.sparta.one_stop.domain.ai.dto.ReviewSummary;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
@@ -13,9 +14,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * 실제 Gemini API 를 호출하는 통합 테스트.
  * local 프로파일의 API Key 를 사용하므로 네트워크 연결이 필요합니다.
+ * GEMINI_API_KEY 환경변수가 설정된 환경에서만 실행됩니다.
  */
 @SpringBootTest
 @ActiveProfiles("local")
+@EnabledIfEnvironmentVariable(named = "GEMINI_API_KEY", matches = ".+")
 class ReviewSummaryIntegrationTest {
 
     @Autowired
