@@ -12,6 +12,7 @@ import com.sparta.one_stop.domain.payment.dto.request.ApprovePaymentRequest;
 import com.sparta.one_stop.domain.payment.dto.response.ApprovePaymentResponse;
 import com.sparta.one_stop.domain.payment.entity.Payment;
 import com.sparta.one_stop.domain.payment.repository.PaymentRepository;
+import com.sparta.one_stop.domain.point.service.PointService;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.global.enums.order.OrderStatus;
 import com.sparta.one_stop.global.enums.payment.PaymentMethod;
@@ -54,6 +55,9 @@ class PaymentServiceTest {
 
     @Mock
     private DeliveryHistoryRepository deliveryHistoryRepository;
+
+    @Mock
+    private PointService pointService;
 
     @InjectMocks
     private PaymentService paymentService;

@@ -17,6 +17,7 @@ import com.sparta.one_stop.domain.order.entity.OrderItem;
 import com.sparta.one_stop.domain.order.repository.OrderCancelHistoryRepository;
 import com.sparta.one_stop.domain.order.repository.OrderItemRepository;
 import com.sparta.one_stop.domain.order.repository.OrderRepository;
+import com.sparta.one_stop.domain.point.service.PointService;
 import com.sparta.one_stop.domain.product.entity.Product;
 import com.sparta.one_stop.domain.product.entity.ProductItem;
 import com.sparta.one_stop.domain.product.repository.ProductItemRepository;
@@ -74,6 +75,9 @@ class OrderCommandServiceTest {
 
     @Mock
     private DeliveryHistoryRepository deliveryHistoryRepository;
+
+    @Mock
+    private PointService pointService;
 
     @InjectMocks
     private OrderCommandService orderCommandService;
@@ -439,7 +443,6 @@ class OrderCommandServiceTest {
             orderId,
             userId,
             23000L,
-            0,
             orderStatus
         );
 
@@ -458,6 +461,8 @@ class OrderCommandServiceTest {
             .thenReturn(List.of(orderItem));
         when(deliveryRepository.findAllByOrderItemIdIn(List.of(101L)))
             .thenReturn(List.of());
+        when(pointService.refundPointByOrder(order))
+            .thenReturn(0);
 
         // when
         CancelOrderResponse result = orderCommandService.cancelOrder(
@@ -475,6 +480,7 @@ class OrderCommandServiceTest {
         verify(productItem).increaseStock(2);
         verify(orderItem).cancel();
         verify(order).cancel();
+        verify(pointService).refundPointByOrder(order);
 
         ArgumentCaptor<OrderCancelHistory> historyCaptor =
             ArgumentCaptor.forClass(OrderCancelHistory.class);
@@ -504,7 +510,6 @@ class OrderCommandServiceTest {
             orderId,
             userId,
             23000L,
-            0,
             orderStatus
         );
 
@@ -526,6 +531,8 @@ class OrderCommandServiceTest {
             .thenReturn(List.of(delivery));
         when(delivery.isCancelable())
             .thenReturn(true);
+        when(pointService.refundPointByOrder(order))
+            .thenReturn(0);
 
         // when
         CancelOrderResponse result = orderCommandService.cancelOrder(
@@ -541,6 +548,7 @@ class OrderCommandServiceTest {
         verify(orderItem).cancel();
         verify(delivery).cancelOrder();
         verify(order).cancel();
+        verify(pointService).refundPointByOrder(order);
         verify(orderCancelHistoryRepository).save(any(OrderCancelHistory.class));
         verify(deliveryHistoryRepository).saveAll(any());
     }
@@ -785,7 +793,6 @@ class OrderCommandServiceTest {
         Long orderId,
         Long userId,
         Long finalPrice,
-        Integer usedPoint,
         AtomicReference<OrderStatus> statusRef
     ) {
         Order order = orderForStatusAndIdValidation(
@@ -795,7 +802,6 @@ class OrderCommandServiceTest {
         );
 
         when(order.getFinalPrice()).thenReturn(finalPrice);
-        when(order.getUsedPoint()).thenReturn(usedPoint);
 
         when(order.getStatus())
             .thenAnswer(invocation -> statusRef.get());
