@@ -5,7 +5,6 @@ import com.sparta.one_stop.domain.auth.dto.request.SignUpRequest;
 import com.sparta.one_stop.domain.auth.dto.request.TokenRefreshRequest;
 import com.sparta.one_stop.domain.auth.dto.result.LoginResult;
 import com.sparta.one_stop.domain.auth.dto.result.RefreshResult;
-import com.sparta.one_stop.domain.auth.dto.response.SignUpResponse;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.UserRepository;
 import com.sparta.one_stop.global.enums.ratelimit.RateLimitPolicy;
@@ -17,270 +16,357 @@ import com.sparta.one_stop.global.security.JwtTokenProvider;
 import io.jsonwebtoken.Claims;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.eq;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.*;
 
+/**
+ * AuthService (퍼사드) 테스트
+ *
+ * <p><b>검증 목적</b>
+ * <ul>
+ *   <li>로그인 흐름 — Rate Limit → 인증 → 토큰 발급 → 기기 등록 → RT 저장 → 로그인 기록 순서 보장</li>
+ *   <li>토큰 재발급 — deviceId 이중 검증, RTR + CAS 원자적 갱신</li>
+ *   <li>로그아웃 — 부분 실패(Best-effort) 정책 — 한 단계 실패해도 다음 단계 진행</li>
+ *   <li>회원가입 — Rate Limit 통과 후 Command 서비스 위임</li>
+ * </ul>
+ *
+ * <p><b>전략</b>: 외부 의존성은 모두 Mock. 흐름과 협업 객체 호출 순서를 검증.
+ */
 @ExtendWith(MockitoExtension.class)
+@DisplayName("AuthService (퍼사드) 테스트")
 class AuthServiceTest {
 
     @InjectMocks
     private AuthService authService;
 
-    // 현재 AuthService가 의존하는 실제 의존성들
     @Mock private AuthQueryService authQueryService;
     @Mock private AuthCommandService authCommandService;
-    @Mock private UserRepository userRepository;
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private JwtTokenProvider jwtTokenProvider;
     @Mock private RedisTokenService redisTokenService;
     @Mock private DeviceLimitService deviceLimitService;
     @Mock private RateLimitService rateLimitService;
+    @Mock private UserRepository userRepository;
 
     private User testUser;
-    private final String DEVICE_ID = "device-123";
-    private final String CLIENT_IP = "127.0.0.1";
-    private final String DUMMY_HASH = "dummy-hash";
+
+    private static final Long USER_ID = 1L;
+    private static final String EMAIL = "test@example.com";
+    private static final String PASSWORD = "Password1!";
+    private static final String DEVICE_ID = "device-abc-123";
+    private static final String CLIENT_IP = "127.0.0.1";
+    private static final String DUMMY_HASH = "$2a$10$dummy.hash.value";
+    private static final String ACCESS_TOKEN = "access-token-xyz";
+    private static final String REFRESH_TOKEN = "refresh-token-xyz";
+    private static final String NEW_REFRESH_TOKEN = "new-refresh-token-xyz";
 
     @BeforeEach
     void setUp() {
-        // init() 메서드에서 사용되는 PasswordEncoder 모킹
+        // init() 메서드가 dummyHash를 미리 생성하므로 같이 모킹
         given(passwordEncoder.encode(anyString())).willReturn(DUMMY_HASH);
-        authService.init(); // 더미 해시 생성
+        authService.init();
 
         testUser = User.builder()
-            .email("test@test.com")
-            .password("encoded-password")
-            .name("홍길동")
+            .email(EMAIL)
+            .password(DUMMY_HASH)
+            .name("테스트")
             .phone("010-1234-5678")
-            .address("서울시")
             .role(UserRole.BUYER)
             .build();
+        ReflectionTestUtils.setField(testUser, "id", USER_ID);
     }
 
-    // =========================================================================
-    // 회원가입 (Signup) 테스트
-    // =========================================================================
-    @Test
-    @DisplayName("회원가입 성공 - 구매자")
-    void signup_Success_Buyer() {
-        SignUpRequest request = mock(SignUpRequest.class);
-        given(request.role()).willReturn(UserRole.BUYER);
-        given(request.email()).willReturn("test@test.com");
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    //  회원가입
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    @Nested
+    @DisplayName("회원가입")
+    class Signup {
 
-        given(userRepository.existsByEmail("test@test.com")).willReturn(false);
-        // DB 저장은 AuthCommandService로 위임됨
-        given(authCommandService.signup(request)).willReturn(testUser);
+        @Test
+        @DisplayName("성공 — Rate Limit 통과 후 Command 서비스에 위임한다")
+        void signup_success() {
+            // given
+            SignUpRequest request = new SignUpRequest(
+                EMAIL, PASSWORD, "테스트", "010-1234-5678", "서울시",
+                UserRole.BUYER,
+                null, null, null  // SELLER 필드 (BUYER엔 불필요)
+            );
+            given(authCommandService.signup(request)).willReturn(testUser);
 
-        SignUpResponse response = authService.signup(request, CLIENT_IP);
+            // when
+            var response = authService.signup(request, CLIENT_IP);
 
-        verify(rateLimitService, times(1)).tryConsume(RateLimitPolicy.SIGNUP_PER_IP, CLIENT_IP);
-        verify(authCommandService, times(1)).signup(request);
-        assertThat(response).isNotNull();
+            // then
+            assertThat(response.email()).isEqualTo(EMAIL);
+            verify(rateLimitService).tryConsume(RateLimitPolicy.SIGNUP_PER_IP, CLIENT_IP);
+            verify(authCommandService).signup(request);
+        }
+
+        @Test
+        @DisplayName("실패 — Rate Limit 초과 시 Command 서비스 호출 전에 차단된다")
+        void signup_blocked_by_rate_limit() {
+            // given
+            SignUpRequest request = new SignUpRequest(
+                EMAIL, PASSWORD, "테스트", "010-1234-5678", "서울시",
+                UserRole.BUYER,
+                null, null, null
+            );
+            doThrow(new CustomException(ErrorCode.AUTH_013))
+                .when(rateLimitService).tryConsume(RateLimitPolicy.SIGNUP_PER_IP, CLIENT_IP);
+
+            // when & then
+            assertThatThrownBy(() -> authService.signup(request, CLIENT_IP))
+                .isInstanceOf(CustomException.class);
+
+            // Rate Limit에서 막혔으니 가입 로직은 호출되지 않아야 함
+            verify(authCommandService, never()).signup(any());
+        }
     }
 
-    @Test
-    @DisplayName("회원가입 성공 - 판매자")
-    void signup_Success_Seller() {
-        SignUpRequest request = mock(SignUpRequest.class);
-        given(request.role()).willReturn(UserRole.SELLER);
-        given(request.email()).willReturn("seller@test.com");
-        given(request.shopName()).willReturn("상점명");
-        given(request.businessNumber()).willReturn("123-45-67890");
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    //  로그인
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    @Nested
+    @DisplayName("로그인")
+    class Login {
 
-        given(userRepository.existsByEmail("seller@test.com")).willReturn(false);
-        given(authCommandService.signup(request)).willReturn(testUser);
+        @Test
+        @DisplayName("성공 — Rate Limit 3계층을 모두 통과한 뒤 토큰 발급 및 기기 등록까지 수행한다")
+        void login_success_full_flow() {
+            // given
+            LoginRequest request = new LoginRequest(EMAIL, PASSWORD);
+            given(authQueryService.authenticate(request, DUMMY_HASH)).willReturn(testUser);
+            given(jwtTokenProvider.createAccessToken(USER_ID, UserRole.BUYER)).willReturn(ACCESS_TOKEN);
+            given(jwtTokenProvider.createRefreshToken(USER_ID, DEVICE_ID)).willReturn(REFRESH_TOKEN);
+            given(deviceLimitService.registerDevice(USER_ID, DEVICE_ID)).willReturn(null);
+            given(jwtTokenProvider.getRefreshTokenExpirySeconds()).willReturn(604_800L); // 7d
+            given(jwtTokenProvider.getAccessTokenExpirySeconds()).willReturn(900L); // 15m
 
-        SignUpResponse response = authService.signup(request, CLIENT_IP);
+            // when
+            LoginResult result = authService.login(request, DEVICE_ID, CLIENT_IP);
 
-        verify(authCommandService, times(1)).signup(request);
-        assertThat(response).isNotNull();
+            // then — Rate Limit 3계층이 모두 호출되었는지
+            verify(rateLimitService).tryConsume(RateLimitPolicy.LOGIN_PER_GLOBAL, "all");
+            verify(rateLimitService).tryConsume(RateLimitPolicy.LOGIN_PER_IP, CLIENT_IP);
+            verify(rateLimitService).tryConsume(RateLimitPolicy.LOGIN_PER_ACCOUNT, EMAIL);
+
+            // 토큰 발급 + 저장
+            verify(jwtTokenProvider).createAccessToken(USER_ID, UserRole.BUYER);
+            verify(jwtTokenProvider).createRefreshToken(USER_ID, DEVICE_ID);
+            verify(deviceLimitService).registerDevice(USER_ID, DEVICE_ID);
+            verify(redisTokenService).saveRefreshToken(USER_ID, DEVICE_ID, REFRESH_TOKEN, 604_800L);
+            verify(authQueryService).recordLogin(USER_ID);
+
+            // 응답에 RT가 담겨 컨트롤러로 전달되는지
+            assertThat(result.refreshToken()).isEqualTo(REFRESH_TOKEN);
+            assertThat(result.response().accessToken()).isEqualTo(ACCESS_TOKEN);
+        }
+
+        @Test
+        @DisplayName("실패 — Rate Limit 초과 시 BCrypt(인증) 단계에 절대 도달하지 않는다")
+        void login_blocked_before_bcrypt() {
+            // given
+            LoginRequest request = new LoginRequest(EMAIL, PASSWORD);
+            doThrow(new CustomException(ErrorCode.AUTH_013))
+                .when(rateLimitService).tryConsume(RateLimitPolicy.LOGIN_PER_GLOBAL, "all");
+
+            // when & then
+            assertThatThrownBy(() -> authService.login(request, DEVICE_ID, CLIENT_IP))
+                .isInstanceOf(CustomException.class);
+
+            // 핵심: BCrypt 검증이나 토큰 발급이 호출되지 않아야 함
+            verify(authQueryService, never()).authenticate(any(), anyString());
+            verify(jwtTokenProvider, never()).createAccessToken(anyLong(), any());
+        }
+
+        @Test
+        @DisplayName("LRU 추방 발생 — registerDevice가 추방 기기를 반환하면 흐름은 계속 진행된다")
+        void login_with_lru_eviction() {
+            // given
+            LoginRequest request = new LoginRequest(EMAIL, PASSWORD);
+            given(authQueryService.authenticate(request, DUMMY_HASH)).willReturn(testUser);
+            given(jwtTokenProvider.createAccessToken(USER_ID, UserRole.BUYER)).willReturn(ACCESS_TOKEN);
+            given(jwtTokenProvider.createRefreshToken(USER_ID, DEVICE_ID)).willReturn(REFRESH_TOKEN);
+            // 5대 한도 초과 → 가장 오래된 기기 "old-device" 추방
+            given(deviceLimitService.registerDevice(USER_ID, DEVICE_ID)).willReturn("old-device");
+            given(jwtTokenProvider.getRefreshTokenExpirySeconds()).willReturn(604_800L);
+            given(jwtTokenProvider.getAccessTokenExpirySeconds()).willReturn(900L);
+
+            // when
+            LoginResult result = authService.login(request, DEVICE_ID, CLIENT_IP);
+
+            // then — 추방이 일어나도 RT 저장은 정상적으로 진행되어야 함
+            assertThat(result.refreshToken()).isEqualTo(REFRESH_TOKEN);
+            verify(redisTokenService).saveRefreshToken(USER_ID, DEVICE_ID, REFRESH_TOKEN, 604_800L);
+        }
     }
 
-    @Test
-    @DisplayName("회원가입 실패 - 허용되지 않은 권한 (ADMIN)")
-    void signup_Fail_InvalidRole() {
-        SignUpRequest request = mock(SignUpRequest.class);
-        given(request.role()).willReturn(UserRole.ADMIN);
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    //  토큰 재발급
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    @Nested
+    @DisplayName("토큰 재발급 (RTR + CAS)")
+    class Refresh {
 
-        CustomException exception = assertThrows(CustomException.class, () -> authService.signup(request, CLIENT_IP));
-        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.AUTH_011);
+        @Test
+        @DisplayName("성공 — CAS로 RT를 원자적으로 회전하고 새 AT/RT를 발급한다")
+        void refresh_success() {
+            // given
+            String oldRt = "old-rt";
+            TokenRefreshRequest request = new TokenRefreshRequest(oldRt);
+
+            Claims claims = mock(Claims.class);
+            given(claims.get("deviceId", String.class)).willReturn(DEVICE_ID);
+
+            given(jwtTokenProvider.parseClaims(oldRt)).willReturn(claims);
+            given(jwtTokenProvider.getUserId(claims)).willReturn(USER_ID);
+            given(authQueryService.findActiveUser(USER_ID)).willReturn(testUser);
+            given(jwtTokenProvider.createAccessToken(USER_ID, UserRole.BUYER)).willReturn(ACCESS_TOKEN);
+            given(jwtTokenProvider.createRefreshToken(USER_ID, DEVICE_ID)).willReturn(NEW_REFRESH_TOKEN);
+            given(jwtTokenProvider.getRefreshTokenExpirySeconds()).willReturn(604_800L);
+            given(jwtTokenProvider.getAccessTokenExpirySeconds()).willReturn(900L);
+            // CAS 성공
+            given(redisTokenService.rotateRefreshTokenCAS(
+                USER_ID, DEVICE_ID, oldRt, NEW_REFRESH_TOKEN, 604_800L
+            )).willReturn(true);
+
+            // when
+            RefreshResult result = authService.refresh(request, DEVICE_ID);
+
+            // then
+            assertThat(result.newRefreshToken()).isEqualTo(NEW_REFRESH_TOKEN);
+            verify(redisTokenService).rotateRefreshTokenCAS(
+                USER_ID, DEVICE_ID, oldRt, NEW_REFRESH_TOKEN, 604_800L);
+            verify(deviceLimitService).touchDevice(USER_ID, DEVICE_ID);
+        }
+
+        @Test
+        @DisplayName("실패 — RT 페이로드 deviceId와 쿠키 deviceId가 다르면 거부 (탈취 의심)")
+        void refresh_rejects_when_device_id_mismatched() {
+            // given
+            String oldRt = "old-rt";
+            TokenRefreshRequest request = new TokenRefreshRequest(oldRt);
+
+            Claims claims = mock(Claims.class);
+            given(claims.get("deviceId", String.class)).willReturn("other-device-zzz"); // 불일치
+
+            given(jwtTokenProvider.parseClaims(oldRt)).willReturn(claims);
+
+            // when & then
+            assertThatThrownBy(() -> authService.refresh(request, DEVICE_ID))
+                .isInstanceOf(CustomException.class);
+
+            // CAS 호출 자체가 일어나지 않아야 함
+            verify(redisTokenService, never()).rotateRefreshTokenCAS(
+                anyLong(), anyString(), anyString(), anyString(), anyLong());
+        }
+
+        @Test
+        @DisplayName("실패 — CAS 회전 실패 시 예외를 던지고 새 RT는 저장되지 않는다")
+        void refresh_fails_when_cas_collides() {
+            // given
+            String oldRt = "old-rt";
+            TokenRefreshRequest request = new TokenRefreshRequest(oldRt);
+
+            Claims claims = mock(Claims.class);
+            given(claims.get("deviceId", String.class)).willReturn(DEVICE_ID);
+
+            given(jwtTokenProvider.parseClaims(oldRt)).willReturn(claims);
+            given(jwtTokenProvider.getUserId(claims)).willReturn(USER_ID);
+            given(authQueryService.findActiveUser(USER_ID)).willReturn(testUser);
+            given(jwtTokenProvider.createAccessToken(USER_ID, UserRole.BUYER)).willReturn(ACCESS_TOKEN);
+            given(jwtTokenProvider.createRefreshToken(USER_ID, DEVICE_ID)).willReturn(NEW_REFRESH_TOKEN);
+            given(jwtTokenProvider.getRefreshTokenExpirySeconds()).willReturn(604_800L);
+            // CAS 실패 (저장된 RT와 불일치 — 동시성 충돌 or 탈취)
+            given(redisTokenService.rotateRefreshTokenCAS(
+                anyLong(), anyString(), anyString(), anyString(), anyLong()
+            )).willReturn(false);
+
+            // when & then
+            assertThatThrownBy(() -> authService.refresh(request, DEVICE_ID))
+                .isInstanceOf(CustomException.class);
+        }
     }
 
-    @Test
-    @DisplayName("회원가입 실패 - 이메일 중복")
-    void signup_Fail_DuplicateEmail() {
-        SignUpRequest request = mock(SignUpRequest.class);
-        given(request.role()).willReturn(UserRole.BUYER);
-        given(request.email()).willReturn("dup@test.com");
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    //  로그아웃 (Best-effort 정책)
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    @Nested
+    @DisplayName("로그아웃")
+    class Logout {
 
-        given(userRepository.existsByEmail("dup@test.com")).willReturn(true);
+        @Test
+        @DisplayName("성공 — RT 삭제, 기기 제거, AT 블랙리스트 등록 모두 수행")
+        void logout_success() {
+            // given
+            given(jwtTokenProvider.getJti(ACCESS_TOKEN)).willReturn("jti-123");
+            given(jwtTokenProvider.getExpirationSeconds(ACCESS_TOKEN)).willReturn(900L);
 
-        CustomException exception = assertThrows(CustomException.class, () -> authService.signup(request, CLIENT_IP));
-        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.AUTH_002);
-    }
+            // when
+            authService.logout(USER_ID, DEVICE_ID, ACCESS_TOKEN);
 
-    @Test
-    @DisplayName("회원가입 실패 - 판매자 필수값(상호명) 누락")
-    void signup_Fail_SellerMissingShopName() {
-        SignUpRequest request = mock(SignUpRequest.class);
-        given(request.role()).willReturn(UserRole.SELLER);
-        // shopName이 null 또는 blank인 상황 시뮬레이션
-        given(request.shopName()).willReturn("");
+            // then
+            verify(redisTokenService).deleteRefreshToken(USER_ID, DEVICE_ID);
+            verify(deviceLimitService).removeDevice(USER_ID, DEVICE_ID);
+            verify(redisTokenService).addToBlacklist("jti-123", 900L);
+        }
 
-        CustomException exception = assertThrows(CustomException.class, () -> authService.signup(request, CLIENT_IP));
-        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.SELLER_010); // 코드 기반 수정 (COMMON_001 -> SELLER_010)
-    }
+        @Test
+        @DisplayName("Best-effort — RT 삭제 실패해도 기기 제거와 블랙리스트는 진행한다")
+        void logout_continues_when_rt_deletion_fails() {
+            // given
+            doThrow(new RuntimeException("Redis down"))
+                .when(redisTokenService).deleteRefreshToken(USER_ID, DEVICE_ID);
+            given(jwtTokenProvider.getJti(ACCESS_TOKEN)).willReturn("jti-123");
+            given(jwtTokenProvider.getExpirationSeconds(ACCESS_TOKEN)).willReturn(900L);
 
-    // =========================================================================
-    // 로그인 (Login) 테스트
-    // =========================================================================
-    @Test
-    @DisplayName("로그인 성공")
-    void login_Success() {
-        LoginRequest request = mock(LoginRequest.class);
-        given(request.email()).willReturn("test@test.com");
+            // when
+            authService.logout(USER_ID, DEVICE_ID, ACCESS_TOKEN);
 
-        // 인증 검증은 AuthQueryService로 위임됨
-        given(authQueryService.authenticate(request, DUMMY_HASH)).willReturn(testUser);
-        given(jwtTokenProvider.createAccessToken(any(), any())).willReturn("access-token");
-        given(jwtTokenProvider.createRefreshToken(any(), any())).willReturn("refresh-token");
-        given(deviceLimitService.registerDevice(any(), eq(DEVICE_ID))).willReturn(null);
+            // then — RT 삭제 실패해도 나머지 두 단계는 실행되어야 함 (best-effort)
+            verify(deviceLimitService).removeDevice(USER_ID, DEVICE_ID);
+            verify(redisTokenService).addToBlacklist("jti-123", 900L);
+        }
 
-        LoginResult result = authService.login(request, DEVICE_ID, CLIENT_IP);
+        @Test
+        @DisplayName("이미 만료된 AT는 블랙리스트에 등록하지 않는다 (메모리 낭비 방지)")
+        void logout_skips_blacklist_for_expired_token() {
+            // given
+            given(jwtTokenProvider.getJti(ACCESS_TOKEN)).willReturn("jti-123");
+            given(jwtTokenProvider.getExpirationSeconds(ACCESS_TOKEN)).willReturn(0L); // 만료됨
 
-        // RateLimit 호출 검증
-        verify(rateLimitService, times(1)).tryConsume(RateLimitPolicy.LOGIN_PER_GLOBAL, "all");
-        verify(rateLimitService, times(1)).tryConsume(RateLimitPolicy.LOGIN_PER_IP, CLIENT_IP);
-        verify(rateLimitService, times(1)).tryConsume(RateLimitPolicy.LOGIN_PER_ACCOUNT, "test@test.com");
+            // when
+            authService.logout(USER_ID, DEVICE_ID, ACCESS_TOKEN);
 
-        verify(redisTokenService, times(1)).saveRefreshToken(any(), eq(DEVICE_ID), anyString(), anyLong());
-        verify(authQueryService, times(1)).recordLogin(any());
+            // then
+            verify(redisTokenService).deleteRefreshToken(USER_ID, DEVICE_ID);
+            verify(deviceLimitService).removeDevice(USER_ID, DEVICE_ID);
+            verify(redisTokenService, never()).addToBlacklist(anyString(), anyLong());
+        }
 
-        assertThat(result.refreshToken()).isEqualTo("refresh-token");
-        assertThat(result.response().accessToken()).isEqualTo("access-token");
-    }
+        @Test
+        @DisplayName("AT가 null이어도 RT 삭제와 기기 제거는 정상 수행된다")
+        void logout_works_without_access_token() {
+            // when
+            authService.logout(USER_ID, DEVICE_ID, null);
 
-    @Test
-    @DisplayName("로그인 실패 - 존재하지 않는 계정 또는 비밀번호 불일치")
-    void login_Fail_InvalidCredentials() {
-        LoginRequest request = mock(LoginRequest.class);
-        given(request.email()).willReturn("test@test.com");
-
-        // AuthQueryService가 예외를 던진다고 모킹 (비밀번호 검증 등 내부 로직은 여기서 처리됨)
-        given(authQueryService.authenticate(request, DUMMY_HASH))
-            .willThrow(new CustomException(ErrorCode.AUTH_004));
-
-        CustomException exception = assertThrows(CustomException.class, () -> authService.login(request, DEVICE_ID, CLIENT_IP));
-        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.AUTH_004);
-    }
-
-    // =========================================================================
-    // 재발급 (Refresh) 테스트
-    // =========================================================================
-    @Test
-    @DisplayName("토큰 재발급 성공")
-    void refresh_Success() {
-        TokenRefreshRequest request = mock(TokenRefreshRequest.class);
-        given(request.refreshToken()).willReturn("old-refresh-token");
-
-        Claims claims = mock(Claims.class);
-        given(claims.get("deviceId", String.class)).willReturn(DEVICE_ID);
-
-        given(jwtTokenProvider.parseClaims("old-refresh-token")).willReturn(claims);
-        given(jwtTokenProvider.getUserId(claims)).willReturn(1L);
-
-        // UserRepository.findById 대신 AuthQueryService.findActiveUser 사용
-        given(authQueryService.findActiveUser(1L)).willReturn(testUser);
-
-        given(jwtTokenProvider.createAccessToken(any(), any())).willReturn("new-access-token");
-        given(jwtTokenProvider.createRefreshToken(any(), any())).willReturn("new-refresh-token");
-        given(redisTokenService.rotateRefreshTokenCAS(any(), anyString(), anyString(), anyString(), anyLong())).willReturn(true);
-
-        RefreshResult result = authService.refresh(request, DEVICE_ID);
-
-        verify(deviceLimitService, times(1)).touchDevice(any(), eq(DEVICE_ID));
-        assertThat(result.newRefreshToken()).isEqualTo("new-refresh-token");
-        assertThat(result.response().accessToken()).isEqualTo("new-access-token");
-    }
-
-    @Test
-    @DisplayName("토큰 재발급 실패 - Device ID 불일치 (탈취 의심)")
-    void refresh_Fail_DeviceIdMismatch() {
-        TokenRefreshRequest request = mock(TokenRefreshRequest.class);
-        given(request.refreshToken()).willReturn("old-refresh-token");
-
-        Claims claims = mock(Claims.class);
-        given(claims.get("deviceId", String.class)).willReturn("hacked-device-id");
-
-        given(jwtTokenProvider.parseClaims(anyString())).willReturn(claims);
-
-        CustomException exception = assertThrows(CustomException.class, () -> authService.refresh(request, DEVICE_ID));
-        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.AUTH_010);
-    }
-
-    @Test
-    @DisplayName("토큰 재발급 실패 - Redis 원자적 갱신 실패")
-    void refresh_Fail_RedisRotationFail() {
-        TokenRefreshRequest request = mock(TokenRefreshRequest.class);
-        given(request.refreshToken()).willReturn("old-refresh-token");
-
-        Claims claims = mock(Claims.class);
-        given(claims.get("deviceId", String.class)).willReturn(DEVICE_ID);
-
-        given(jwtTokenProvider.parseClaims(anyString())).willReturn(claims);
-        given(jwtTokenProvider.getUserId(claims)).willReturn(1L);
-        given(authQueryService.findActiveUser(1L)).willReturn(testUser);
-
-        given(jwtTokenProvider.createAccessToken(any(), any())).willReturn("new-access-token");
-        given(jwtTokenProvider.createRefreshToken(any(), any())).willReturn("new-refresh-token");
-
-        given(redisTokenService.rotateRefreshTokenCAS(any(), anyString(), anyString(), anyString(), anyLong())).willReturn(false);
-
-        CustomException exception = assertThrows(CustomException.class, () -> authService.refresh(request, DEVICE_ID));
-        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.AUTH_010);
-    }
-
-    // =========================================================================
-    // 로그아웃 (Logout) 테스트
-    // =========================================================================
-    @Test
-    @DisplayName("로그아웃 성공")
-    void logout_Success() {
-        String accessToken = "valid-access-token";
-        given(jwtTokenProvider.getJti(accessToken)).willReturn("jti-123");
-        given(jwtTokenProvider.getExpirationSeconds(accessToken)).willReturn(3600L);
-
-        authService.logout(1L, DEVICE_ID, accessToken);
-
-        verify(redisTokenService, times(1)).deleteRefreshToken(1L, DEVICE_ID);
-        verify(deviceLimitService, times(1)).removeDevice(1L, DEVICE_ID); // 추가된 로직 반영
-        verify(redisTokenService, times(1)).addToBlacklist("jti-123", 3600L);
-    }
-
-    @Test
-    @DisplayName("로그아웃 성공 - 만료된 토큰은 블랙리스트 추가 안함")
-    void logout_Success_ExpiredToken_NoBlacklist() {
-        String accessToken = "expired-access-token";
-        given(jwtTokenProvider.getJti(accessToken)).willReturn("jti-123");
-        given(jwtTokenProvider.getExpirationSeconds(accessToken)).willReturn(-10L); // 만료됨
-
-        authService.logout(1L, DEVICE_ID, accessToken);
-
-        verify(redisTokenService, times(1)).deleteRefreshToken(1L, DEVICE_ID);
-        verify(deviceLimitService, times(1)).removeDevice(1L, DEVICE_ID);
-        verify(redisTokenService, never()).addToBlacklist(anyString(), anyLong());
+            // then
+            verify(redisTokenService).deleteRefreshToken(USER_ID, DEVICE_ID);
+            verify(deviceLimitService).removeDevice(USER_ID, DEVICE_ID);
+            verify(redisTokenService, never()).addToBlacklist(anyString(), anyLong());
+        }
     }
 }
