@@ -19,6 +19,7 @@ import com.sparta.one_stop.domain.order.entity.OrderItem;
 import com.sparta.one_stop.domain.order.repository.OrderCancelHistoryRepository;
 import com.sparta.one_stop.domain.order.repository.OrderItemRepository;
 import com.sparta.one_stop.domain.order.repository.OrderRepository;
+import com.sparta.one_stop.domain.point.service.PointService;
 import com.sparta.one_stop.domain.product.entity.ProductItem;
 import com.sparta.one_stop.domain.product.repository.ProductItemRepository;
 import com.sparta.one_stop.domain.user.entity.User;
@@ -44,7 +45,6 @@ public class OrderCommandService {
 
     private static final long MIN_ORDER_PRICE = 1_000L;
     private static final long DEFAULT_DELIVERY_FEE = 3_000L;
-    private static final int NOT_RESTORED_POINT = 0;
 
     private final UserRepository userRepository;
     private final ProductItemRepository productItemRepository;
@@ -54,6 +54,7 @@ public class OrderCommandService {
     private final DeliveryRepository deliveryRepository;
     private final OrderCancelHistoryRepository orderCancelHistoryRepository;
     private final DeliveryHistoryRepository deliveryHistoryRepository;
+    private final PointService pointService;
 
     /**
      * 주문 생성 1단계
@@ -132,10 +133,11 @@ public class OrderCommandService {
      * - 이미 취소된 주문 중복 취소 방지
      * - 배송 상태 기준 취소 가능 여부 검증
      * - 재고 복구
+     * - 사용 포인트 복구
      * - Order / OrderItem / Delivery 상태 취소 처리
      * - 주문 취소 이력 저장
      * - 배송 취소 이력 저장
-     * TODO: 포인트/쿠폰은 MVP 이후 연동
+     * TODO: 쿠폰은 MVP 이후 연동
      */
     public CancelOrderResponse cancelOrder(
         Long userId,
@@ -196,6 +198,8 @@ public class OrderCommandService {
         // MVP 단계에서는 쿠폰 복구 미구현이므로 null
         RestoredCouponResponse restoredCoupon = null;
 
+        Integer restoredPoint = pointService.refundPointByOrder(order);
+
         OrderCancelHistory cancelHistory = new OrderCancelHistory(
             order,
             null,
@@ -204,7 +208,7 @@ public class OrderCommandService {
             OrderCancelType.BUYER_CANCEL,
             request.reason(),
             order.getFinalPrice(),
-            NOT_RESTORED_POINT   // MVP 단계에서는 포인트 복구 미구현이므로 0
+            restoredPoint
         );
 
         orderCancelHistoryRepository.save(cancelHistory);
@@ -213,7 +217,7 @@ public class OrderCommandService {
             order.getId(),
             order.getStatus(),
             order.getFinalPrice(),
-            order.getUsedPoint(),
+            restoredPoint,
             restoredCoupon
         );
     }
