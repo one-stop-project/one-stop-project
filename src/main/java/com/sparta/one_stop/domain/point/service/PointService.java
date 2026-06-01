@@ -195,6 +195,78 @@ public class PointService {
     }
 
     /**
+     * 주문 취소 시 포인트 복구
+     * - 주문 결제 시 생성된 USE 이력을 기준으로 복구
+     * - 실제 차감 상세는 PointUsageDetail에서 조회
+     * - 원래 차감된 포인트의 만료일을 유지하여 REFUND 이력 생성
+     * - 원래 만료일이 이미 지난 포인트는 사용 가능 포인트로 복구하지 않음
+     * - 복구된 포인트 총액을 반환
+     * - USE 이력이 없으면 복구할 포인트가 없으므로 0 반환
+     */
+    @Transactional
+    public Integer refundPointByOrder(Order order) {
+        if (order == null) {
+            throw new CustomException(ErrorCode.COMMON_001);
+        }
+
+        List<PointHistory> useHistories = pointHistoryRepository.findAllByOrderIdAndType(
+            order.getId(),
+            PointHistoryType.USE
+        );
+
+        if (useHistories.isEmpty()) {
+            return 0;
+        }
+
+        List<Long> useHistoryIds = useHistories.stream()
+            .map(PointHistory::getId)
+            .toList();
+
+        List<PointUsageDetail> usageDetails =
+            pointUsageDetailRepository.findAllByUseHistoryIdIn(useHistoryIds);
+
+        if (usageDetails.isEmpty()) {
+            return 0;
+        }
+
+        Point point = useHistories.get(0)
+            .getPoint();
+
+        LocalDate today = LocalDate.now();
+        int restoredPoint = 0;
+        List<PointHistory> refundHistories = new ArrayList<>();
+
+        for (PointUsageDetail usageDetail : usageDetails) {
+            LocalDate sourceExpireAt = usageDetail.getSourceExpireAt();
+
+            // 원래 만료일이 이미 지난 포인트는 사용 가능 포인트로 복구하지 않음
+            if (sourceExpireAt.isBefore(today)) {
+                continue;
+            }
+
+            Integer refundAmount = usageDetail.getUsedAmount();
+
+            PointHistory refundHistory = PointHistory.refund(
+                point,
+                order,
+                refundAmount,
+                "주문 취소 포인트 복구",
+                sourceExpireAt
+            );
+
+            refundHistories.add(refundHistory);
+
+            point.increaseBalance(refundAmount);
+
+            restoredPoint += refundAmount;
+        }
+
+        pointHistoryRepository.saveAll(refundHistories);
+
+        return restoredPoint;
+    }
+
+    /**
      * 테스트용 포인트 충전 금액 검증
      * - 최소 1,000원
      * - 최대 1,000,000원
