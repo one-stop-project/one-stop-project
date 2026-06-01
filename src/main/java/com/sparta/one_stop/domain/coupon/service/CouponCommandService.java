@@ -102,7 +102,7 @@ public class CouponCommandService {
                 now
             );
 
-            return toIssueCouponResponse(savedUserCoupon);
+            return IssueCouponResponse.of(savedUserCoupon);
         } catch (DataIntegrityViolationException e) {
             increaseRedisStock(stockKey);
             throw new CustomException(ErrorCode.COUPON_002);
@@ -238,27 +238,6 @@ public class CouponCommandService {
         if (couponId == null) {
             throw new CustomException(ErrorCode.COUPON_004);
         }
-    }
-
-    // == 응답 변환 메서드 ==
-
-    /**
-     * 쿠폰 발급 응답 DTO 변환
-     * - 발급된 UserCoupon 기준으로 응답 생성
-     * - createdAt은 쿠폰 발급일로 사용
-     * - expiredAt은 쿠폰 마스터의 발급/사용 만료일을 사용
-     */
-    private IssueCouponResponse toIssueCouponResponse(UserCoupon userCoupon) {
-        Coupon coupon = userCoupon.getCoupon();
-
-        return new IssueCouponResponse(
-            userCoupon.getId(),
-            coupon.getId(),
-            coupon.getName(),
-            userCoupon.getStatus(),
-            userCoupon.getCreatedAt(),
-            coupon.getExpiredAt()
-        );
     }
 
 }
