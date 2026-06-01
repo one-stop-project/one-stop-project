@@ -71,11 +71,11 @@ public class PopularProductService {
     private final RedisTemplate<String, String> redisTemplate;
     private final ProductRepository productRepository;
 
-    // 인기 상품 ZSET 갱신 — 3단계 파이프라인:
-    //   1) 조회수 시간 버킷 가중 합산 (3시간 윈도우)
-    //   2) 판매수 시간 가중 집계 (3일 윈도우)
-    //   3) 두 결과를 0.7 / 0.3 비율로 합쳐 TOP N 추출 후 atomic 교체
-    // Redis 예외 발생 시 catch — 다음 주기에 자동 재시도
+    // 인기 상품 랭킹 갱신 — 3단계:
+    //   1) 최근 3시간 조회수를 시간 가중치로 합산
+    //   2) 최근 3일 판매수를 시간 가중치로 합산
+    //   3) 둘을 0.7 / 0.3 비율로 합쳐 상위 N개만 남기고 노출용 키로 교체
+    // Redis 예외 시 catch — 다음 주기에 자동 재시도
     public void refresh() {
         LocalDateTime now = LocalDateTime.now(KST);
         try {
@@ -129,7 +129,7 @@ public class PopularProductService {
 
     // ===== 내부 구현 =====
 
-    // 시간 단위 3개 버킷(현재/-1h/-2h)을 가중 합산해 view-weighted ZSET 생성
+    // 최근 3시간(현재/-1h/-2h) 조회수를 시간 가중치로 합산
     private void buildViewWeighted(LocalDateTime now) {
         String oldest = viewBucketKey(now.minusHours(2));
         String middle = viewBucketKey(now.minusHours(1));
@@ -144,7 +144,7 @@ public class PopularProductService {
         );
     }
 
-    // 3일 윈도우 OrderItem 집계 SQL → 일별 가중치 적용 후 sales-weighted ZSET에 ZADD
+    // 최근 3일 판매수를 일별 가중치로 합산해 점수화
     private void buildSalesWeighted(LocalDateTime now) {
         LocalDateTime recentSince = now.minusDays(1);
         LocalDateTime middleSince = now.minusDays(2);
@@ -167,7 +167,7 @@ public class PopularProductService {
         }
     }
 
-    // view-weighted + sales-weighted ZSET을 0.7/0.3 비율로 합산 → TOP N → RENAME으로 atomic 교체
+    // 조회 점수 + 판매 점수를 0.7/0.3 비율로 합산 → 상위 N개 → 노출용 키로 교체
     private void mergeAndRename() {
         redisTemplate.opsForZSet().unionAndStore(
             VIEW_WEIGHTED_KEY,
@@ -177,8 +177,8 @@ public class PopularProductService {
             Weights.of(VIEW_WEIGHT, SALES_WEIGHT)
         );
 
-        // 모든 소스 ZSET이 비어있으면 ZUNIONSTORE는 결과 키를 생성하지 않음
-        // → RENAME "no such key" 방지 + 기존 랭킹은 무효화하여 DB fallback 경로로 떨어뜨림
+        // 합칠 점수가 하나도 없으면 결과 키가 안 생김
+        // → 기존 랭킹을 비워서 DB 조회 경로로 떨어뜨림
         Boolean exists = redisTemplate.hasKey(POPULAR_BUILDING_KEY);
         if (!Boolean.TRUE.equals(exists)) {
             redisTemplate.delete(POPULAR_KEY);

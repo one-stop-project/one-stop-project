@@ -23,8 +23,8 @@ public class ProductViewCountService {
     private static final String DIRTY_KEY = "viewcount:dirty";
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
-    // dedup 신규 진입 시에만 INCR + dirty 마킹 + 인기상품 시간 버킷 ZINCRBY
-    // dedup 충돌이면 0 반환
+    // 중복 조회가 아닌 최초 1회만 조회수 +1, 동기화 대상 표시, 인기상품 점수 +1
+    // 중복(이미 본 사용자)이면 0 반환
     private static final RedisScript<Long> RECORD_VIEW_LOGIN_SCRIPT = RedisScript.of("""
         if redis.call('SET', KEYS[1], '1', 'NX', 'EX', ARGV[2]) then
             redis.call('INCR', KEYS[2])
@@ -36,7 +36,7 @@ public class ProductViewCountService {
         return 0
         """, Long.class);
 
-    // 비로그인은 dedup 없이 매번 카운트 + 인기상품 시간 버킷 ZINCRBY
+    // 비로그인은 중복 체크 없이 매번 조회수 +1, 인기상품 점수 +1
     private static final RedisScript<Long> RECORD_VIEW_GUEST_SCRIPT = RedisScript.of("""
         redis.call('INCR', KEYS[1])
         redis.call('SADD', KEYS[2], ARGV[1])
@@ -45,8 +45,8 @@ public class ProductViewCountService {
         return 1
         """, Long.class);
 
-    // DB UPDATE 성공 후 호출 — DECRBY로 처리한 만큼만 차감, 0 이하가 되면 cleanup
-    // PEEK 이후 새로 들어온 INCR이 있어도 보존됨 (다음 사이클에서 처리)
+    // DB 반영 성공 후 호출 — 처리한 만큼만 차감하고, 0 이하면 키 정리
+    // 읽은 뒤 새로 들어온 조회수는 남아서 다음 사이클에 처리됨
     private static final RedisScript<Long> ACK_VIEW_COUNT_SCRIPT = RedisScript.of("""
         local remaining = redis.call('DECRBY', KEYS[1], ARGV[2])
         if remaining <= 0 then
@@ -102,13 +102,13 @@ public class ProductViewCountService {
         return ids != null ? ids : Set.of();
     }
 
-    // 카운터 값만 읽음 (부수 효과 없음). DB UPDATE 전에 호출
+    // 카운터 값만 읽음 (변경 없음). DB 반영 전에 호출
     public long peekCount(Long productId) {
         String value = redisTemplate.opsForValue().get(COUNTER_KEY_PREFIX + productId);
         return value == null ? 0L : Long.parseLong(value);
     }
 
-    // DB UPDATE 성공 후 호출 — Redis에서 처리한 만큼 차감
+    // DB 반영 성공 후 호출 — Redis에서 처리한 만큼 차감
     public void acknowledge(Long productId, long count) {
         List<String> keys = List.of(
             COUNTER_KEY_PREFIX + productId,

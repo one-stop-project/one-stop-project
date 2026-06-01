@@ -231,7 +231,7 @@ public class SellerProductService {
             throw new CustomException(ErrorCode.PRODUCT_006);
         }
 
-        // 기존 이미지는 1..N 연속 정렬 유지 -> 마지막 순서 다음부터 배치
+        // 기존 이미지 순서(1,2,3...)는 그대로 두고, 새 이미지는 맨 뒤에 이어 붙임
         int nextOrder = activeImages.size();
         for (int i = 0; i < imageUrls.size(); i++) {
             ProductImage image = ProductImage.builder()

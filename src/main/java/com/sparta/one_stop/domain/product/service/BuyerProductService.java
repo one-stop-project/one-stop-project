@@ -37,9 +37,9 @@ public class BuyerProductService {
     private final ProductViewCountService viewCountService;
     private final PopularProductService popularProductService;
 
-    // sort=POPULAR은 ZSET 순서 그대로 반환 (keyword/categoryId/가격 필터 미적용)
-    // 응답 캐시 productList TTL 5분 — 키는 모든 필터 조합
-    // Page<T> 자체는 Jackson 역직렬화 불가 → CacheableProductList(record)에 담아 캐시
+    // 인기순 정렬은 랭킹 순서 그대로 반환 (keyword/categoryId/가격 필터 미적용)
+    // 응답 캐시 5분 — 키는 모든 필터 조합
+    // Page는 그대로 캐시 직렬화가 안 돼서 CacheableProductList에 담아 저장
     @Cacheable(
         value = "productList",
         key = "T(java.util.Objects).toString(#keyword,'') + ':' + T(java.util.Objects).toString(#categoryId,'') + ':' + " +
@@ -85,7 +85,7 @@ public class BuyerProductService {
     }
 
     private Page<ProductSummaryResponse> searchPopular(Pageable pageable) {
-        // 인기 상품 ZSET은 TOP N(상한 20)만 보관
+        // 인기 상품은 상위 20개만 보관 → 2페이지부터는 빈 결과
         if (pageable.getPageNumber() > 0) {
             return Page.empty(pageable);
         }
@@ -93,7 +93,7 @@ public class BuyerProductService {
         int limit = pageable.getPageSize();
         List<Long> popularIds = popularProductService.getPopularProductIds(limit);
 
-        // Redis ZSET 비어있음/장애 → DB fallback (sales_count DESC)
+        // 랭킹이 비었거나 Redis 장애면 DB에서 판매수 높은 순으로 대체
         if (popularIds.isEmpty()) {
             Pageable salesDesc = PageRequest.of(0, limit,
                 Sort.by(Sort.Direction.DESC, "salesCount"));
@@ -120,8 +120,7 @@ public class BuyerProductService {
         return p.getProductItems().stream().anyMatch(ProductItem::isOnSale);
     }
 
-    // PRICE_*는 별도 JPQL(searchApprovedOrderByMinPriceAsc/Desc)에서 처리, 여기 도달 X
-    // POPULAR은 search() 진입부에서 분기 처리됨
+    // 가격 정렬은 별도 쿼리, 인기순은 진입부에서 분기 — 여기는 최신순만 처리
     private Pageable applySorting(Pageable pageable, SortType sort) {
         Sort sortBy = switch (sort) {
             case LATEST -> Sort.by(Sort.Direction.DESC, "id");
@@ -130,15 +129,15 @@ public class BuyerProductService {
         return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sortBy);
     }
 
-    // 단건 응답만 캐시 (productDetail TTL 10분, default)
-    // 조회수 카운트는 캐시 hit 여부와 무관해야 하므로 컨트롤러에서 recordView를 별도 호출
+    // 단건 응답만 캐시 (10분)
+    // 조회수는 캐시 hit이어도 매번 세야 해서 컨트롤러에서 따로 호출
     @Cacheable(value = "productDetail", key = "#productId", cacheManager = "redisCacheManager")
     public ProductDetailResponse getDetail(Long productId) {
         Product product = findApprovedProduct(productId);
         return ProductDetailResponse.from(product);
     }
 
-    // 조회수 카운트 — 컨트롤러에서 getDetail 성공 후 호출
+    // 조회수 카운트 — 단건 조회 성공 후 컨트롤러에서 호출
     public void recordView(Long productId, Long userId) {
         viewCountService.recordView(productId, userId);
     }

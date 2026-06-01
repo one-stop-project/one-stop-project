@@ -10,8 +10,8 @@ import org.springframework.stereotype.Component;
 import java.util.Set;
 
 // 5분마다 Redis 누적 조회수를 MySQL에 동기화
-// 흐름: peek(count) → DB UPDATE 성공 → acknowledge(DECRBY)
-// DB UPDATE 실패 시 acknowledge 미호출 → 다음 사이클에서 재시도 (유실 방지)
+// 흐름: 읽기 → DB 반영 성공 → 반영분만 Redis에서 차감
+// DB 반영 실패 시 차감 안 함 → 다음 사이클 재시도 (유실 방지)
 @Slf4j
 @Component
 @RequiredArgsConstructor
@@ -39,12 +39,12 @@ public class ProductViewCountScheduler {
                 long count = viewCountService.peekCount(productId);
 
                 if (count <= 0) {
-                    // counter는 비었는데 dirty에는 남아있는 경우 — dirty cleanup
+                    // 카운터는 비었는데 동기화 대상 목록에만 남은 경우 — 목록에서 제거
                     viewCountService.acknowledge(productId, 0L);
                     continue;
                 }
 
-                // DB UPDATE 성공 후에만 acknowledge — 트랜잭션 커밋 성공이 전제
+                // DB 반영 성공(커밋 완료) 후에만 Redis 차감
                 syncService.syncOne(productId, count);
                 viewCountService.acknowledge(productId, count);
                 success++;
@@ -58,7 +58,7 @@ public class ProductViewCountScheduler {
     }
 
     // 매주 월요일 00:00 (KST) — product.view_count 일괄 0 초기화
-    // Redis 펜딩 카운터는 건드리지 않음. 미동기화 델타는 다음 5분 sync에 새 주차로 누적됨
+    // Redis에 남은 카운터는 건드리지 않음 — 아직 반영 안 된 분은 다음 주차로 이어 집계됨
     @Scheduled(cron = "0 0 0 ? * MON", zone = "Asia/Seoul")
     public void weeklyReset() {
         int reset = syncService.resetAllViewCounts();
