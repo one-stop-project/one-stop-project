@@ -113,6 +113,13 @@ public enum ErrorCode {
     PAYMENT_007(HttpStatus.BAD_REQUEST, "PAYMENT_007", "지원하지 않는 결제 수단입니다"),
     PAYMENT_008(HttpStatus.BAD_REQUEST, "PAYMENT_008", "취소된 주문은 결제할 수 없습니다"),
 
+    // ===== POINT - 포인트 =====
+    POINT_001(HttpStatus.NOT_FOUND, "POINT_001", "포인트 계정을 찾을 수 없습니다"),
+    POINT_002(HttpStatus.BAD_REQUEST, "POINT_002", "포인트가 부족합니다"),
+    POINT_003(HttpStatus.BAD_REQUEST, "POINT_003", "포인트 금액은 1 이상이어야 합니다"),
+    POINT_004(HttpStatus.BAD_REQUEST, "POINT_004", "포인트 충전 금액은 1,000원 이상 1,000,000원 이하여야 합니다"),
+    POINT_005(HttpStatus.CONFLICT, "POINT_005", "포인트 처리 중 충돌이 발생했습니다. 다시 시도해주세요"),
+
     // ===== SHIPPING - 배송 =====
     SHIPPING_001(HttpStatus.BAD_REQUEST, "SHIPPING_001", "주문 확인 전에는 배송을 시작할 수 없습니다"),
     SHIPPING_002(HttpStatus.BAD_REQUEST, "SHIPPING_002", "유효하지 않은 배송 상태 변경입니다"),
