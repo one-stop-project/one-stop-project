@@ -42,5 +42,27 @@ jwt:
 app:
   cors:
     allowed-origins: "*"
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      ai-review:
+        failure-rate-threshold: 50
+        minimum-number-of-calls: 5
+        wait-duration-in-open-state: 60s
+        permitted-number-of-calls-in-half-open-state: 2
+        sliding-window-size: 10
+      ai-assistant:
+        failure-rate-threshold: 50
+        minimum-number-of-calls: 10
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        sliding-window-size: 10
+  timelimiter:
+    instances:
+      ai-review:
+        timeout-duration: 30s
+      ai-assistant:
+        timeout-duration: 10s
   test-data:
     init: true
