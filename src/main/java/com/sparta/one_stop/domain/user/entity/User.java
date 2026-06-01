@@ -157,6 +157,10 @@ public class User extends BaseEntity {
         this.lastLoginAt = java.time.LocalDateTime.now();
     }
 
+    public void updateRole(UserRole newRole) {
+        this.role = newRole;
+    }
+
     // 본인검증 / → AuthUser.verifyOwnership(targetUserId)로 호출 권장
     public void verifyOwnership(Long requestUserId) {
         if (!this.id.equals(requestUserId)) {
