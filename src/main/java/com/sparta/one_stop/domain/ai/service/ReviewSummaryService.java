@@ -6,6 +6,7 @@ import com.sparta.one_stop.global.ai.fallback.AiFallbackHandler;
 import com.sparta.one_stop.global.ai.logging.AiTokenLogger;
 import com.sparta.one_stop.global.ai.prompt.AiPromptProperties;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatResponse;
@@ -39,6 +40,14 @@ public class ReviewSummaryService {
         this.fallbackHandler = throwable -> ReviewSummary.unavailable();
     }
 
+    @PostConstruct
+    void validatePrompts() {
+        if (promptProperties.clothing() == null) throw new IllegalStateException("ai.prompts.clothing 설정이 누락되었습니다.");
+        if (promptProperties.electronics() == null) throw new IllegalStateException("ai.prompts.electronics 설정이 누락되었습니다.");
+        if (promptProperties.food() == null) throw new IllegalStateException("ai.prompts.food 설정이 누락되었습니다.");
+        if (promptProperties.general() == null) throw new IllegalStateException("ai.prompts.general 설정이 누락되었습니다.");
+    }
+
     /**
      * 카테고리별 프롬프트로 리뷰를 AI 에 전송하고 구조화된 요약을 반환합니다.
      * Circuit Breaker "ai-review" 인스턴스로 보호됩니다.
@@ -63,10 +72,16 @@ public class ReviewSummaryService {
                     .call()
                     .chatResponse();
 
-            tokenLogger.logSuccess(requestId, response, System.currentTimeMillis() - start);
+            if (response == null || response.getResult() == null) {
+                throw new IllegalStateException("AI 응답이 비어있습니다.");
+            }
 
             String content = response.getResult().getOutput().getText();
-            return converter.convert(content);
+            ReviewSummary result = converter.convert(content);
+
+            // 파싱 성공 후 로깅 — 파싱 실패 시 중복 로그 방지
+            tokenLogger.logSuccess(requestId, response, System.currentTimeMillis() - start);
+            return result;
 
         } catch (Exception e) {
             tokenLogger.logFailure(requestId, System.currentTimeMillis() - start, modelName, e);

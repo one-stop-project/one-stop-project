@@ -24,7 +24,7 @@ public class AiTokenLogger {
         long completionTokens = 0L;
         String model = "unknown";
 
-        if (response.getMetadata() != null) {
+        if (response != null && response.getMetadata() != null) {
             model = response.getMetadata().getModel() != null
                     ? response.getMetadata().getModel() : "unknown";
 

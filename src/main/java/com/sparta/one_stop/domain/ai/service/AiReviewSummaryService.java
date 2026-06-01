@@ -13,6 +13,7 @@ import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +30,7 @@ public class AiReviewSummaryService {
 
     private static final String CACHE_KEY_PREFIX = "ai:review-summary:";
     private static final int MIN_REVIEW_COUNT = 10;
+    private static final int MAX_REVIEW_FOR_AI = 50; // 토큰 비용 및 컨텍스트 윈도우 초과 방지
     private static final Duration CACHE_TTL = Duration.ofHours(1);
 
     private final AiReviewReader aiReviewReader;
@@ -52,7 +54,8 @@ public class AiReviewSummaryService {
         }
 
         // AI 호출
-        List<Review> reviews = aiReviewReader.findAllByProduct_Id(productId);
+        List<Review> reviews = aiReviewReader.findAllByProduct_IdOrderByCreatedAtDesc(
+            productId, PageRequest.of(0, MAX_REVIEW_FOR_AI));
         String reviewsText = reviews.stream()
             .map(Review::getContent)
             .collect(Collectors.joining("\n"));
