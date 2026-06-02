@@ -21,9 +21,10 @@ class OrderTest {
         // when
         Order order = new Order(
             user,
-            30000L,
+            null,
+            10000L,
             0L,
-            33000L,
+            13000L,
             0,
             "홍길동",
             "010-1234-5678",
@@ -35,9 +36,9 @@ class OrderTest {
 
         // then
         assertThat(order.getUser()).isSameAs(user);
-        assertThat(order.getTotalPrice()).isEqualTo(30000L);
+        assertThat(order.getTotalPrice()).isEqualTo(10000L);
         assertThat(order.getDiscountPrice()).isEqualTo(0L);
-        assertThat(order.getFinalPrice()).isEqualTo(33000L);
+        assertThat(order.getFinalPrice()).isEqualTo(13000L);
         assertThat(order.getUsedPoint()).isEqualTo(0);
         assertThat(order.getReceiverName()).isEqualTo("홍길동");
         assertThat(order.getReceiverPhone()).isEqualTo("010-1234-5678");
@@ -117,14 +118,15 @@ class OrderTest {
     private Order order() {
         return new Order(
             mock(User.class),
-            30000L,
+            null,
+            10000L,
             0L,
-            33000L,
+            13000L,
             0,
             "홍길동",
             "010-1234-5678",
             "서울시 강남구",
-            "문 앞에 놓아주세요",
+            "문 앞에 놔주세요",
             3000L,
             OrderType.CART
         );
