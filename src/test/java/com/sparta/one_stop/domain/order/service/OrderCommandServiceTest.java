@@ -132,6 +132,8 @@ class OrderCommandServiceTest {
 
         // then
         assertThat(result).isNotNull();
+        assertThat(result.deliveryFee()).isEqualTo(3000L);
+        assertThat(result.finalPrice()).isEqualTo(23000L);
 
         ArgumentCaptor<Order> orderCaptor = ArgumentCaptor.forClass(Order.class);
         verify(orderRepository).save(orderCaptor.capture());
@@ -210,6 +212,8 @@ class OrderCommandServiceTest {
 
         // then
         assertThat(result).isNotNull();
+        assertThat(result.deliveryFee()).isEqualTo(3000L);
+        assertThat(result.finalPrice()).isEqualTo(23000L);
 
         verify(productItem).decreaseStock(2);
         verify(orderRepository).save(any(Order.class));
