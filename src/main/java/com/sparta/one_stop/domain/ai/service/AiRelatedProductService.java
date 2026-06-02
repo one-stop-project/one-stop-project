@@ -17,6 +17,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -72,8 +76,12 @@ public class AiRelatedProductService {
         if (popularIds.isEmpty()) {
             return List.of();
         }
-        return aiProductReader.findWithItemsByIds(popularIds).stream()
-            .filter(p -> !p.getId().equals(productId))
+        Map<Long, Product> productMap = aiProductReader.findWithItemsByIds(popularIds).stream()
+            .collect(Collectors.toMap(Product::getId, Function.identity()));
+        return popularIds.stream()
+            .filter(id -> !id.equals(productId))
+            .map(productMap::get)
+            .filter(Objects::nonNull)
             .filter(this::hasStock)
             .limit(RELATED_LIMIT)
             .map(RelatedProductResponse::from)
