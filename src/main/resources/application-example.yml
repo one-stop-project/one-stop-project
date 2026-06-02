@@ -63,6 +63,16 @@ management:
     health:
       show-details: when-authorized
 
+app:
+  cors:
+    # 허용할 프론트엔드 Origin을 입력하세요 (로컬: http://localhost:8080, 배포: 실제 도메인)
+    allowed-origins: "http://localhost:8080"
+  security:
+    csp:
+      # 로컬 개발 환경에서는 Swagger UI 렌더링을 위해 아래 정책을 그대로 사용하세요.
+      # 배포 환경에서는 unsafe-inline / unsafe-eval 제거를 검토하세요.
+      policy: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data:; font-src 'self' data: https://cdn.jsdelivr.net;"
+
 # ── Circuit Breaker 설정 ──
 # AI 서버가 죽거나 느릴 때 우리 서버 보호용
 resilience4j:
