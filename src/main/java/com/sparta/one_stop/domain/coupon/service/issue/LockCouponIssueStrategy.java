@@ -12,6 +12,7 @@ import com.sparta.one_stop.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +21,10 @@ import java.time.LocalDateTime;
 import java.util.concurrent.TimeUnit;
 
 @Component("lockCouponIssueStrategy")
+@ConditionalOnProperty(
+    name = "coupon.issue.strategy",
+    havingValue = "lock"
+)
 @RequiredArgsConstructor
 public class LockCouponIssueStrategy implements CouponIssueStrategy {
 
