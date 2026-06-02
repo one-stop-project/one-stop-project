@@ -94,7 +94,8 @@ public class ProductRepositoryImpl implements ProductRepositoryCustom {
                 new OrderSpecifier<>(Order.ASC, minOnSalePrice(cond)), product.id.desc()};
             case PRICE_DESC -> new OrderSpecifier<?>[]{
                 new OrderSpecifier<>(Order.DESC, minOnSalePrice(cond)), product.id.desc()};
-            default -> new OrderSpecifier<?>[]{product.id.desc()};
+            // LATEST: 생성 시각 기준 최신순, 동시각이면 id로 안정 정렬
+            default -> new OrderSpecifier<?>[]{product.createdAt.desc(), product.id.desc()};
         };
     }
 

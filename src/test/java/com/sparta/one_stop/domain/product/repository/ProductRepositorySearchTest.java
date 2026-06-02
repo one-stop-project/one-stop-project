@@ -72,8 +72,8 @@ class ProductRepositorySearchTest {
     }
 
     @Test
-    @DisplayName("LATEST: 승인 상품 전체를 id 내림차순으로 (ON_SALE 옵션 없어도 포함)")
-    void latest_allApproved_orderByIdDesc() {
+    @DisplayName("LATEST: 승인 상품 전체를 최신순(createdAt desc, id tie-break)으로 (ON_SALE 옵션 없어도 포함)")
+    void latest_allApproved_orderByCreatedAtDesc() {
         Page<Product> page = productRepository.search(
             cond(SortType.LATEST, null, null, null), PageRequest.of(0, 10));
 
