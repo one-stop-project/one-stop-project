@@ -144,6 +144,7 @@ public enum ErrorCode {
     COUPON_006(HttpStatus.BAD_REQUEST, "COUPON_006", "이미 사용한 쿠폰입니다"),
     COUPON_007(HttpStatus.BAD_REQUEST, "COUPON_007", "만료된 쿠폰입니다"),
     COUPON_008(HttpStatus.BAD_REQUEST, "COUPON_008", "할인 값이 유효하지 않습니다"),
+    COUPON_009(HttpStatus.INTERNAL_SERVER_ERROR, "COUPON_009", "지원하지 않는 쿠폰 발급 전략입니다."),
 
     // ===== REVIEW - 리뷰 =====
     REVIEW_001(HttpStatus.BAD_REQUEST, "REVIEW_001", "배송 완료 후에만 리뷰를 작성할 수 있습니다"),
