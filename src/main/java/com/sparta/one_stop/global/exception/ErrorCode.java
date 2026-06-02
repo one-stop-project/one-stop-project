@@ -120,6 +120,11 @@ public enum ErrorCode {
     POINT_003(HttpStatus.BAD_REQUEST, "POINT_003", "포인트 금액은 1 이상이어야 합니다"),
     POINT_004(HttpStatus.BAD_REQUEST, "POINT_004", "포인트 충전 금액은 1,000원 이상 1,000,000원 이하여야 합니다"),
     POINT_005(HttpStatus.CONFLICT, "POINT_005", "포인트 처리 중 충돌이 발생했습니다. 다시 시도해주세요"),
+    POINT_006(HttpStatus.BAD_REQUEST, "POINT_006", "적립률은 null일 수 없습니다."),
+    POINT_007(HttpStatus.BAD_REQUEST, "POINT_007", "적립률은 음수일 수 없습니다."),
+    POINT_008(HttpStatus.BAD_REQUEST, "POINT_008", "적립률은 100%를 초과할 수 없습니다."),
+    POINT_009(HttpStatus.BAD_REQUEST, "POINT_009", "안전상한선 초과"),
+    POINT_010(HttpStatus.BAD_REQUEST,"POINT_010","해시 입력값 오류"),
 
     // ===== SHIPPING - 배송 =====
     SHIPPING_001(HttpStatus.BAD_REQUEST, "SHIPPING_001", "주문 확인 전에는 배송을 시작할 수 없습니다"),
@@ -154,6 +159,18 @@ public enum ErrorCode {
     REVIEW_005(HttpStatus.NOT_FOUND, "REVIEW_005", "리뷰를 찾을 수 없습니다"),
     REVIEW_006(HttpStatus.FORBIDDEN, "REVIEW_006", "본인의 리뷰만 수정/삭제할 수 있습니다"),
     REVIEW_007(HttpStatus.BAD_REQUEST, "REVIEW_007", "작성 후 30일이 지나 수정할 수 없습니다"),
+
+    // ===== SUBSCRIPTION - 구독 =====
+    SUBSCRIPTION_001(HttpStatus.NOT_FOUND, "SUBSCRIPTION_001", "구독 정보를 찾을 수 없습니다"),
+    SUBSCRIPTION_002(HttpStatus.CONFLICT, "SUBSCRIPTION_002", "이미 유효한 구독이 존재합니다"),
+    SUBSCRIPTION_003(HttpStatus.BAD_REQUEST, "SUBSCRIPTION_003", "구독이 이미 해지되었습니다"),
+    SUBSCRIPTION_004(HttpStatus.BAD_REQUEST, "SUBSCRIPTION_004", "현재 상태에서는 구독을 변경할 수 없습니다"),
+    SUBSCRIPTION_005(HttpStatus.BAD_REQUEST, "SUBSCRIPTION_005", "자동 결제에 실패했습니다"),
+    SUBSCRIPTION_007(HttpStatus.FORBIDDEN, "SUBSCRIPTION_007", "본인의 구독만 조회할 수 있습니다"),
+    SUBSCRIPTION_008(HttpStatus.FORBIDDEN, "SUBSCRIPTION_008", "본인의 구독만 수정할 수 있습니다"),
+    SUBSCRIPTION_009(HttpStatus.BAD_REQUEST, "SUBSCRIPTION_009", "다음 결제일이 유효하지 않습니다"),
+    SUBSCRIPTION_010(HttpStatus.BAD_REQUEST, "SUBSCRIPTION_010", "구독 상태가 변경되어 처리할 수 없습니다"),
+    SUBSCRIPTION_011(HttpStatus.BAD_REQUEST, "SUBSCRIPTION_011", "이미 만료된 구독입니다"),
 
     // ===== SELLER - 판매자 =====
     SELLER_001(HttpStatus.NOT_FOUND, "SELLER_001", "판매자 정보를 찾을 수 없습니다"),

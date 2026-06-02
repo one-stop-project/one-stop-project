@@ -1,7 +1,10 @@
 package com.sparta.one_stop.domain.point.entity;
 
+import com.sparta.one_stop.domain.point.util.PointIntergrityHasher;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.global.entity.BaseEntity;
+import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -44,25 +47,28 @@ public class Point extends BaseEntity {
     @Column(name = "version", nullable = false)
     private Integer version;
 
-    // == 생성자 ==
-    public Point(User user) {
-        if (user == null) {
-            throw new IllegalArgumentException("포인트 소유자는 필수입니다.");
-        }
+    // 무결성해시(HMAC-SHA256)
+    @Column(name = "integrity_hash", nullable = false, length = 64)
+    private String integrityHash;
 
-        this.user = user;
-        this.balance = 0;
-        this.version = 0;
+    // == 생성자 ==
+    public static Point createInitial(User user) {
+        Point point = new Point();
+        point.user = user;
+        point.balance = 0;
+        point.version = 0;
+        point.integrityHash = PointIntergrityHasher.hash(user.getId(), 0, 0);
+        return point;
     }
 
     // == 비즈니스 메서드 ==
 
     // 포인트 증가
-    // 충전, 적립, 복구 시 사용
+    // 충전, 적립, 복구 시 사용 -> 해시 재계산
     public void increaseBalance(Integer amount) {
         validatePositiveAmount(amount);
-
         this.balance += amount;
+        regenerateHash();
     }
 
     // 포인트 감소
@@ -75,12 +81,30 @@ public class Point extends BaseEntity {
         }
 
         this.balance -= amount;
+        regenerateHash();
     }
 
-    // 포인트 금액 검증
+
+    // 무결성 검증 - 조회 시점에 호출
+    public void verifyIntegrity() {
+        String expectedHash = PointIntergrityHasher.hash(user.getId(), balance, version);
+        if(!expectedHash.equals(this.integrityHash)) {
+            throw new CustomException(ErrorCode.POINT_010,
+                String.format("포인트 무결성 위반 감지, userId=%d, balance=%d, version=%d",
+                    user.getId(), balance, version));
+        }
+    }
+
+    // 내부
+    private void regenerateHash() {
+        // version은 @Version 변경 시 자동 증가 -> 미리 +1 해서 해시 생성
+        // JPA가 dirty checking으로 UPDATE 발행 시 version도 +1되어 해시와 일치)
+        this.integrityHash = PointIntergrityHasher.hash(user.getId(), balance, version +1 );
+    }
+
     private void validatePositiveAmount(Integer amount) {
-        if (amount == null || amount <= 0) {
-            throw new IllegalArgumentException("포인트 금액은 1 이상이어야 합니다.");
+        if(amount == null || amount <= 0) {
+            throw new CustomException(ErrorCode.POINT_003, "포인트는 양수여야 합니다:" + amount);
         }
     }
 
