@@ -18,7 +18,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
-public interface ProductRepository extends JpaRepository<Product, Long> {
+public interface ProductRepository extends JpaRepository<Product, Long>, ProductRepositoryCustom {
 
     // 상태별 상품 목록 조회 (관리자 승인/반려 목록용)
     List<Product> findAllByStatus(ProductStatus status);
@@ -39,78 +39,8 @@ public interface ProductRepository extends JpaRepository<Product, Long> {
 
     // 구매자용 조회
 
-    // 검색/목록 (LATEST 등 가격 무관 정렬용)
-    // 가격 필터: 동일 ProductItem 한 건이 [minPrice, maxPrice] 범위에 들어가야 노출
-    @Query("SELECT p FROM Product p JOIN p.seller s " +
-           "WHERE p.status = :productStatus AND s.status = :sellerStatus " +
-           "AND (:keyword IS NULL OR LOWER(p.name) LIKE LOWER(CONCAT('%', :keyword, '%'))) " +
-           "AND (:categoryId IS NULL OR EXISTS (" +
-           "    SELECT m FROM ProductCategoryMapping m WHERE m.product = p AND m.category.id = :categoryId)) " +
-           "AND ((:minPrice IS NULL AND :maxPrice IS NULL) OR EXISTS (" +
-           "    SELECT 1 FROM ProductItem pi WHERE pi.product = p " +
-           "      AND (:minPrice IS NULL OR pi.price >= :minPrice) " +
-           "      AND (:maxPrice IS NULL OR pi.price <= :maxPrice)))")
-    Page<Product> searchApproved(@Param("productStatus") ProductStatus productStatus,
-                                 @Param("sellerStatus") SellerStatus sellerStatus,
-                                 @Param("keyword") String keyword,
-                                 @Param("categoryId") Long categoryId,
-                                 @Param("minPrice") Long minPrice,
-                                 @Param("maxPrice") Long maxPrice,
-                                 Pageable pageable);
-
-    // 검색/목록 — PRICE_ASC: MIN(price) 오름차순 (ON_SALE 옵션만 정렬 대상)
-    @Query(value = "SELECT p FROM Product p JOIN p.seller s JOIN p.productItems pi " +
-                   "WHERE p.status = :productStatus AND s.status = :sellerStatus " +
-                   "AND pi.status = com.sparta.one_stop.global.enums.product.ProductItemStatus.ON_SALE " +
-                   "AND (:keyword IS NULL OR LOWER(p.name) LIKE LOWER(CONCAT('%', :keyword, '%'))) " +
-                   "AND (:categoryId IS NULL OR EXISTS (" +
-                   "    SELECT m FROM ProductCategoryMapping m WHERE m.product = p AND m.category.id = :categoryId)) " +
-                   "AND (:minPrice IS NULL OR pi.price >= :minPrice) " +
-                   "AND (:maxPrice IS NULL OR pi.price <= :maxPrice) " +
-                   "GROUP BY p " +
-                   "ORDER BY MIN(pi.price) ASC",
-           countQuery = "SELECT COUNT(DISTINCT p) FROM Product p JOIN p.seller s JOIN p.productItems pi " +
-                        "WHERE p.status = :productStatus AND s.status = :sellerStatus " +
-                        "AND pi.status = com.sparta.one_stop.global.enums.product.ProductItemStatus.ON_SALE " +
-                        "AND (:keyword IS NULL OR LOWER(p.name) LIKE LOWER(CONCAT('%', :keyword, '%'))) " +
-                        "AND (:categoryId IS NULL OR EXISTS (" +
-                        "    SELECT m FROM ProductCategoryMapping m WHERE m.product = p AND m.category.id = :categoryId)) " +
-                        "AND (:minPrice IS NULL OR pi.price >= :minPrice) " +
-                        "AND (:maxPrice IS NULL OR pi.price <= :maxPrice)")
-    Page<Product> searchApprovedOrderByMinPriceAsc(@Param("productStatus") ProductStatus productStatus,
-                                                   @Param("sellerStatus") SellerStatus sellerStatus,
-                                                   @Param("keyword") String keyword,
-                                                   @Param("categoryId") Long categoryId,
-                                                   @Param("minPrice") Long minPrice,
-                                                   @Param("maxPrice") Long maxPrice,
-                                                   Pageable pageable);
-
-    // 검색/목록 — PRICE_DESC: MIN(price) 내림차순
-    @Query(value = "SELECT p FROM Product p JOIN p.seller s JOIN p.productItems pi " +
-                   "WHERE p.status = :productStatus AND s.status = :sellerStatus " +
-                   "AND pi.status = com.sparta.one_stop.global.enums.product.ProductItemStatus.ON_SALE " +
-                   "AND (:keyword IS NULL OR LOWER(p.name) LIKE LOWER(CONCAT('%', :keyword, '%'))) " +
-                   "AND (:categoryId IS NULL OR EXISTS (" +
-                   "    SELECT m FROM ProductCategoryMapping m WHERE m.product = p AND m.category.id = :categoryId)) " +
-                   "AND (:minPrice IS NULL OR pi.price >= :minPrice) " +
-                   "AND (:maxPrice IS NULL OR pi.price <= :maxPrice) " +
-                   "GROUP BY p " +
-                   "ORDER BY MIN(pi.price) DESC",
-           countQuery = "SELECT COUNT(DISTINCT p) FROM Product p JOIN p.seller s JOIN p.productItems pi " +
-                        "WHERE p.status = :productStatus AND s.status = :sellerStatus " +
-                        "AND pi.status = com.sparta.one_stop.global.enums.product.ProductItemStatus.ON_SALE " +
-                        "AND (:keyword IS NULL OR LOWER(p.name) LIKE LOWER(CONCAT('%', :keyword, '%'))) " +
-                        "AND (:categoryId IS NULL OR EXISTS (" +
-                        "    SELECT m FROM ProductCategoryMapping m WHERE m.product = p AND m.category.id = :categoryId)) " +
-                        "AND (:minPrice IS NULL OR pi.price >= :minPrice) " +
-                        "AND (:maxPrice IS NULL OR pi.price <= :maxPrice)")
-    Page<Product> searchApprovedOrderByMinPriceDesc(@Param("productStatus") ProductStatus productStatus,
-                                                    @Param("sellerStatus") SellerStatus sellerStatus,
-                                                    @Param("keyword") String keyword,
-                                                    @Param("categoryId") Long categoryId,
-                                                    @Param("minPrice") Long minPrice,
-                                                    @Param("maxPrice") Long maxPrice,
-                                                    Pageable pageable);
+    // 검색/목록(키워드 FULLTEXT + 카테고리 + 가격 + 정렬)은 QueryDSL 동적 쿼리로 이동
+    // → ProductRepositoryCustom.search() / ProductRepositoryImpl
 
     // 단건 상세 조회
     @EntityGraph(attributePaths = {"seller", "productItems", "productImages", "categoryMappings", "categoryMappings.category"})

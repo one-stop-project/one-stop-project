@@ -6,6 +6,7 @@ import com.sparta.one_stop.domain.product.dto.response.ProductSummaryResponse;
 import com.sparta.one_stop.domain.product.entity.Product;
 import com.sparta.one_stop.domain.product.entity.ProductItem;
 import com.sparta.one_stop.domain.product.repository.ProductRepository;
+import com.sparta.one_stop.domain.product.repository.ProductSearchCond;
 import com.sparta.one_stop.global.enums.product.ProductStatus;
 import com.sparta.one_stop.global.enums.product.SortType;
 import com.sparta.one_stop.global.enums.user.SellerStatus;
@@ -64,24 +65,25 @@ public class BuyerProductService {
             return searchPopular(pageable);
         }
 
-        String kw = (keyword != null && !keyword.isBlank()) ? keyword : null;
+        // 정렬은 QueryDSL 쿼리 내부에서 처리하므로 페이지 번호/크기만 전달
         Pageable plainPage = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
+        ProductSearchCond cond = new ProductSearchCond(
+            ProductStatus.APPROVED, SellerStatus.APPROVED,
+            sanitizeKeyword(keyword), categoryId, minPrice, maxPrice, sort
+        );
+        return productRepository.search(cond, plainPage).map(ProductSummaryResponse::from);
+    }
 
-        if (sort == SortType.PRICE_ASC) {
-            return productRepository.searchApprovedOrderByMinPriceAsc(
-                ProductStatus.APPROVED, SellerStatus.APPROVED, kw, categoryId, minPrice, maxPrice, plainPage
-            ).map(ProductSummaryResponse::from);
+    // FULLTEXT BOOLEAN MODE 연산자 문자(+ - ~ * " ( ) < > @)는 평문 검색이라 제거
+    // 정리 후 비면 null → 키워드 필터 미적용(검색어 없음 = 전체 노출 유지)
+    private String sanitizeKeyword(String keyword) {
+        if (keyword == null) {
+            return null;
         }
-        if (sort == SortType.PRICE_DESC) {
-            return productRepository.searchApprovedOrderByMinPriceDesc(
-                ProductStatus.APPROVED, SellerStatus.APPROVED, kw, categoryId, minPrice, maxPrice, plainPage
-            ).map(ProductSummaryResponse::from);
-        }
-
-        Pageable sorted = applySorting(pageable, sort);
-        return productRepository.searchApproved(
-            ProductStatus.APPROVED, SellerStatus.APPROVED, kw, categoryId, minPrice, maxPrice, sorted
-        ).map(ProductSummaryResponse::from);
+        String cleaned = keyword.replaceAll("[+\\-~*\"()<>@]", " ")
+            .replaceAll("\\s+", " ")
+            .trim();
+        return cleaned.isEmpty() ? null : cleaned;
     }
 
     private Page<ProductSummaryResponse> searchPopular(Pageable pageable) {
@@ -118,15 +120,6 @@ public class BuyerProductService {
         if (p == null || !p.isApproved()) return false;
         if (p.getSeller().getStatus() != SellerStatus.APPROVED) return false;
         return p.getProductItems().stream().anyMatch(ProductItem::isOnSale);
-    }
-
-    // 가격 정렬은 별도 쿼리, 인기순은 진입부에서 분기 — 여기는 최신순만 처리
-    private Pageable applySorting(Pageable pageable, SortType sort) {
-        Sort sortBy = switch (sort) {
-            case LATEST -> Sort.by(Sort.Direction.DESC, "id");
-            case PRICE_ASC, PRICE_DESC, POPULAR -> Sort.unsorted();
-        };
-        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), sortBy);
     }
 
     // 단건 응답만 캐시 (10분)
