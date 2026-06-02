@@ -118,7 +118,7 @@ public class PointService {
 
         // 포인트 계정 조회, 없으면 생성
         Point point = pointRepository.findByUserId(userId)
-            .orElseGet(() -> pointRepository.save(new Point(user)));
+            .orElseGet(() -> pointRepository.save(Point.createInitial(user)));
 
         Integer amount = request.amount();
         LocalDate expireAt = LocalDate.now().plusYears(1);

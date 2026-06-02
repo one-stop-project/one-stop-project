@@ -24,7 +24,7 @@ import java.util.UUID;
 /**
  * JWT 토큰 생성 / 검증 컴포넌트
  * Access Token: 15분
- * Refresh Token: 14일
+ * Refresh Token: 7일
  */
 @Slf4j
 @Component

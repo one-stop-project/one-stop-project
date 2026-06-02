@@ -119,6 +119,11 @@ public enum ErrorCode {
     POINT_003(HttpStatus.BAD_REQUEST, "POINT_003", "포인트 금액은 1 이상이어야 합니다"),
     POINT_004(HttpStatus.BAD_REQUEST, "POINT_004", "포인트 충전 금액은 1,000원 이상 1,000,000원 이하여야 합니다"),
     POINT_005(HttpStatus.CONFLICT, "POINT_005", "포인트 처리 중 충돌이 발생했습니다. 다시 시도해주세요"),
+    POINT_006(HttpStatus.BAD_REQUEST, "POINT_006", "적립률은 null일 수 없습니다."),
+    POINT_007(HttpStatus.BAD_REQUEST, "POINT_007", "적립률은 음수일 수 없습니다."),
+    POINT_008(HttpStatus.BAD_REQUEST, "POINT_008", "적립률은 100%를 초과할 수 없습니다."),
+    POINT_009(HttpStatus.BAD_REQUEST, "POINT_009", "안전상한선 초과"),
+    POINT_010(HttpStatus.BAD_REQUEST,"POINT_010","해시 입력값 오류"),
 
     // ===== SHIPPING - 배송 =====
     SHIPPING_001(HttpStatus.BAD_REQUEST, "SHIPPING_001", "주문 확인 전에는 배송을 시작할 수 없습니다"),
