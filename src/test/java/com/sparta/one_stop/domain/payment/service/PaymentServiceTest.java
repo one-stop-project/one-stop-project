@@ -1,5 +1,6 @@
 package com.sparta.one_stop.domain.payment.service;
 
+import com.sparta.one_stop.domain.coupon.service.CouponCommandService;
 import com.sparta.one_stop.domain.delivery.entity.Delivery;
 import com.sparta.one_stop.domain.delivery.entity.DeliveryHistory;
 import com.sparta.one_stop.domain.delivery.repository.DeliveryHistoryRepository;
@@ -33,6 +34,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.BDDMockito.willDoNothing;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -59,6 +61,9 @@ class PaymentServiceTest {
     @Mock
     private PointService pointService;
 
+    @Mock
+    private CouponCommandService couponCommandService;
+
     @InjectMocks
     private PaymentService paymentService;
 
@@ -74,6 +79,10 @@ class PaymentServiceTest {
             orderId,
             amount
         );
+
+        willDoNothing()
+            .given(couponCommandService)
+            .useCouponByOrder(any(Order.class));
 
         AtomicReference<OrderStatus> orderStatus =
             new AtomicReference<>(OrderStatus.PENDING_PAYMENT);
@@ -343,6 +352,10 @@ class PaymentServiceTest {
             amount
         );
 
+        willDoNothing()
+            .given(couponCommandService)
+            .useCouponByOrder(any(Order.class));
+
         AtomicReference<OrderStatus> orderStatus =
             new AtomicReference<>(OrderStatus.PENDING_PAYMENT);
 
@@ -387,6 +400,10 @@ class PaymentServiceTest {
             orderId,
             amount
         );
+
+        willDoNothing()
+            .given(couponCommandService)
+            .useCouponByOrder(any(Order.class));
 
         AtomicReference<OrderStatus> orderStatus =
             new AtomicReference<>(OrderStatus.PENDING_PAYMENT);
