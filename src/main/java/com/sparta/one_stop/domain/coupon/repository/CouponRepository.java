@@ -2,6 +2,8 @@ package com.sparta.one_stop.domain.coupon.repository;
 
 import com.sparta.one_stop.domain.coupon.entity.Coupon;
 import com.sparta.one_stop.global.enums.coupon.CouponStatus;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -40,5 +42,11 @@ public interface CouponRepository extends JpaRepository<Coupon, Long> {
     int increaseIssuedQuantity(
         @Param("couponId") Long couponId
     );
+
+    // 관리자 전체 목록 조회 (최신순)
+    Page<Coupon> findAllByOrderByCreatedAtDesc(Pageable pageable);
+
+    // 관리자 상태별 목록 조회 (최신순)
+    Page<Coupon> findAllByStatusOrderByCreatedAtDesc(CouponStatus status, Pageable pageable);
 
 }
