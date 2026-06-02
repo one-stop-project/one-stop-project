@@ -16,12 +16,13 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.util.concurrent.TimeUnit;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -102,14 +103,13 @@ public class CouponCommandService {
             redisTemplate.opsForSet()
                 .add(issuedUsersKey, userIdValue);
 
-            // Redis Set TTL 설정은 현재 로컬 Redis Connection 환경에서 StackOverflowError가 발생하여 임시 비활성화
-            // 발급 수량 제어 및 중복 발급 방지는 Redis stock key와 DB Unique 제약으로 검증
-            // TODO: Redis Connection 설정 점검 후 issuedUsersKey TTL 적용 재활성화
-            // applyExpireAtToRedisKey(
-            //     issuedUsersKey,
-            //     coupon.getExpiredAt(),
-            //     now
-            // );
+            // Redis Set에도 쿠폰 만료 시각 기준 TTL 적용
+            // redisTemplate.expire() 대신 Lua Script로 EXPIRE 명령을 실행하여 로컬 Redis Connection 이슈를 우회한다
+            applyExpireAtToRedisKey(
+                issuedUsersKey,
+                coupon.getExpiredAt(),
+                now
+            );
 
             return IssueCouponResponse.of(savedUserCoupon);
         } catch (DataIntegrityViolationException e) {
@@ -208,7 +208,9 @@ public class CouponCommandService {
     /**
      * Redis key 만료 시간 설정
      * - 쿠폰 만료 시각 기준으로 Redis Set TTL 설정
-     * - 이미 만료되었거나 TTL이 0 이하이면 만료 시간을 설정하지 않음
+     * - RedissonConnection 환경에서 redisTemplate.expire(), keyCommands().expire() 호출 시
+     *   StackOverflowError가 발생하여 Lua Script로 EXPIRE 명령을 실행한다
+     * - TTL 설정 실패가 쿠폰 발급 실패로 이어지지 않도록 warn 로그만 남긴다
      */
     private void applyExpireAtToRedisKey(
         String key,
@@ -222,10 +224,22 @@ public class CouponCommandService {
         }
 
         try {
-            redisTemplate.expire(
+            DefaultRedisScript<Long> expireScript = new DefaultRedisScript<>(
+                "return redis.call('expire', KEYS[1], ARGV[1])",
+                Long.class
+            );
+
+            Long result = redisTemplate.execute(
+                expireScript,
+                List.of(key),
+                String.valueOf(ttlSeconds)
+            );
+
+            log.info(
+                "Redis key TTL 설정 결과 - key: {}, ttlSeconds: {}, result: {}",
                 key,
                 ttlSeconds,
-                TimeUnit.SECONDS
+                result
             );
         } catch (Throwable e) {
             log.warn(
