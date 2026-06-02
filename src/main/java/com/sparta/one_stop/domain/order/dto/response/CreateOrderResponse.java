@@ -18,6 +18,8 @@ public record CreateOrderResponse(
 
     Integer usedPoint,
 
+    Long deliveryFee,
+
     Long finalPrice,
 
     OrderStatus status,
@@ -35,6 +37,7 @@ public record CreateOrderResponse(
             order.getTotalPrice(),
             order.getDiscountPrice(),
             order.getUsedPoint(),
+            order.getDeliveryFee(),
             order.getFinalPrice(),
             order.getStatus(),
             order.getCreatedAt()

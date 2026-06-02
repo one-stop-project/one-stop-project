@@ -5,6 +5,10 @@ plugins {
     id "com.github.node-gradle.node" version "7.0.2"
 }
 
+ext {
+    set('springAiVersion', '1.1.0')
+}
+
 group = 'com.sparta'
 version = '0.0.1-SNAPSHOT'
 
@@ -16,6 +20,14 @@ java {
 
 repositories {
 	mavenCentral()
+    maven { url 'https://repo.spring.io/milestone' }
+    maven { url 'https://repo.spring.io/snapshot' }
+}
+
+dependencyManagement {
+    imports {
+        mavenBom "org.springframework.ai:spring-ai-bom:${springAiVersion}"
+    }
 }
 
 configurations {
@@ -64,6 +76,9 @@ dependencies {
 
 // Redisson (분산락)
     implementation 'org.redisson:redisson-spring-boot-starter:3.27.2'
+
+// Spring AI (1.0.0 GA 기준 아티팩트명 변경됨)
+    implementation 'org.springframework.ai:spring-ai-starter-model-openai'
 
 // Resilience4j
     implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.2.0'
