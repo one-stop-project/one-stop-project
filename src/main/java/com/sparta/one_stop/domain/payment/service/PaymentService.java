@@ -1,5 +1,6 @@
 package com.sparta.one_stop.domain.payment.service;
 
+import com.sparta.one_stop.domain.coupon.service.CouponCommandService;
 import com.sparta.one_stop.domain.delivery.entity.Delivery;
 import com.sparta.one_stop.domain.delivery.entity.DeliveryHistory;
 import com.sparta.one_stop.domain.delivery.repository.DeliveryHistoryRepository;
@@ -36,12 +37,14 @@ public class PaymentService {
     private final DeliveryRepository deliveryRepository;
     private final DeliveryHistoryRepository deliveryHistoryRepository;
     private final PointService pointService;
+    private final CouponCommandService couponCommandService;
 
     /**
      * 결제 승인
      * - Mock 결제 승인 처리
      * - 결제 금액과 주문 금액 일치 여부 검증
      * - 결제 승인 전 사용 포인트 실제 차감
+     * - 결제 승인 성공 시 적용 쿠폰 사용 처리
      * - Order / Payment 상태를 동일 트랜잭션 내에서 PAID 처리
      * - 결제 승인 완료 시 OrderItem 접수 처리 및 Delivery 생성
      * - 최초 배송 상태는 ACCEPT
@@ -76,6 +79,8 @@ public class PaymentService {
         );
 
         order.completePayment();
+
+        couponCommandService.useCouponByOrder(order);
 
         acceptOrderItemsAndCreateDeliveries(order);
 

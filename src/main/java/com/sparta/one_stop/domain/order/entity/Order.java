@@ -1,5 +1,6 @@
 package com.sparta.one_stop.domain.order.entity;
 
+import com.sparta.one_stop.domain.coupon.entity.UserCoupon;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.global.entity.BaseEntity;
 import com.sparta.one_stop.global.enums.order.OrderStatus;
@@ -27,7 +28,8 @@ import lombok.NoArgsConstructor;
     name = "orders",
     indexes = {
         @Index(name = "idx_orders_user", columnList = "user_id, created_at"),
-        @Index(name = "idx_orders_status", columnList = "status, created_at")
+        @Index(name = "idx_orders_status", columnList = "status, created_at"),
+        @Index(name = "idx_orders_user_coupon", columnList = "user_coupon_id")
     }
 )
 public class Order extends BaseEntity {
@@ -43,16 +45,16 @@ public class Order extends BaseEntity {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-//    //TODO: MVP 단계에서 쿠폰과 구독은 구현 안함(추후 구현 예정)
+//    //TODO: MVP 단계에서 구독은 구현 안함(추후 구현 예정)
 //    // 구독 정보
 //    @ManyToOne(fetch = FetchType.LAZY)
 //    @JoinColumn(name = "subscription_id")
 //    private Subscription subscription;
 //
-//    // 적용 쿠폰 정보
-//    @ManyToOne(fetch = FetchType.LAZY)
-//    @JoinColumn(name = "user_coupon_id")
-//    private UserCoupon userCoupon;
+    // 적용 쿠폰 정보
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_coupon_id")
+    private UserCoupon userCoupon;
 
     // 총 주문 금액
     @Column(name = "total_price", nullable = false)
@@ -103,6 +105,7 @@ public class Order extends BaseEntity {
     // == 생성자 ==
     public Order(
         User user,
+        UserCoupon userCoupon,
         Long totalPrice,
         Long discountPrice,
         Long finalPrice,
@@ -115,6 +118,7 @@ public class Order extends BaseEntity {
         OrderType orderType
     ) {
         this.user = user;
+        this.userCoupon = userCoupon;
         this.totalPrice = totalPrice;
         this.discountPrice = discountPrice;
         this.finalPrice = finalPrice;

@@ -3,6 +3,9 @@ package com.sparta.one_stop.domain.order.service;
 import com.sparta.one_stop.domain.cart.entity.Cart;
 import com.sparta.one_stop.domain.cart.entity.CartItem;
 import com.sparta.one_stop.domain.cart.repository.CartItemRepository;
+import com.sparta.one_stop.domain.coupon.dto.CouponDiscountResult;
+import com.sparta.one_stop.domain.coupon.service.CouponCommandService;
+import com.sparta.one_stop.domain.coupon.service.CouponQueryService;
 import com.sparta.one_stop.domain.delivery.entity.Delivery;
 import com.sparta.one_stop.domain.delivery.repository.DeliveryHistoryRepository;
 import com.sparta.one_stop.domain.delivery.repository.DeliveryRepository;
@@ -43,6 +46,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -79,6 +83,12 @@ class OrderCommandServiceTest {
     @Mock
     private PointService pointService;
 
+    @Mock
+    private CouponQueryService couponQueryService;
+
+    @Mock
+    private CouponCommandService couponCommandService;
+
     @InjectMocks
     private OrderCommandService orderCommandService;
 
@@ -95,6 +105,12 @@ class OrderCommandServiceTest {
             10000L,
             10L
         );
+
+        given(couponQueryService.validateAndCalculateDiscount(
+            anyLong(),
+            any(),
+            anyLong()
+        )).willReturn(CouponDiscountResult.none());
 
         CreateOrderRequest request = directOrderRequest(
             itemId,
@@ -116,6 +132,8 @@ class OrderCommandServiceTest {
 
         // then
         assertThat(result).isNotNull();
+        assertThat(result.deliveryFee()).isEqualTo(3000L);
+        assertThat(result.finalPrice()).isEqualTo(23000L);
 
         ArgumentCaptor<Order> orderCaptor = ArgumentCaptor.forClass(Order.class);
         verify(orderRepository).save(orderCaptor.capture());
@@ -169,6 +187,12 @@ class OrderCommandServiceTest {
             2
         );
 
+        given(couponQueryService.validateAndCalculateDiscount(
+            anyLong(),
+            any(),
+            anyLong()
+        )).willReturn(CouponDiscountResult.none());
+
         CreateOrderRequest request = cartOrderRequest(
             cartItemId
         );
@@ -188,6 +212,8 @@ class OrderCommandServiceTest {
 
         // then
         assertThat(result).isNotNull();
+        assertThat(result.deliveryFee()).isEqualTo(3000L);
+        assertThat(result.finalPrice()).isEqualTo(23000L);
 
         verify(productItem).decreaseStock(2);
         verify(orderRepository).save(any(Order.class));
@@ -210,7 +236,7 @@ class OrderCommandServiceTest {
             "010-1234-5678",
             "서울시 강남구",
             "문 앞",
-            0L,
+            null,
             0
         );
 
@@ -241,7 +267,7 @@ class OrderCommandServiceTest {
             "010-1234-5678",
             "서울시 강남구",
             "문 앞",
-            0L,
+            null,
             0
         );
 
@@ -272,7 +298,7 @@ class OrderCommandServiceTest {
             "010-1234-5678",
             "서울시 강남구",
             "문 앞",
-            0L,
+            null,
             0
         );
 
@@ -461,6 +487,8 @@ class OrderCommandServiceTest {
             .thenReturn(List.of(orderItem));
         when(deliveryRepository.findAllByOrderItemIdIn(List.of(101L)))
             .thenReturn(List.of());
+        when(couponCommandService.restoreCouponByOrder(order))
+            .thenReturn(null);
         when(pointService.refundPointByOrder(order))
             .thenReturn(0);
 
@@ -531,6 +559,8 @@ class OrderCommandServiceTest {
             .thenReturn(List.of(delivery));
         when(delivery.isCancelable())
             .thenReturn(true);
+        when(couponCommandService.restoreCouponByOrder(order))
+            .thenReturn(null);
         when(pointService.refundPointByOrder(order))
             .thenReturn(0);
 
@@ -708,7 +738,7 @@ class OrderCommandServiceTest {
             "010-1234-5678",
             "서울시 강남구",
             "문 앞",
-            0L,
+            null,
             0
         );
     }
@@ -722,7 +752,7 @@ class OrderCommandServiceTest {
             "010-1234-5678",
             "서울시 강남구",
             "문 앞",
-            0L,
+            null,
             0
         );
     }
