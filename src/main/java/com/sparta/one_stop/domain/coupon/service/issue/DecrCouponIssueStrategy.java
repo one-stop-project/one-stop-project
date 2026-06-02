@@ -22,7 +22,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @Slf4j
-@Component
+@Component("decrCouponIssueStrategy")
 @RequiredArgsConstructor
 public class DecrCouponIssueStrategy implements CouponIssueStrategy {
 

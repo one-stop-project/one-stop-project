@@ -96,3 +96,11 @@ resilience4j:
         timeout-duration: 10s   # 10초 넘으면 강제 타임아웃
       ai-review:
         timeout-duration: 30s   # 30초 넘으면 강제 타임아웃
+
+coupon:
+  issue:
+    # 쿠폰 발급 전략
+    # decr: Redis DECR 기반 원자 차감
+    # lua: Lua Script 기반 원자 처리 예정
+    # lock: Redis Lock 기반 처리 예정
+    strategy: decr
