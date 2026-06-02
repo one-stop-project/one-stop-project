@@ -13,6 +13,7 @@ import com.sparta.one_stop.global.enums.order.OrderStatus;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -20,7 +21,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.concurrent.TimeUnit;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class CouponCommandService {
@@ -99,11 +102,14 @@ public class CouponCommandService {
             redisTemplate.opsForSet()
                 .add(issuedUsersKey, userIdValue);
 
-            applyExpireAtToRedisKey(
-                issuedUsersKey,
-                coupon.getExpiredAt(),
-                now
-            );
+            // Redis Set TTL 설정은 현재 로컬 Redis Connection 환경에서 StackOverflowError가 발생하여 임시 비활성화
+            // 발급 수량 제어 및 중복 발급 방지는 Redis stock key와 DB Unique 제약으로 검증
+            // TODO: Redis Connection 설정 점검 후 issuedUsersKey TTL 적용 재활성화
+            // applyExpireAtToRedisKey(
+            //     issuedUsersKey,
+            //     coupon.getExpiredAt(),
+            //     now
+            // );
 
             return IssueCouponResponse.of(savedUserCoupon);
         } catch (DataIntegrityViolationException e) {
@@ -113,6 +119,13 @@ public class CouponCommandService {
             throw e;
         } catch (RuntimeException e) {
             increaseRedisStock(stockKey);
+
+            redisTemplate.opsForSet()
+                .remove(
+                    issuedUsersKey,
+                    userIdValue
+                );
+
             throw e;
         }
     }
@@ -202,10 +215,25 @@ public class CouponCommandService {
         LocalDateTime expiredAt,
         LocalDateTime now
     ) {
-        Duration ttl = Duration.between(now, expiredAt);
+        long ttlSeconds = Duration.between(now, expiredAt).getSeconds();
 
-        if (!ttl.isNegative() && !ttl.isZero()) {
-            redisTemplate.expire(key, ttl);
+        if (ttlSeconds <= 0) {
+            return;
+        }
+
+        try {
+            redisTemplate.expire(
+                key,
+                ttlSeconds,
+                TimeUnit.SECONDS
+            );
+        } catch (Throwable e) {
+            log.warn(
+                "Redis key TTL 설정 실패 - key: {}, ttlSeconds: {}",
+                key,
+                ttlSeconds,
+                e
+            );
         }
     }
 
