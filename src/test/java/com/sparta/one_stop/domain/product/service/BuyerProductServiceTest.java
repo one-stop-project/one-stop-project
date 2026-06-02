@@ -6,7 +6,6 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.BDDMockito.then;
 import static org.mockito.Mockito.never;
@@ -111,65 +110,95 @@ class BuyerProductServiceTest {
     class Search {
 
         @Test
-        @DisplayName("keyword가 null이면 repository에 null 키워드로 전달된다")
+        @DisplayName("keyword가 null이면 cond에 null 키워드로 전달된다")
         void nullKeyword_passesNullToRepository() {
             // given
-            given(productRepository.searchApproved(any(), any(), any(), any(), any(), any(), any()))
-                .willReturn(Page.empty(pageable));
+            given(productRepository.search(any(), any())).willReturn(Page.empty(pageable));
 
             // when
             buyerProductService.search(null, null, null, null, SortType.LATEST, pageable);
 
             // then
-            then(productRepository).should().searchApproved(
-                eq(ProductStatus.APPROVED), eq(SellerStatus.APPROVED),
-                isNull(), isNull(), isNull(), isNull(), any(Pageable.class));
+            then(productRepository).should().search(
+                argThat(cond -> cond.keyword() == null
+                    && cond.productStatus() == ProductStatus.APPROVED
+                    && cond.sellerStatus() == SellerStatus.APPROVED
+                    && cond.sort() == SortType.LATEST),
+                any(Pageable.class));
         }
 
         @Test
-        @DisplayName("keyword가 빈 문자열이면 repository에 null로 정규화되어 전달된다")
+        @DisplayName("keyword가 빈 문자열이면 cond에 null로 정규화되어 전달된다")
         void blankKeyword_normalizedToNull() {
             // given
-            given(productRepository.searchApproved(any(), any(), any(), any(), any(), any(), any()))
-                .willReturn(Page.empty(pageable));
+            given(productRepository.search(any(), any())).willReturn(Page.empty(pageable));
 
             // when
             buyerProductService.search("", null, null, null, SortType.LATEST, pageable);
 
             // then
-            then(productRepository).should().searchApproved(
-                any(), any(), isNull(), any(), any(), any(), any());
+            then(productRepository).should().search(
+                argThat(cond -> cond.keyword() == null), any(Pageable.class));
         }
 
         @Test
-        @DisplayName("keyword가 공백만 있으면 repository에 null로 정규화되어 전달된다")
+        @DisplayName("keyword가 공백만 있으면 cond에 null로 정규화되어 전달된다")
         void whitespaceKeyword_normalizedToNull() {
             // given
-            given(productRepository.searchApproved(any(), any(), any(), any(), any(), any(), any()))
-                .willReturn(Page.empty(pageable));
+            given(productRepository.search(any(), any())).willReturn(Page.empty(pageable));
 
             // when
             buyerProductService.search("   ", null, null, null, SortType.LATEST, pageable);
 
             // then
-            then(productRepository).should().searchApproved(
-                any(), any(), isNull(), any(), any(), any(), any());
+            then(productRepository).should().search(
+                argThat(cond -> cond.keyword() == null), any(Pageable.class));
         }
 
         @Test
-        @DisplayName("정상 keyword는 repository에 그대로 전달된다")
+        @DisplayName("정상 keyword/카테고리는 cond에 그대로 전달된다")
         void validKeyword_passedAsIs() {
             // given
-            given(productRepository.searchApproved(any(), any(), any(), any(), any(), any(), any()))
-                .willReturn(Page.empty(pageable));
+            given(productRepository.search(any(), any())).willReturn(Page.empty(pageable));
 
             // when
             buyerProductService.search("맥북", 5L, null, null, SortType.LATEST, pageable);
 
             // then
-            then(productRepository).should().searchApproved(
-                eq(ProductStatus.APPROVED), eq(SellerStatus.APPROVED),
-                eq("맥북"), eq(5L), isNull(), isNull(), any(Pageable.class));
+            then(productRepository).should().search(
+                argThat(cond -> "맥북".equals(cond.keyword())
+                    && cond.categoryId() == 5L
+                    && cond.minPrice() == null
+                    && cond.maxPrice() == null),
+                any(Pageable.class));
+        }
+
+        @Test
+        @DisplayName("FULLTEXT 연산자 문자는 제거되고 공백은 하나로 압축된다")
+        void operatorChars_strippedAndCollapsed() {
+            // given
+            given(productRepository.search(any(), any())).willReturn(Page.empty(pageable));
+
+            // when
+            buyerProductService.search("맥북+프로", null, null, null, SortType.LATEST, pageable);
+
+            // then
+            then(productRepository).should().search(
+                argThat(cond -> "맥북 프로".equals(cond.keyword())), any(Pageable.class));
+        }
+
+        @Test
+        @DisplayName("연산자 문자만 있는 검색어는 null로 정규화된다")
+        void operatorOnlyKeyword_normalizedToNull() {
+            // given
+            given(productRepository.search(any(), any())).willReturn(Page.empty(pageable));
+
+            // when
+            buyerProductService.search("+-*\"()", null, null, null, SortType.LATEST, pageable);
+
+            // then
+            then(productRepository).should().search(
+                argThat(cond -> cond.keyword() == null), any(Pageable.class));
         }
     }
 
