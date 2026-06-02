@@ -48,6 +48,9 @@ public class AdminCouponService {
     public AdminCouponResponse deactivateCoupon(Long couponId) {
         Coupon coupon = couponRepository.findById(couponId)
             .orElseThrow(() -> new CustomException(ErrorCode.COUPON_004));
+        if (coupon.getStatus() == CouponStatus.INACTIVE) {
+            throw new CustomException(ErrorCode.COUPON_009);
+        }
         coupon.deactivate();
         return AdminCouponResponse.from(coupon);
     }
