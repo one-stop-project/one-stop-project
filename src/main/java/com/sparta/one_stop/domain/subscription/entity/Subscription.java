@@ -45,6 +45,9 @@ public class Subscription extends BaseEntity {
     @Column(name = "next_payment_date", nullable = false)
     private LocalDateTime nextPaymentDate;
 
+    @Column(name = "cancel_reason", length = 255)
+    private String cancelReason;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private SubscriptionStatus status;
@@ -66,7 +69,7 @@ public class Subscription extends BaseEntity {
     /**
      * 구독 해지
      */
-    public void cancel() {
+    public void cancel(String reason) {
 
         if (this.status == SubscriptionStatus.CANCELLED) {
             throw new CustomException(ErrorCode.SUBSCRIPTION_003);
@@ -76,6 +79,7 @@ public class Subscription extends BaseEntity {
             throw new CustomException(ErrorCode.SUBSCRIPTION_011);
         }
 
+        this.cancelReason = reason;
         this.status = SubscriptionStatus.CANCELLED;
     }
 

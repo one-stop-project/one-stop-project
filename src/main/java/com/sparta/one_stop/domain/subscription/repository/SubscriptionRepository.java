@@ -12,16 +12,17 @@ public interface SubscriptionRepository
     extends JpaRepository<Subscription, Long> {
 
     /**
-     * 내 최신 구독 조회
-     */
-    Optional<Subscription> findTopByUserIdOrderByCreatedAtDesc(
-        Long userId
-    );
-
-    /**
      * ACTIVE 또는 CANCELLED 존재 여부
      */
     boolean existsByUserIdAndStatusIn(
+        Long userId,
+        List<SubscriptionStatus> statuses
+    );
+
+    /**
+     * 내 유효 구독 조회
+     */
+    Optional<Subscription> findTopByUserIdAndStatusInOrderByCreatedAtDesc(
         Long userId,
         List<SubscriptionStatus> statuses
     );
@@ -32,10 +33,5 @@ public interface SubscriptionRepository
     List<Subscription> findAllByStatusAndEndAtBefore(
         SubscriptionStatus status,
         LocalDateTime now
-    );
-
-    Optional<Subscription> findByUserIdAndStatusIn(
-        Long userId,
-        List<SubscriptionStatus> statuses
     );
 }
