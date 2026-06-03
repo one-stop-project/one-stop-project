@@ -12,5 +12,6 @@ public record AiPromptProperties(
         String clothing,
         String electronics,
         String food,
-        String general
+        String general,
+        String assistant
 ) {}
