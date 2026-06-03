@@ -15,21 +15,21 @@ import java.security.MessageDigest;
 
 @Slf4j
 @Component
-public class PointIntergrityHasher {
+public class PointIntegrityHasher {
 
     private static final String ALGORITHM = "HmacSHA256";
 
-    private static PointIntergrityHasher INSTANCE;
+    private static PointIntegrityHasher INSTANCE;
 
     private final byte[] secretKey;
 
-    public PointIntergrityHasher(
+    public PointIntegrityHasher(
         @Value("${point.integrity.secret:CHANGE_ME_TO_LONG_RANDOM_STRING_AT_LEAST_32_BYTES}") String secret) {
 
         if (secret == null || secret.getBytes(StandardCharsets.UTF_8).length < 32) {
             // 운영 환경에서 키 조건 미 일치시 블락
             throw new IllegalStateException(
-                "point.integrity.secret must be at least 32 bytes for HMAC-SHA256 security");
+                "point.integrity.secret must be configured with a secure random string of at least 32 bytes");
         }
         this.secretKey = secret.getBytes(StandardCharsets.UTF_8);
     }

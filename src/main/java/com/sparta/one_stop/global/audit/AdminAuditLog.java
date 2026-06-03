@@ -44,6 +44,16 @@ public class AdminAuditLog {
     @Column(nullable = false, length = 30)
     private String targetResource;
 
+    /** 작업 수행자 ID */
+    @Column(nullable = false)
+    private Long adminId;
+
+    /** 작업 수행자 사용자명 */
+    @Column(nullable = false, length =50)
+    private String adminUsername;
+
+    /** 대상 리소스 — Point, User, Order 등 */
+
     /** 호출된 메서드 시그니처 — 디버깅용 */
     @Column(length = 200)
     private String methodName;
@@ -76,13 +86,28 @@ public class AdminAuditLog {
     @Builder
     private AdminAuditLog(String action, String targetResource, String methodName,
                           String args, String result, String errorDetail,
+                          Long adminId, String adminUsername,
                           String clientIp, String userAgent, LocalDateTime occurredAt) {
+        if (action == null || action.isBlank()) {
+            throw new IllegalArgumentException("action은 필수입니다.");
+        }
+        if (targetResource == null || targetResource.isBlank()) {
+            throw new IllegalArgumentException("targetResource는 필수입니다.");
+        }
+        if (result == null || result.isBlank()) {
+            throw new IllegalArgumentException("result는 필수입니다.");
+        }
+        if (occurredAt == null) {
+            throw new IllegalArgumentException("occurredAt은 필수입니다.");
+        }
         this.action = action;
         this.targetResource = targetResource;
         this.methodName = methodName;
         this.args = args;
         this.result = result;
         this.errorDetail = errorDetail;
+        this.adminId = adminId;
+        this.adminUsername = adminUsername;
         this.clientIp = clientIp;
         this.userAgent = userAgent;
         this.occurredAt = occurredAt;

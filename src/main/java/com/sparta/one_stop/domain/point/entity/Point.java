@@ -1,6 +1,6 @@
 package com.sparta.one_stop.domain.point.entity;
 
-import com.sparta.one_stop.domain.point.util.PointIntergrityHasher;
+import com.sparta.one_stop.domain.point.util.PointIntegrityHasher;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.global.entity.BaseEntity;
 import com.sparta.one_stop.global.exception.CustomException;
@@ -57,7 +57,7 @@ public class Point extends BaseEntity {
         point.user = user;
         point.balance = 0;
         point.version = 0;
-        point.integrityHash = PointIntergrityHasher.hash(user.getId(), 0, 0);
+        point.integrityHash = PointIntegrityHasher.hash(user.getId(), 0, 0);
         return point;
     }
 
@@ -87,7 +87,7 @@ public class Point extends BaseEntity {
 
     // 무결성 검증 - 조회 시점에 호출
     public void verifyIntegrity() {
-        String expectedHash = PointIntergrityHasher.hash(user.getId(), balance, version);
+        String expectedHash = PointIntegrityHasher.hash(user.getId(), balance, version);
         if(!expectedHash.equals(this.integrityHash)) {
             throw new CustomException(ErrorCode.POINT_010,
                 String.format("포인트 무결성 위반 감지, userId=%d, balance=%d, version=%d",
@@ -96,15 +96,21 @@ public class Point extends BaseEntity {
     }
 
     // 내부
+    // 해시 재계산
+    // version +1 로 미리 계산하는 이유
+    // : increase/decrease 직후 호출됨
+    // : JPA가 flush 시 UPDATE 발행하며 version을 +1함
+    // : flush 후 시점의 version을 미리 예측해서 해시를 장착
+    // : 다음 트랜잭션 SELECT 시 : DB의 version과 해시 입력의 version이 일치 -> verify 통과
     private void regenerateHash() {
         // version은 @Version 변경 시 자동 증가 -> 미리 +1 해서 해시 생성
         // JPA가 dirty checking으로 UPDATE 발행 시 version도 +1되어 해시와 일치)
-        this.integrityHash = PointIntergrityHasher.hash(user.getId(), balance, version +1 );
+        this.integrityHash = PointIntegrityHasher.hash(user.getId(), balance, version +1 );
     }
 
     private void validatePositiveAmount(Integer amount) {
         if(amount == null || amount <= 0) {
-            throw new CustomException(ErrorCode.POINT_003, "포인트는 양수여야 합니다:" + amount);
+            throw new CustomException(ErrorCode.POINT_003, "포인트 변동 양수여야 합니다:" + amount);
         }
     }
 
