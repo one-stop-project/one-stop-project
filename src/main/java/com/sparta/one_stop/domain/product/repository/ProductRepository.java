@@ -87,7 +87,7 @@ public interface ProductRepository extends JpaRepository<Product, Long>, Product
                    "INNER JOIN product p ON p.product_id = pt.product_id " +
                    "INNER JOIN seller s ON s.seller_id = p.seller_id " +
                    "WHERE p.status = 'APPROVED' AND s.status = 'APPROVED' " +
-                   "GROUP BY pt.tag ORDER BY cnt DESC LIMIT :limit",
+                   "GROUP BY pt.tag ORDER BY cnt DESC, pt.tag ASC LIMIT :limit",
            nativeQuery = true)
     List<Object[]> findTopTags(@Param("limit") int limit);
 

@@ -25,22 +25,26 @@ public class PopularTagService {
     private final ProductRepository productRepository;
 
     // 승인된 상품의 태그를 집계해 Redis ZSet에 갱신
+    // 임시 키에 적재 후 rename으로 원자적 교체 → 갱신 도중 빈 결과 노출 방지
     public void refresh() {
+        String tempKey = POPULAR_TAG_KEY + ":tmp";
         try {
             List<Object[]> rows = productRepository.findTopTags(TOP_N);
             if (rows.isEmpty()) {
                 redisTemplate.delete(POPULAR_TAG_KEY);
                 return;
             }
-            redisTemplate.delete(POPULAR_TAG_KEY);
+            redisTemplate.delete(tempKey);
             for (Object[] row : rows) {
                 String tag = (String) row[0];
                 long count = ((Number) row[1]).longValue();
-                redisTemplate.opsForZSet().add(POPULAR_TAG_KEY, tag, count);
+                redisTemplate.opsForZSet().add(tempKey, tag, count);
             }
-            redisTemplate.expire(POPULAR_TAG_KEY, Duration.ofSeconds(CACHE_TTL_SECONDS));
+            redisTemplate.expire(tempKey, Duration.ofSeconds(CACHE_TTL_SECONDS));
+            redisTemplate.rename(tempKey, POPULAR_TAG_KEY);
             log.info("[PopularTag] refresh done. tags={}", rows.size());
         } catch (Exception e) {
+            redisTemplate.delete(tempKey);
             log.error("[PopularTag] refresh failed", e);
         }
     }

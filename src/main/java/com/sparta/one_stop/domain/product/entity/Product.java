@@ -175,10 +175,15 @@ public class Product extends BaseEntity {
         this.categoryMappings.add(mapping);
     }
 
-    // 태그 전체 교체 (null이면 비움)
+    // 태그 전체 교체 (null이면 비움, 저장 전 trim+소문자 정규화)
     public void replaceTags(Set<String> newTags) {
         this.tags.clear();
-        if (newTags != null) this.tags.addAll(newTags);
+        if (newTags != null) {
+            newTags.stream()
+                .filter(t -> t != null && !t.isBlank())
+                .map(t -> t.trim().toLowerCase(java.util.Locale.ROOT))
+                .forEach(this.tags::add);
+        }
     }
 
     public Set<String> getTags() {
