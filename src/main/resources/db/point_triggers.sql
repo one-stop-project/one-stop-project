@@ -123,7 +123,7 @@ BEGIN
        OR OLD.user_id <> NEW.user_id
        OR OLD.point_id <> NEW.point_id
        OR OLD.created_at <> NEW.created_at
-       OR (OLD.expire_at IS NOT NULL AND NEW.expire_at IS NOT NULL AND OLD.expire_at <> NEW.expire_at)
+       OR (OLD.expire_at IS NOT NULL OR NEW.expire_at IS NOT NULL) AND NOT (OLD.expire_at <> NEW.expire_at)
     THEN
         SIGNAL SQLSTATE '45000'
         SET MESSAGE_TEXT = 'PointHistory immutable fields modification is forbidden';
