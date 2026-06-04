@@ -176,12 +176,54 @@ class ProductRepositorySearchTest {
             .containsExactly(pD.getId(), pB.getId());
     }
 
+    @Test
+    @DisplayName("연관상품(findRelated): 같은 카테고리여도 재고 0(ON_SALE)·STOP 옵션은 제외")
+    void findRelated_excludesOutOfStockAndStopped_inSameCategory() {
+        // cat1 + ON_SALE이지만 재고 0 → i.stock > 0 필터로 제외돼야 함
+        Product outOfStock = persistSingleItemProduct("재고0", cat1, ProductItemStatus.ON_SALE, 0L);
+        // cat1 + 재고 있지만 STOP → i.status = ON_SALE 필터로 제외 (카테고리 안에서도 빠지는지)
+        Product stopped = persistSingleItemProduct("정지", cat1, ProductItemStatus.STOP, 10L);
+        em.flush();
+        em.clear();
+
+        List<Product> result = productRepository.findRelated(
+            List.of(cat1.getId()), pA.getId(),
+            ProductStatus.APPROVED, SellerStatus.APPROVED, ProductItemStatus.ON_SALE,
+            PageRequest.of(0, 10));
+
+        List<Long> resultIds = result.stream().map(Product::getId).toList();
+        // 정상(cat1·판매중·재고>0)인 pB, pD만 남고, 재고0·STOP은 제외
+        assertThat(resultIds).containsExactlyInAnyOrder(pB.getId(), pD.getId());
+        assertThat(resultIds).doesNotContain(outOfStock.getId(), stopped.getId());
+    }
+
     // ===== 헬퍼 =====
 
     private void bumpScore(Product p, long views, long sales) {
         Product managed = em.find(Product.class, p.getId());
         if (views > 0) managed.syncViewCount(views);
         if (sales > 0) managed.increaseSalesCount(sales);
+    }
+
+    // 옵션 1건짜리 상품(상태·재고 지정) — 연관 필터(판매중·재고>0) 검증용
+    private Product persistSingleItemProduct(String name, Category category, ProductItemStatus status, long stock) {
+        Product p = Product.builder()
+            .seller(seller).name(name).description(name + " 설명").thumbnailUrl("http://img/" + name)
+            .build();
+        p.approve();
+        ProductItem it = ProductItem.builder()
+            .product(p)
+            .optionValue1("opt").optionValue2("기본").optionValue3("기본")
+            .optionValue4("기본").optionValue5("기본")
+            .price(3000L).stock(stock)                 // 생성자 기본 상태 = ON_SALE
+            .build();
+        if (status == ProductItemStatus.STOP) {
+            it.stop();
+        }
+        p.getProductItems().add(it);
+        p.getCategoryMappings().add(
+            ProductCategoryMapping.builder().product(p).category(category).build());
+        return productRepository.save(p);
     }
 
     private ProductSearchCond cond(SortType sort, Long categoryId, Long minPrice, Long maxPrice) {
