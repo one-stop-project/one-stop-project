@@ -2,6 +2,7 @@ package com.sparta.one_stop.domain.subscription.repository;
 
 import com.sparta.one_stop.domain.subscription.entity.Subscription;
 import com.sparta.one_stop.global.enums.subscription.SubscriptionStatus;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.LocalDateTime;
@@ -28,10 +29,20 @@ public interface SubscriptionRepository
     );
 
     /**
-     * 만료 스케줄러용
+     * 자동 결제 (chunk 처리)
+     */
+    List<Subscription> findAllByStatusAndNextPaymentDateLessThanEqual(
+        SubscriptionStatus status,
+        LocalDateTime now,
+        Pageable pageable
+    );
+
+    /**
+     * 만료 처리 (chunk 처리)
      */
     List<Subscription> findAllByStatusAndEndAtBefore(
         SubscriptionStatus status,
-        LocalDateTime now
+        LocalDateTime now,
+        Pageable pageable
     );
 }
