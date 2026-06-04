@@ -36,6 +36,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 @Service
@@ -304,8 +305,8 @@ public class SellerProductService {
             .findFirst()
             .orElseThrow(() -> new CustomException(ErrorCode.PRODUCT_011));
 
-        // 이미 대표(display_order=1)인 이미지를 다시 선택하면 실제 변경 없음
-        boolean alreadyThumbnail = target.isThumbnail();
+        // 재승인 판정용 — 동기화 전 썸네일 URL 보관 (대표 위치가 아니라 실제 URL 변경 여부로 판단)
+        String previousThumbnailUrl = product.getThumbnailUrl();
 
         // 선택 이미지를 대표로 승격, 나머지는 기존 상대 순서 유지
         target.updateDisplayOrder(1);
@@ -319,8 +320,8 @@ public class SellerProductService {
         // 대표 이미지 URL을 상품 썸네일에 동기화
         product.changeThumbnailUrl(target.getImageUrl());
 
-        // 대표(썸네일)가 실제로 바뀐 경우에만 재승인 대상
-        if (!alreadyThumbnail) {
+        // 썸네일 URL이 실제로 바뀐 경우에만 재승인 대상
+        if (!Objects.equals(previousThumbnailUrl, product.getThumbnailUrl())) {
             markForReapproval(product);
         }
 
