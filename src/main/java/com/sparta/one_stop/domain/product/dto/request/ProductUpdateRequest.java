@@ -1,5 +1,6 @@
 package com.sparta.one_stop.domain.product.dto.request;
 
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import lombok.AccessLevel;
 import lombok.Getter;
@@ -21,4 +22,8 @@ public class ProductUpdateRequest {
 
     @Size(min = 1, max = 3, message = "카테고리는 1~3개까지 선택 가능합니다")
     private List<Long> categoryIds;
+
+    // null이면 태그 변경 없음, 빈 리스트면 태그 전체 삭제
+    @Size(max = 10, message = "태그는 최대 10개까지 가능합니다")
+    private List<@NotBlank(message = "태그는 비어있을 수 없습니다") @Size(max = 30, message = "태그는 30자 이하여야 합니다") String> tags;
 }

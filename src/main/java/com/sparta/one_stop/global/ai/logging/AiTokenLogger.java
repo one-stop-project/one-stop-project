@@ -5,6 +5,8 @@ import org.slf4j.MDC;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.stereotype.Component;
 
+import java.util.List;
+
 /**
  * AI 호출 후 토큰 사용량을 MDC 와 함께 로깅합니다.
  * requestId 를 MDC 에 심어 로그 집계 도구(ELK 등)에서 요청 단위 추적이 가능합니다.
@@ -13,7 +15,7 @@ import org.springframework.stereotype.Component;
 @Component
 public class AiTokenLogger {
 
-    private static final String MDC_REQUEST_ID = "ai.requestId";
+    public static final String MDC_REQUEST_ID = "ai.requestId";
 
     /**
      * 성공 응답 로깅.
@@ -42,6 +44,14 @@ public class AiTokenLogger {
         } finally {
             MDC.remove(MDC_REQUEST_ID);
         }
+    }
+
+    /** searchProducts 툴 호출 로깅 — 실제 사용된 categoryId를 포함해 디버깅 추적용 */
+    public void logSearchCall(String keyword, List<String> tags, Long categoryId, Long maxPrice) {
+        String requestId = MDC.get(MDC_REQUEST_ID);
+        log.info("[AI Tool] searchProducts requestId={} keyword={} tags={} categoryId={} maxPrice={}",
+                requestId != null ? requestId : "unknown",
+                keyword, tags, categoryId, maxPrice);
     }
 
     /** 실패 응답 로깅 */

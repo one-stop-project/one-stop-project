@@ -7,6 +7,7 @@ import com.sparta.one_stop.global.ai.prompt.AiPromptProperties;
 import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatResponse;
 import org.springframework.beans.factory.annotation.Value;
@@ -44,12 +45,13 @@ public class ShoppingAssistantService {
     }
 
     @CircuitBreaker(name = "ai-assistant", fallbackMethod = "assistFallback")
-    public ShoppingAssistantResponse assist(String userMessage) {
+    public ShoppingAssistantResponse assist(String userMessage, Long categoryId) {
         String requestId = UUID.randomUUID().toString();
         long start = System.currentTimeMillis();
+        MDC.put(AiTokenLogger.MDC_REQUEST_ID, requestId);
         try {
             ChatResponse response = chatClient.prompt()
-                .system(promptProperties.assistant())
+                .system(buildSystemPrompt(categoryId))
                 .user(userMessage)
                 .tools(shoppingAssistantTool)
                 .call()
@@ -65,10 +67,20 @@ public class ShoppingAssistantService {
         } catch (Exception e) {
             tokenLogger.logFailure(requestId, System.currentTimeMillis() - start, modelName, e);
             throw e;
+        } finally {
+            MDC.remove(AiTokenLogger.MDC_REQUEST_ID);
         }
     }
 
-    ShoppingAssistantResponse assistFallback(String userMessage, Throwable t) {
+    private String buildSystemPrompt(Long categoryId) {
+        String base = promptProperties.assistant();
+        if (categoryId == null) return base;
+        return base + "\n[카테고리 힌트] 현재 고객이 카테고리 ID " + categoryId
+            + " 페이지를 보고 있습니다. 질문이 이 카테고리와 관련 있으면 searchProducts의 categoryId 파라미터에 "
+            + categoryId + "를 사용하고, 관련 없으면 null로 전체 검색하세요.";
+    }
+
+    ShoppingAssistantResponse assistFallback(String userMessage, Long categoryId, Throwable t) {
         log.warn("[AI Assistant] circuit breaker triggered. reason={}", t.getMessage());
         return new ShoppingAssistantResponse("현재 AI 어시스턴트를 이용할 수 없습니다. 잠시 후 다시 시도해주세요.");
     }

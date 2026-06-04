@@ -3,6 +3,7 @@ package com.sparta.one_stop.domain.product.controller;
 import com.sparta.one_stop.domain.product.dto.request.ProductCreateRequest;
 import com.sparta.one_stop.domain.product.dto.request.ProductImageAddRequest;
 import com.sparta.one_stop.domain.product.dto.request.ProductUpdateRequest;
+import com.sparta.one_stop.domain.product.dto.response.PopularTagResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductCreateResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductDeleteResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductDetailResponse;
@@ -10,7 +11,10 @@ import com.sparta.one_stop.domain.product.dto.response.ProductImageAddResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductImageDeleteResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductImageThumbnailResponse;
 import com.sparta.one_stop.domain.product.dto.response.SellerProductListResponse;
+import com.sparta.one_stop.domain.product.service.PopularTagService;
 import com.sparta.one_stop.domain.product.service.SellerProductService;
+import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import com.sparta.one_stop.global.response.ApiResponse;
 import com.sparta.one_stop.global.security.AuthUser;
 import io.swagger.v3.oas.annotations.Operation;
@@ -31,7 +35,10 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
 
 @Tag(name = "Seller - Product", description = "판매자 본인 상품 관리 API")
 @RestController
@@ -39,7 +46,24 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class SellerProductController {
 
+    private static final int TAG_AUTOCOMPLETE_MAX_LIMIT = 10;
+
     private final SellerProductService sellerProductService;
+    private final PopularTagService popularTagService;
+
+    // 태그 자동완성: GET /api/seller/products/tags/popular?keyword=면&limit=10
+    @Operation(summary = "인기 태그 자동완성 — 태그 입력 시 사용 빈도 기반 제안")
+    @GetMapping("/tags/popular")
+    public ResponseEntity<ApiResponse<List<PopularTagResponse>>> getPopularTags(
+        @RequestParam(required = false) String keyword,
+        @RequestParam(defaultValue = "10") int limit
+    ) {
+        if (limit < 1 || limit > TAG_AUTOCOMPLETE_MAX_LIMIT) {
+            throw new CustomException(ErrorCode.PRODUCT_014,
+                "limit은 1~" + TAG_AUTOCOMPLETE_MAX_LIMIT + " 범위여야 합니다 (요청 limit=" + limit + ")");
+        }
+        return ResponseEntity.ok(ApiResponse.success(popularTagService.getAutocompleteTags(keyword, limit)));
+    }
 
     // 상품 등록
     @Operation(summary = "상품 등록")

@@ -28,7 +28,7 @@ public class AiShoppingAssistantController {
         @RequestBody @Valid ShoppingAssistantRequest request
     ) {
         return ResponseEntity.ok(ApiResponse.success(
-            shoppingAssistantService.assist(request.message())
+            shoppingAssistantService.assist(request.message(), request.categoryId())
         ));
     }
 }
