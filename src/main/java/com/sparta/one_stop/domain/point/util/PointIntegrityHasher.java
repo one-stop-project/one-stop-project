@@ -24,9 +24,9 @@ public class PointIntegrityHasher {
     private final byte[] secretKey;
 
     public PointIntegrityHasher(
-        @Value("${point.integrity.secret:CHANGE_ME_TO_LONG_RANDOM_STRING_AT_LEAST_32_BYTES}") String secret) {
+        @Value("${point.integrity.secret}") String secret) {
 
-        if (secret == null || secret.getBytes(StandardCharsets.UTF_8).length < 32) {
+        if (secret == null || secret.isBlank() || secret.getBytes(StandardCharsets.UTF_8).length < 32) {
             // 운영 환경에서 키 조건 미 일치시 블락
             throw new IllegalStateException(
                 "point.integrity.secret must be configured with a secure random string of at least 32 bytes");

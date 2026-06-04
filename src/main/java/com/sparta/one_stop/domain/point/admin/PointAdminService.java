@@ -11,6 +11,7 @@ import com.sparta.one_stop.global.enums.point.PointHistoryType;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Isolation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
@@ -57,6 +58,7 @@ public class PointAdminService {
      *
      * <p>회계·재무 보고 시 사용
      */
+    @Transactional(readOnly = true, isolation = Isolation.REPEATABLE_READ)
     public PointSystemStats getSystemStats() {
         QPointHistory ph = QPointHistory.pointHistory;
         QPoint p = QPoint.point;

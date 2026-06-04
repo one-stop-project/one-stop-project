@@ -20,6 +20,8 @@ import org.springframework.batch.item.database.builder.JpaCursorItemReaderBuilde
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.transaction.PlatformTransactionManager;
 
 import java.time.LocalDate;
@@ -97,8 +99,11 @@ public class PointExpireBatchConfig {
             .processor(processor)
             .writer(writer)
             .faultTolerant()
+            .retryLimit(3)
+            .retry(ObjectOptimisticLockingFailureException.class)
             .skipLimit(100)                         // 최대 100건까지 개별 실패 허용
-            .skip(Exception.class)
+            .noSkip(DataIntegrityViolationException.class)
+            .noSkip(NullPointerException.class)
             .listener(new BatchSkipListener())
             .build();
     }
