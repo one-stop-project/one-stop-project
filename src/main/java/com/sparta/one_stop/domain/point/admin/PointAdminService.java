@@ -1,7 +1,10 @@
 package com.sparta.one_stop.domain.point.admin;
 
 import com.querydsl.core.Tuple;
+import com.querydsl.core.types.dsl.NumberExpression;
 import com.querydsl.jpa.impl.JPAQueryFactory;
+import com.sparta.one_stop.domain.point.admin.PointInconsistencyReport;
+import com.sparta.one_stop.domain.point.admin.PointSystemStats;
 import com.sparta.one_stop.domain.point.entity.QPoint;
 import com.sparta.one_stop.domain.point.entity.QPointHistory;
 import com.sparta.one_stop.global.enums.point.PointHistoryType;
@@ -29,6 +32,13 @@ import java.util.List;
  *   <li>PointService는 일반 사용자 API용 — Admin 기능과 권한·트랜잭션 분리</li>
  *   <li>대용량 집계 쿼리가 일반 트래픽 영향 안 주도록 readOnly 격리</li>
  * </ul>
+ *
+ * <p><b>타입 처리 주의사항</b>
+ * <ul>
+ *   <li>Point.balance / PointHistory.amount 는 Integer (단일 행)</li>
+ *   <li>SUM 결과는 누적되면 Integer.MAX_VALUE(약 21억) 초과 가능 → Long으로 안전 변환</li>
+ *   <li>coalesce(0)는 Integer 타입과 일치해야 함 (0L 불가)</li>
+ * </ul>
  */
 @Slf4j
 @Service
@@ -51,9 +61,15 @@ public class PointAdminService {
         QPointHistory ph = QPointHistory.pointHistory;
         QPoint p = QPoint.point;
 
+        // ★ SUM 결과 표현식을 변수로 빼서 select와 t.get()에서 동일하게 사용
+        //   - amount(Integer).sum() → NumberExpression<Integer>
+        //   - coalesce(0) → Integer 타입과 일치 (0L 쓰면 컴파일 에러)
+        //   - 누적합이 21억 초과 가능하므로 .longValue()로 Long 변환 (오버플로우 방어)
+        NumberExpression<Long> amountSum = ph.amount.sum().coalesce(0).longValue();
+
         // 타입별 합계 (amount 기준 — 발생한 모든 변동의 누적)
         List<Tuple> typeStats = queryFactory
-            .select(ph.type, ph.amount.sum().coalesce(0L))
+            .select(ph.type, amountSum)
             .from(ph)
             .groupBy(ph.type)
             .fetch();
@@ -62,7 +78,7 @@ public class PointAdminService {
 
         for (Tuple t : typeStats) {
             PointHistoryType type = t.get(ph.type);
-            Long sum = t.get(ph.amount.sum().coalesce(0L));
+            Long sum = t.get(amountSum);
             if (sum == null || type == null) continue;
 
             switch (type) {
@@ -75,6 +91,7 @@ public class PointAdminService {
         }
 
         // 현재 시스템에 살아있는 총 잔액 (모든 유저 balance 합)
+        // ★ balance(Integer).sum() → coalesce(0) Integer 일치 → longValue()로 안전 변환
         Long totalLiveBalance = queryFactory
             .select(p.balance.sum().coalesce(0).longValue())
             .from(p)
@@ -112,18 +129,22 @@ public class PointAdminService {
         QPoint p = QPoint.point;
         QPointHistory ph = QPointHistory.pointHistory;
 
+        // ★ 동일 표현식 변수화 — select / having / t.get() 에서 같은 인스턴스 사용
+        //   remainingAmount(Integer).sum().coalesce(0) → NumberExpression<Integer>
+        NumberExpression<Integer> remainingSumExpr = ph.remainingAmount.sum().coalesce(0);
+
         // 각 유저의 balance vs SUM(remaining)
         List<Tuple> all = queryFactory
             .select(
                 p.user.id,
                 p.balance,
-                ph.remainingAmount.sum().coalesce(0)
+                remainingSumExpr
             )
             .from(p)
             .leftJoin(ph).on(ph.point.eq(p)
                 .and(ph.remainingAmount.gt(0)))
             .groupBy(p.user.id, p.balance)
-            .having(p.balance.ne(ph.remainingAmount.sum().coalesce(0)))
+            .having(p.balance.ne(remainingSumExpr))
             .limit(limit)
             .fetch();
 
@@ -131,7 +152,7 @@ public class PointAdminService {
         for (Tuple t : all) {
             Long userId = t.get(p.user.id);
             Integer balance = t.get(p.balance);
-            Integer remainingSum = t.get(ph.remainingAmount.sum().coalesce(0));
+            Integer remainingSum = t.get(remainingSumExpr);
 
             reports.add(PointInconsistencyReport.builder()
                 .userId(userId)
