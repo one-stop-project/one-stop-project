@@ -74,3 +74,8 @@ coupon:
     # lua: Lua Script 기반 원자 처리
     # lock: Redis Lock 기반 처리
     strategy: decr
+
+point:
+  integrity:
+    # 테스트 환경을 통과하기 위한 32바이트 이상의 임시(더미) 시크릿 키
+    secret: "test_secret_key_for_point_integrity_validation_must_be_long"

@@ -20,6 +20,7 @@ import org.springframework.batch.item.database.builder.JpaCursorItemReaderBuilde
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -64,6 +65,7 @@ import java.util.Map;
  */
 @Slf4j
 @Configuration
+@Profile("!test")
 @RequiredArgsConstructor
 public class PointExpireBatchConfig {
 
