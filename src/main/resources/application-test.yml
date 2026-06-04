@@ -28,11 +28,6 @@ spring:
         options:
           model: "gpt-4o-mini"
 
-  autoconfigure:
-    exclude:
-      - org.redisson.spring.starter.RedissonAutoConfigurationV2
-
-
 jwt:
   secret:
     key: ${JWT_SECRET_KEY:c3ByaW5nLWJvb3Qtc2VjdXJpdHktand0LXR1dG9yaWFsLXNlY3JldC1rZXktMjAyMw==}

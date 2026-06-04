@@ -65,7 +65,6 @@ import java.util.Map;
  */
 @Slf4j
 @Configuration
-@Profile("!test")
 @RequiredArgsConstructor
 public class PointExpireBatchConfig {
 

@@ -7,6 +7,7 @@ import org.springframework.batch.core.Job;
 import org.springframework.batch.core.JobParameters;
 import org.springframework.batch.core.JobParametersBuilder;
 import org.springframework.batch.core.launch.JobLauncher;
+import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -28,7 +29,7 @@ public class PointExpireScheduler {
     private final JobExplorer jobExplorer; // 🚀 현재 실행 중인 배치를 확인하기 위해 추가
     private final RedissonClient redissonClient; // 🚀 멀티 서버 동시성 제어를 위해 추가
 
-    @Scheduled(cron = "0 0 0 * * *")
+    @Scheduled(cron = "0 0 3 * * *")
     public void runPointExpireBatch() {
         // 1. Redisson 분산 락 획득 시도 (동일한 시간에 1대의 서버만 실행되도록 보장)
         RLock lock = redissonClient.getLock("point-expire-batch-lock");
