@@ -16,6 +16,7 @@ import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -29,6 +30,12 @@ import java.util.stream.Stream;
         indexes = {
                 @Index(name = "idx_item_product", columnList = "product_id, status"),
                 @Index(name = "idx_item_status_price", columnList = "status, price")
+        },
+        uniqueConstraints = {
+                // 동일 상품 내 옵션 조합 중복 방지 (앱 레벨 검증 + DB 최후 방어선)
+                @UniqueConstraint(name = "uk_product_item_options",
+                        columnNames = {"product_id", "option_value_1", "option_value_2",
+                                "option_value_3", "option_value_4", "option_value_5"})
         })
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)

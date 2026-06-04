@@ -367,7 +367,7 @@ class BuyerProductServiceTest {
             // then
             assertThat(result).isEmpty();
             then(productRepository).should(never())
-                .findRelated(any(), any(), any(), any(), any());
+                .findRelated(any(), any(), any(), any(), any(), any());
         }
 
         @Test
@@ -379,7 +379,7 @@ class BuyerProductServiceTest {
             attachCategory(product, CATEGORY_ID_2);
             given(productRepository.findWithCollectionsById(PRODUCT_ID))
                 .willReturn(Optional.of(product));
-            given(productRepository.findRelated(any(), any(), any(), any(), any()))
+            given(productRepository.findRelated(any(), any(), any(), any(), any(), any()))
                 .willReturn(List.of());
 
             // when
@@ -392,6 +392,7 @@ class BuyerProductServiceTest {
                 eq(PRODUCT_ID),
                 eq(ProductStatus.APPROVED),
                 eq(SellerStatus.APPROVED),
+                eq(ProductItemStatus.ON_SALE),
                 any(Pageable.class)
             );
         }

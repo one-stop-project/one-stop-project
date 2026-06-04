@@ -10,6 +10,7 @@ import com.sparta.one_stop.domain.user.entity.Seller;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.SellerRepository;
 import com.sparta.one_stop.domain.user.repository.UserRepository;
+import com.sparta.one_stop.global.enums.product.ProductItemStatus;
 import com.sparta.one_stop.global.enums.product.ProductStatus;
 import com.sparta.one_stop.global.enums.product.SortType;
 import com.sparta.one_stop.global.enums.user.SellerStatus;
@@ -156,7 +157,32 @@ class ProductRepositorySearchTest {
         assertThat(page.getTotalElements()).isEqualTo(4);
     }
 
+    @Test
+    @DisplayName("연관상품(findRelated): 같은 카테고리 + 판매중(ON_SALE)·재고 보유 + 자기 제외, 인기점수(조회70+판매30) 내림차순")
+    void findRelated_sameCategory_onSaleOnly_excludeSelf_orderByPopularity() {
+        // 인기점수 차등: pD(조회수 100 → 0.7*100=70) > pB(판매수 100 → 0.3*100=30)
+        bumpScore(pD, 100, 0);
+        bumpScore(pB, 0, 100);
+        em.flush();
+        em.clear();
+
+        List<Product> result = productRepository.findRelated(
+            List.of(cat1.getId()), pA.getId(),
+            ProductStatus.APPROVED, SellerStatus.APPROVED, ProductItemStatus.ON_SALE,
+            PageRequest.of(0, 10));
+
+        // cat1 + ON_SALE + 자기(pA) 제외 → pB, pD만 (pC는 cat2·STOP이라 제외). 점수순 pD > pB.
+        assertThat(result.stream().map(Product::getId).toList())
+            .containsExactly(pD.getId(), pB.getId());
+    }
+
     // ===== 헬퍼 =====
+
+    private void bumpScore(Product p, long views, long sales) {
+        Product managed = em.find(Product.class, p.getId());
+        if (views > 0) managed.syncViewCount(views);
+        if (sales > 0) managed.increaseSalesCount(sales);
+    }
 
     private ProductSearchCond cond(SortType sort, Long categoryId, Long minPrice, Long maxPrice) {
         return new ProductSearchCond(
@@ -186,9 +212,10 @@ class ProductRepositorySearchTest {
     }
 
     private ProductItem item(Product product, long price) {
+        // 동일 상품 내 옵션 조합 유니크 제약 충족 — 가격으로 조합을 구분(상품 내 가격은 서로 다름)
         return ProductItem.builder()
             .product(product)
-            .optionValue1("기본").optionValue2("기본").optionValue3("기본")
+            .optionValue1("opt-" + price).optionValue2("기본").optionValue3("기본")
             .optionValue4("기본").optionValue5("기본")
             .price(price).stock(10L)
             .build();
