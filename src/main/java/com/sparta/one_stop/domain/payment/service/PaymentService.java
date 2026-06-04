@@ -19,6 +19,7 @@ import com.sparta.one_stop.global.enums.order.OrderStatus;
 import com.sparta.one_stop.global.enums.payment.PaymentMethod;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
+import com.sparta.one_stop.global.outbox.service.OutboxEventService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +39,7 @@ public class PaymentService {
     private final DeliveryHistoryRepository deliveryHistoryRepository;
     private final PointService pointService;
     private final CouponCommandService couponCommandService;
+    private final OutboxEventService outboxEventService;
 
     /**
      * 결제 승인
@@ -48,6 +50,7 @@ public class PaymentService {
      * - Order / Payment 상태를 동일 트랜잭션 내에서 PAID 처리
      * - 결제 승인 완료 시 OrderItem 접수 처리 및 Delivery 생성
      * - 최초 배송 상태는 ACCEPT
+     * - 결제 승인 완료 이벤트를 Outbox 테이블에 저장
      */
     public ApprovePaymentResponse approvePayment(
         Long userId,
@@ -84,8 +87,17 @@ public class PaymentService {
 
         acceptOrderItemsAndCreateDeliveries(order);
 
-        // TODO: Outbox 이벤트 저장
-        // TODO: 알림 이벤트 연동
+        // 결제 승인 이벤트를 Outbox 테이블에 저장
+        // Kafka 직접 발행 대신 같은 트랜잭션 안에서 이벤트 저장까지 처리한다
+        outboxEventService.savePaymentApprovedEvent(
+            createPaymentApprovedEventId(payment),
+            order.getId(),
+            createPaymentApprovedPayload(
+                userId,
+                order,
+                payment
+            )
+        );
 
         return new ApprovePaymentResponse(
             order.getId(),
@@ -215,6 +227,38 @@ public class PaymentService {
         payment.approve();
 
         return paymentRepository.save(payment);
+    }
+
+    /**
+     * 결제 승인 이벤트 고유 ID 생성
+     */
+    private String createPaymentApprovedEventId(Payment payment) {
+        return "payment-approved-" + payment.getId();
+    }
+
+    /**
+     * 결제 승인 이벤트 payload 생성
+     */
+    private String createPaymentApprovedPayload(
+        Long userId,
+        Order order,
+        Payment payment
+    ) {
+        return """
+            {
+              "paymentId": %d,
+              "orderId": %d,
+              "userId": %d,
+              "amount": %d,
+              "approvedAt": "%s"
+            }
+            """.formatted(
+            payment.getId(),
+            order.getId(),
+            userId,
+            payment.getAmount(),
+            payment.getApprovedAt()
+        );
     }
 
 }

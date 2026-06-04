@@ -19,6 +19,7 @@ import com.sparta.one_stop.global.enums.order.OrderStatus;
 import com.sparta.one_stop.global.enums.payment.PaymentMethod;
 import com.sparta.one_stop.global.enums.payment.PaymentStatus;
 import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.outbox.service.OutboxEventService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -63,6 +64,9 @@ class PaymentServiceTest {
 
     @Mock
     private CouponCommandService couponCommandService;
+
+    @Mock
+    private OutboxEventService outboxEventService;
 
     @InjectMocks
     private PaymentService paymentService;
