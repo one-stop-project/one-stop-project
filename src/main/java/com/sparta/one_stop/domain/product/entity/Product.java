@@ -9,6 +9,7 @@ import lombok.*;
 import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.Collections;
 
 // idx_product_name_fulltext: FULLTEXT(name, description) — DB 마이그레이션으로 별도 관리
 @Entity
@@ -80,6 +81,13 @@ public class Product extends BaseEntity {
 
     @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<ProductCategoryMapping> categoryMappings = new HashSet<>();
+
+    @ElementCollection
+    @CollectionTable(name = "product_tag",
+        joinColumns = @JoinColumn(name = "product_id"),
+        indexes = @Index(name = "idx_product_tag_product_tag", columnList = "product_id, tag"))
+    @Column(name = "tag", nullable = false, length = 30)
+    private Set<String> tags = new HashSet<>();
 
     @Builder
     private Product(Seller seller, String name, String description, String thumbnailUrl,
@@ -165,6 +173,21 @@ public class Product extends BaseEntity {
     // 카테고리 매핑 자식 추가
     public void addCategoryMapping(ProductCategoryMapping mapping) {
         this.categoryMappings.add(mapping);
+    }
+
+    // 태그 전체 교체 (null이면 비움, 저장 전 trim+소문자 정규화)
+    public void replaceTags(Set<String> newTags) {
+        this.tags.clear();
+        if (newTags != null) {
+            newTags.stream()
+                .filter(t -> t != null && !t.isBlank())
+                .map(t -> t.trim().toLowerCase(java.util.Locale.ROOT))
+                .forEach(this.tags::add);
+        }
+    }
+
+    public Set<String> getTags() {
+        return Collections.unmodifiableSet(tags);
     }
 
     // REJECTED 상품 수정 시 APPROVE_REQUESTED로 변경 후 재승인 요청

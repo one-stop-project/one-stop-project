@@ -160,7 +160,7 @@ class ProductRepositorySearchTest {
 
     private ProductSearchCond cond(SortType sort, Long categoryId, Long minPrice, Long maxPrice) {
         return new ProductSearchCond(
-            ProductStatus.APPROVED, SellerStatus.APPROVED, null, categoryId, minPrice, maxPrice, sort);
+            ProductStatus.APPROVED, SellerStatus.APPROVED, null, categoryId, minPrice, maxPrice, sort, null);
     }
 
     private List<Long> ids(Page<Product> page) {

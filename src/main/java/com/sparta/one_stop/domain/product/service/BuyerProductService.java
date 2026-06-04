@@ -69,7 +69,7 @@ public class BuyerProductService {
         Pageable plainPage = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
         ProductSearchCond cond = new ProductSearchCond(
             ProductStatus.APPROVED, SellerStatus.APPROVED,
-            sanitizeKeyword(keyword), categoryId, minPrice, maxPrice, sort
+            sanitizeKeyword(keyword), categoryId, minPrice, maxPrice, sort, null
         );
         return productRepository.search(cond, plainPage).map(ProductSummaryResponse::from);
     }
