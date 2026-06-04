@@ -89,7 +89,7 @@ public class PointAuditAspect {
     }
 
     @AfterReturning(
-        pointcut = "execution(* com.sparta.one_stop.domain.point.service.PointService.earnPoint(..))")
+        pointcut = "execution(* com.sparta.one_stop.domain.point.service.PointService.chargePoint(..))")
     @Async
     public void auditEarn(JoinPoint jp) {
         record("POINT_EARN", jp, "SUCCESS", null);
@@ -177,7 +177,7 @@ public class PointAuditAspect {
                 && !"anonymousUser".equals(auth.getPrincipal())
                 && auth.getPrincipal() instanceof AuthUser authUser) {
 
-                Long userId = authUser.getId();
+                Long userId = authUser.userId();
                 // username 형식: "user:{userId}" — 추후 email 조회로 확장 가능
                 String username = "user:" + userId;
                 return new ActorInfo(userId, username);
