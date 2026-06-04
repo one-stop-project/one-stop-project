@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 
+//수정
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public class PointCalculator {
 
@@ -23,7 +24,7 @@ public class PointCalculator {
 
     // @param baseAmount 적립 기준 금액( >= 0)
     // @return 적립 포인트 (소수점 버림)
-    // @throws CustomException 음소 또는 비정상 값
+    // @throws CustomException 음수 또는 비정상 값
     public static int calculateEarnedPoint(int baseAmount) {
         return calculateEarnedPoint(baseAmount, EARN_RATE);
     }
@@ -75,7 +76,7 @@ public class PointCalculator {
     //----------------------검증-----------------------
     private static void validateBaseAmount(int amount) {
         if (amount < 0) {
-            throw new CustomException(ErrorCode.POINT_003, "포인트 금액은 1이상 이어야 합니다.");
+            throw new CustomException(ErrorCode.POINT_003, "포인트 금액은 0이상 이어야 합니다.");
         }
 
         if (amount > SAFE_MAX_AMOUNT) {
