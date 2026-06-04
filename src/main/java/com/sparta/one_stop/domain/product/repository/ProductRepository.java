@@ -43,7 +43,7 @@ public interface ProductRepository extends JpaRepository<Product, Long>, Product
     // → ProductRepositoryCustom.search() / ProductRepositoryImpl
 
     // 단건 상세 조회
-    @EntityGraph(attributePaths = {"seller", "productItems", "productImages", "categoryMappings", "categoryMappings.category"})
+    @EntityGraph(attributePaths = {"seller", "productItems", "productImages", "categoryMappings", "categoryMappings.category", "tags"})
     @Query("SELECT p FROM Product p WHERE p.id = :id")
     Optional<Product> findWithCollectionsById(@Param("id") Long id);
 
@@ -80,6 +80,16 @@ public interface ProductRepository extends JpaRepository<Product, Long>, Product
     @Modifying(clearAutomatically = true)
     @Query("update Product p set p.viewCount = 0 where p.viewCount > 0")
     int resetAllViewCounts();
+
+    // 승인된 상품 + 승인된 판매자의 태그 사용 빈도 집계 (인기 태그 자동완성용)
+    @Query(value = "SELECT pt.tag, COUNT(pt.tag) AS cnt " +
+                   "FROM product_tag pt " +
+                   "INNER JOIN product p ON p.product_id = pt.product_id " +
+                   "INNER JOIN seller s ON s.seller_id = p.seller_id " +
+                   "WHERE p.status = 'APPROVED' AND s.status = 'APPROVED' " +
+                   "GROUP BY pt.tag ORDER BY cnt DESC, pt.tag ASC LIMIT :limit",
+           nativeQuery = true)
+    List<Object[]> findTopTags(@Param("limit") int limit);
 
     // 인기 상품 응답용 배치 fetch (productItems 같이 로드)
     @Query("SELECT DISTINCT p FROM Product p LEFT JOIN FETCH p.productItems WHERE p.id IN :ids")

@@ -75,6 +75,9 @@ public class SellerProductService {
         attachCategoryMappings(product, categories);
         attachImages(product, request.getImageUrls());
         attachItems(product, request.getItems());
+        if (request.getTags() != null) {
+            product.replaceTags(new java.util.HashSet<>(request.getTags()));
+        }
 
         // 6. 저장 (cascade로 자식들 같이 저장)
         Product saved = productRepository.save(product);
@@ -118,6 +121,11 @@ public class SellerProductService {
             List<Category> categories = findAndValidateCategories(request.getCategoryIds());
             product.getCategoryMappings().clear();
             attachCategoryMappings(product, categories);
+        }
+
+        // 태그 교체 (요청에 포함된 경우에만, 빈 리스트면 전체 삭제)
+        if (request.getTags() != null) {
+            product.replaceTags(new java.util.HashSet<>(request.getTags()));
         }
 
         // REJECTED 상태에서 수정 시 APPROVE_REQUESTED로 재전환
