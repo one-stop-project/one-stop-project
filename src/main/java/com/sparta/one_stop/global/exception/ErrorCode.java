@@ -114,6 +114,11 @@ public enum ErrorCode {
     PAYMENT_007(HttpStatus.BAD_REQUEST, "PAYMENT_007", "지원하지 않는 결제 수단입니다"),
     PAYMENT_008(HttpStatus.BAD_REQUEST, "PAYMENT_008", "취소된 주문은 결제할 수 없습니다"),
 
+    // ===== OUTBOX - 이벤트 발행 =====
+    OUTBOX_001(HttpStatus.CONFLICT, "OUTBOX_001", "이미 저장된 Outbox 이벤트입니다"),
+    OUTBOX_002(HttpStatus.NOT_FOUND, "OUTBOX_002", "Outbox 이벤트를 찾을 수 없습니다"),
+    OUTBOX_003(HttpStatus.BAD_REQUEST, "OUTBOX_003", "처리할 수 없는 Outbox 이벤트 상태입니다"),
+
     // ===== POINT - 포인트 =====
     POINT_001(HttpStatus.NOT_FOUND, "POINT_001", "포인트 계정을 찾을 수 없습니다"),
     POINT_002(HttpStatus.BAD_REQUEST, "POINT_002", "포인트가 부족합니다"),
