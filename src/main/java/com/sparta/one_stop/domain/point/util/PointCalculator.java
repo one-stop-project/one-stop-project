@@ -8,6 +8,7 @@ import lombok.NoArgsConstructor;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 
+//수정
 @NoArgsConstructor(access = AccessLevel.PRIVATE)
 public class PointCalculator {
 
