@@ -124,7 +124,9 @@ public class PointExpireBatchConfig {
     public JpaCursorItemReader<PointHistory> expireTargetReader(
         @Value("#{jobParameters['expireDate']}") String expireDateStr) {
 
-        LocalDate expireDate = LocalDate.parse(expireDateStr);
+        LocalDate expireDate = (expireDateStr != null && !expireDateStr.isBlank())
+            ? LocalDate.parse(expireDateStr)
+            : LocalDate.now();
 
         Map<String, Object> params = new HashMap<>();
         params.put("types", List.of(PointHistoryType.CHARGE, PointHistoryType.EARN, PointHistoryType.REFUND));
