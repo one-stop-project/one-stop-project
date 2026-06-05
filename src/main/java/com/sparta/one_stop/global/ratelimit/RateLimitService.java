@@ -19,8 +19,6 @@ import java.util.List;
 @RequiredArgsConstructor
 public class RateLimitService {
 
-    private final RedisTemplate<String, String> redisTemplate;
-
     /**
      * Lua Script — 원자적 카운팅 + TTL 관리 + 대기 시간 반환
      *
@@ -46,17 +44,16 @@ public class RateLimitService {
             "   return -ttl " +
             "end " +
             "return current";
-
     private static final RedisScript<Long> RATE_LIMIT =
         new DefaultRedisScript<>(RATE_LIMIT_SCRIPT, Long.class);
-
+    private final RedisTemplate<String, String> redisTemplate;
 
     /**
-     * Rate Limit 검증 — 통과 시 정상, 차단 시 AUTH_013 예외
+     * Rate Limit 검증 — 통과 시 정상, 차단 시 COMMON_009 예외
      *
      * @param policy     적용할 정책
-     * @param identifier 식별자 (이메일, IP, deviceId 등)
-     * @throws CustomException AUTH_013 (429 Too Many Requests)
+     * @param identifier 식별자 (이메일, IP, userId 등)
+     * @throws CustomException COMMON_009 (429 Too Many Requests)
      */
     public void tryConsume(RateLimitPolicy policy, String identifier) {
         String redisKey = policy.buildKey(identifier);
@@ -77,7 +74,7 @@ public class RateLimitService {
                     policy.name(), maskIdentifier(identifier), waitSeconds, policy.getDescription());
 
                 throw new CustomException(
-                    ErrorCode.AUTH_013,
+                    ErrorCode.COMMON_009,
                     String.format("요청 한도를 초과했습니다. %d초 후 다시 시도해주세요.", waitSeconds)
                 );
             }
@@ -101,7 +98,7 @@ public class RateLimitService {
             tryConsume(policy, identifier);
             return true;
         } catch (CustomException e) {
-            if (e.getErrorCode() == ErrorCode.AUTH_013) {
+            if (e.getErrorCode() == ErrorCode.COMMON_009) {
                 return false;
             }
             throw e;

@@ -6,6 +6,8 @@ import com.sparta.one_stop.domain.coupon.dto.response.MyCouponPageResponse;
 import com.sparta.one_stop.domain.coupon.service.CouponCommandService;
 import com.sparta.one_stop.domain.coupon.service.CouponQueryService;
 import com.sparta.one_stop.global.enums.coupon.UserCouponStatus;
+import com.sparta.one_stop.global.enums.ratelimit.RateLimitPolicy;
+import com.sparta.one_stop.global.ratelimit.RateLimitService;
 import com.sparta.one_stop.global.response.ApiResponse;
 import com.sparta.one_stop.global.security.AuthUser;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +32,7 @@ public class CouponController {
 
     private final CouponQueryService couponQueryService;
     private final CouponCommandService couponCommandService;
+    private final RateLimitService rateLimitService;
 
     // 발급 가능 쿠폰 목록 조회
     @GetMapping("/coupons/available")
@@ -47,6 +50,13 @@ public class CouponController {
         @AuthenticationPrincipal AuthUser authUser,
         @PathVariable Long couponId
     ) {
+
+        // Rate Limit 체크
+        rateLimitService.tryConsume(
+            RateLimitPolicy.COUPON_ISSUE_PER_USER,
+            String.valueOf(authUser.userId())
+        );
+
         IssueCouponResponse response = couponCommandService.issueCoupon(
             authUser.userId(),
             couponId
