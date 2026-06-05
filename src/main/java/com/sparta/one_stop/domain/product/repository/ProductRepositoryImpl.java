@@ -71,6 +71,14 @@ public class ProductRepositoryImpl implements ProductRepositoryCustom {
                 .exists());
         }
 
+        if (cond.tags() != null && !cond.tags().isEmpty()) {
+            BooleanBuilder tagOr = new BooleanBuilder();
+            for (String tag : cond.tags()) {
+                tagOr.or(product.tags.contains(tag));
+            }
+            where.and(tagOr);
+        }
+
         if (isPriceSort(cond.sort())) {
             // 가격 정렬은 판매중(ON_SALE) 옵션만 대상 — 옵션 존재 보장 + 가격 범위도 ON_SALE 기준
             // exists 필터와 ORDER BY MIN이 동일 술어(onSalePriceWhere)를 공유해야 정렬 기준이 어긋나지 않음

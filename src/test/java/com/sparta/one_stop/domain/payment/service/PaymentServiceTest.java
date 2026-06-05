@@ -1,5 +1,6 @@
 package com.sparta.one_stop.domain.payment.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sparta.one_stop.domain.coupon.service.CouponCommandService;
 import com.sparta.one_stop.domain.delivery.entity.Delivery;
 import com.sparta.one_stop.domain.delivery.entity.DeliveryHistory;
@@ -12,6 +13,7 @@ import com.sparta.one_stop.domain.order.repository.OrderRepository;
 import com.sparta.one_stop.domain.payment.dto.request.ApprovePaymentRequest;
 import com.sparta.one_stop.domain.payment.dto.response.ApprovePaymentResponse;
 import com.sparta.one_stop.domain.payment.entity.Payment;
+import com.sparta.one_stop.domain.payment.event.PaymentApprovedEventPayload;
 import com.sparta.one_stop.domain.payment.repository.PaymentRepository;
 import com.sparta.one_stop.domain.point.service.PointService;
 import com.sparta.one_stop.domain.user.entity.User;
@@ -19,6 +21,7 @@ import com.sparta.one_stop.global.enums.order.OrderStatus;
 import com.sparta.one_stop.global.enums.payment.PaymentMethod;
 import com.sparta.one_stop.global.enums.payment.PaymentStatus;
 import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.outbox.service.OutboxEventService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -34,6 +37,8 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.AssertionsForClassTypes.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.willDoNothing;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.never;
@@ -64,12 +69,18 @@ class PaymentServiceTest {
     @Mock
     private CouponCommandService couponCommandService;
 
+    @Mock
+    private OutboxEventService outboxEventService;
+
+    @Mock
+    private ObjectMapper objectMapper;
+
     @InjectMocks
     private PaymentService paymentService;
 
     @Test
     @DisplayName("approvePayment 성공 - 결제 승인 후 Order, OrderItem, Delivery, DeliveryHistory를 처리한다")
-    void approvePayment_success() {
+    void approvePayment_success() throws Exception {
         // given
         Long userId = 1L;
         Long orderId = 10L;
@@ -109,6 +120,8 @@ class PaymentServiceTest {
             .thenReturn(List.of());
         when(deliveryRepository.saveAll(any()))
             .thenAnswer(invocation -> invocation.getArgument(0));
+        when(objectMapper.writeValueAsString(any(PaymentApprovedEventPayload.class)))
+            .thenReturn("{\"orderId\":1}");
 
         // when
         ApprovePaymentResponse result = paymentService.approvePayment(
@@ -123,6 +136,12 @@ class PaymentServiceTest {
             ArgumentCaptor.forClass(Payment.class);
 
         verify(paymentRepository).save(paymentCaptor.capture());
+
+        verify(outboxEventService).savePaymentApprovedEvent(
+            anyString(),
+            eq(orderId),
+            anyString()
+        );
 
         Payment savedPayment = paymentCaptor.getValue();
 
