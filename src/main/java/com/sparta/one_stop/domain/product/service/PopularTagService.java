@@ -29,7 +29,8 @@ public class PopularTagService {
     private final ProductRepository productRepository;
 
     // Redis 장애 시 DB 직접 쏠림 완충용 로컬 캐시
-    // Redis 정상 시에는 사용하지 않으며, Redis 장애 fallback 경로에서만 조회/저장
+    // Redis 정상 시에는 사용하지 않으며, Redis 예외 발생 경로에서만 조회/저장
+    // 빈 리스트도 캐시해야 장애 중 "태그 0건" 상태에서 DB 반복 요청을 막을 수 있음
     private final Cache<String, List<PopularTagResponse>> localCache =
         Caffeine.newBuilder()
             .expireAfterWrite(5, TimeUnit.MINUTES)
@@ -43,11 +44,17 @@ public class PopularTagService {
         String tempKey = POPULAR_TAG_KEY + ":tmp";
         try {
             List<Object[]> rows = productRepository.findTopTags(TOP_N);
+            List<PopularTagResponse> allTags = rows.stream()
+                .map(row -> new PopularTagResponse((String) row[0], ((Number) row[1]).longValue()))
+                .toList();
+
             if (rows.isEmpty()) {
                 redisTemplate.delete(POPULAR_TAG_KEY);
-                localCache.invalidateAll();
+                // 빈 리스트를 캐시 — 장애 중 "태그 0건" 상태에서 DB 반복 요청 방지
+                localCache.put(LOCAL_CACHE_KEY, List.of());
                 return;
             }
+
             redisTemplate.delete(tempKey);
             for (Object[] row : rows) {
                 String tag = (String) row[0];
@@ -58,9 +65,6 @@ public class PopularTagService {
             redisTemplate.rename(tempKey, POPULAR_TAG_KEY);
 
             // 로컬 캐시 동기화 — Redis 성공 시 함께 갱신
-            List<PopularTagResponse> allTags = rows.stream()
-                .map(row -> new PopularTagResponse((String) row[0], ((Number) row[1]).longValue()))
-                .toList();
             localCache.put(LOCAL_CACHE_KEY, allTags);
 
             log.info("[PopularTag] refresh done. tags={}", rows.size());
@@ -71,14 +75,16 @@ public class PopularTagService {
     }
 
     // prefix로 시작하는 인기 태그 자동완성 (prefix null/blank이면 전체 반환)
-    // 흐름: Redis → (장애) 로컬 캐시 → (없으면) DB 조회
+    // 흐름: Redis → (예외 발생 시) 로컬 캐시 → (없으면) DB 조회
+    // Redis 정상이지만 빈 경우: 로컬 캐시를 타지 않고 DB 직접 조회 (stale 데이터 방지)
     public List<PopularTagResponse> getAutocompleteTags(String prefix, int limit) {
         try {
             Set<TypedTuple<String>> tuples = redisTemplate.opsForZSet()
                 .reverseRangeWithScores(POPULAR_TAG_KEY, 0, TOP_N - 1L);
 
             if (tuples == null || tuples.isEmpty()) {
-                return fallbackFromLocalOrDb(prefix, limit);
+                // Redis 정상 + 빈 데이터 → 로컬 캐시 미사용, DB 직접 조회
+                return fallbackFromDb(prefix, limit);
             }
 
             return tuples.stream()
@@ -88,14 +94,16 @@ public class PopularTagService {
                 .map(t -> new PopularTagResponse(t.getValue(), Math.round(t.getScore())))
                 .toList();
         } catch (Exception e) {
-            log.warn("[PopularTag] redis failed, fallback: {}", e.getMessage());
+            // Redis 예외(장애) → 로컬 캐시 우선 조회
+            log.debug("[PopularTag] redis failed, fallback to local/db: {}", e.getMessage());
             return fallbackFromLocalOrDb(prefix, limit);
         }
     }
 
     private List<PopularTagResponse> fallbackFromLocalOrDb(String prefix, int limit) {
         List<PopularTagResponse> cached = localCache.getIfPresent(LOCAL_CACHE_KEY);
-        if (cached != null && !cached.isEmpty()) {
+        if (cached != null) {
+            // 빈 리스트도 유효한 캐시 결과 ("태그 0건" 상태를 DB 재요청 없이 반환)
             log.debug("[PopularTag] serving from local cache (Redis unavailable)");
             return filterAndLimit(cached, prefix, limit);
         }
@@ -108,10 +116,9 @@ public class PopularTagService {
                 .map(row -> new PopularTagResponse((String) row[0], ((Number) row[1]).longValue()))
                 .toList();
 
-            if (!all.isEmpty()) {
-                localCache.put(LOCAL_CACHE_KEY, all);
-                log.info("[PopularTag] local cache populated from DB fallback");
-            }
+            // 빈 리스트도 캐시 — 장애 중 0건 상태에서 DB 반복 쏠림 방지
+            localCache.put(LOCAL_CACHE_KEY, all);
+            log.debug("[PopularTag] local cache populated from DB fallback. tags={}", all.size());
 
             return filterAndLimit(all, prefix, limit);
         } catch (Exception e) {
