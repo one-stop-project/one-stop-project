@@ -39,7 +39,7 @@ public class ProductDescriptionGenerator {
             }
             return content.trim();
         } catch (Exception e) {
-            log.warn("LLM 설명 생성 실패 → 템플릿 fallback (productId={}): {}", item.productId(), e.getMessage());
+            log.warn("LLM 설명 생성 실패 → 템플릿 fallback (productId={})", item.productId(), e);
             return fallback(item, categoryName);
         }
     }

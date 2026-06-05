@@ -1,6 +1,7 @@
 package com.sparta.one_stop.dummy.seed;
 
 import com.sparta.one_stop.domain.user.entity.Seller;
+import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.SellerRepository;
 import com.sparta.one_stop.domain.user.repository.UserRepository;
 import com.sparta.one_stop.global.enums.user.UserRole;
@@ -14,6 +15,7 @@ import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
 @ActiveProfiles("test")
@@ -50,5 +52,21 @@ class DummySellerSeederTest {
         assertThat(second.getId()).isEqualTo(firstId);
         assertThat(userRepository.findByEmail(EMAIL)).isPresent();
         assertThat(sellerRepository.findAll()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("seed: 더미 이메일이 SELLER 아닌 역할로 이미 있으면 예외")
+    void seed_throwsWhenEmailExistsWithNonSellerRole() {
+        userRepository.save(User.builder()
+            .email(EMAIL)
+            .password("encoded")
+            .name("기존사용자")
+            .role(UserRole.BUYER)
+            .build());
+        em.flush();
+        em.clear();
+
+        assertThatThrownBy(() -> dummySellerSeeder.seed())
+            .isInstanceOf(IllegalStateException.class);
     }
 }
