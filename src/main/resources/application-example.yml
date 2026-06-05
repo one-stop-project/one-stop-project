@@ -140,3 +140,12 @@ naver:
     client-secret: ${NAVER_CLIENT_SECRET}
     base-url: https://openapi.naver.com/v1/search/shop.json
     default-sort: sim
+
+# ── Slack 운영 알림 설정 ──
+# OutboxEvent DEAD 전이 등 운영자가 확인해야 하는 이벤트를 Slack 채널로 알림
+# Webhook URL은 보안 값이므로 Git에 커밋하지 않고 환경변수로 주입
+# 로컬 기본값은 false이며, 알림 테스트 또는 운영 환경에서만 true로 변경
+slack:
+  alert:
+    enabled: false
+    webhook-url: ${SLACK_ALERT_WEBHOOK_URL:}
