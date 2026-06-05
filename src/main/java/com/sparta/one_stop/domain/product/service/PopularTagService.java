@@ -96,7 +96,7 @@ public class PopularTagService {
     private List<PopularTagResponse> fallbackFromLocalOrDb(String prefix, int limit) {
         List<PopularTagResponse> cached = localCache.getIfPresent(LOCAL_CACHE_KEY);
         if (cached != null && !cached.isEmpty()) {
-            log.info("[PopularTag] serving from local cache (Redis unavailable)");
+            log.debug("[PopularTag] serving from local cache (Redis unavailable)");
             return filterAndLimit(cached, prefix, limit);
         }
         return fallbackFromDb(prefix, limit);
