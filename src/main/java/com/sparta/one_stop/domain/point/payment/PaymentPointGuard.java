@@ -87,6 +87,12 @@ public class PaymentPointGuard {
             return; // 포인트 미사용 결제
         }
 
+        if (requestedPoint < 0) {
+            throw new CustomException(ErrorCode.POINT_003,
+                "포인트 사용 금액은 음수일 수 없습니다: " + requestedPoint);
+        }
+
+
         Point point = pointRepository.findByUserId(userId)
             .orElseThrow(() -> new CustomException(ErrorCode.POINT_001));
 
