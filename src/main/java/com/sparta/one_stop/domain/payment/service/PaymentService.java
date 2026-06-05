@@ -1,5 +1,7 @@
 package com.sparta.one_stop.domain.payment.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sparta.one_stop.domain.coupon.service.CouponCommandService;
 import com.sparta.one_stop.domain.delivery.entity.Delivery;
 import com.sparta.one_stop.domain.delivery.entity.DeliveryHistory;
@@ -12,6 +14,7 @@ import com.sparta.one_stop.domain.order.repository.OrderRepository;
 import com.sparta.one_stop.domain.payment.dto.request.ApprovePaymentRequest;
 import com.sparta.one_stop.domain.payment.dto.response.ApprovePaymentResponse;
 import com.sparta.one_stop.domain.payment.entity.Payment;
+import com.sparta.one_stop.domain.payment.event.PaymentApprovedEventPayload;
 import com.sparta.one_stop.domain.payment.repository.PaymentRepository;
 import com.sparta.one_stop.domain.point.service.PointService;
 import com.sparta.one_stop.global.enums.delivery.DeliveryStatus;
@@ -19,6 +22,7 @@ import com.sparta.one_stop.global.enums.order.OrderStatus;
 import com.sparta.one_stop.global.enums.payment.PaymentMethod;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
+import com.sparta.one_stop.global.outbox.service.OutboxEventService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +42,8 @@ public class PaymentService {
     private final DeliveryHistoryRepository deliveryHistoryRepository;
     private final PointService pointService;
     private final CouponCommandService couponCommandService;
+    private final OutboxEventService outboxEventService;
+    private final ObjectMapper objectMapper;
 
     /**
      * 결제 승인
@@ -48,6 +54,7 @@ public class PaymentService {
      * - Order / Payment 상태를 동일 트랜잭션 내에서 PAID 처리
      * - 결제 승인 완료 시 OrderItem 접수 처리 및 Delivery 생성
      * - 최초 배송 상태는 ACCEPT
+     * - 결제 승인 완료 이벤트를 Outbox 테이블에 저장
      */
     public ApprovePaymentResponse approvePayment(
         Long userId,
@@ -84,8 +91,8 @@ public class PaymentService {
 
         acceptOrderItemsAndCreateDeliveries(order);
 
-        // TODO: Outbox 이벤트 저장
-        // TODO: 알림 이벤트 연동
+        // Outbox 이벤트 저장
+        savePaymentApprovedOutboxEvent(userId, order, payment);
 
         return new ApprovePaymentResponse(
             order.getId(),
@@ -215,6 +222,41 @@ public class PaymentService {
         payment.approve();
 
         return paymentRepository.save(payment);
+    }
+
+    /**
+     * 결제 승인 Outbox 이벤트 저장
+     * - 결제 승인 완료 후 Kafka 발행 대신 Outbox 테이블에 이벤트를 저장한다
+     * - eventId는 payment ID 기반으로 생성하여 동일 결제에 대한 중복 이벤트를 방지한다
+     * - payload는 Jackson ObjectMapper로 JSON 직렬화한다
+     */
+    private void savePaymentApprovedOutboxEvent(
+        Long userId,
+        Order order,
+        Payment payment
+    ) {
+        String eventId = "payment-approved-" + payment.getId();
+
+        PaymentApprovedEventPayload eventPayload = PaymentApprovedEventPayload.of(
+            eventId,
+            order.getId(),
+            payment.getId(),
+            userId,
+            order.getFinalPrice(),
+            payment.getApprovedAt()
+        );
+
+        try {
+            String payloadJson = objectMapper.writeValueAsString(eventPayload);
+
+            outboxEventService.savePaymentApprovedEvent(
+                eventId,
+                order.getId(),
+                payloadJson
+            );
+        } catch (JsonProcessingException e) {
+            throw new CustomException(ErrorCode.COMMON_007);
+        }
     }
 
 }

@@ -36,6 +36,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.HashSet;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 @Service
@@ -75,6 +76,9 @@ public class SellerProductService {
         attachCategoryMappings(product, categories);
         attachImages(product, request.getImageUrls());
         attachItems(product, request.getItems());
+        if (request.getTags() != null) {
+            product.replaceTags(new java.util.HashSet<>(request.getTags()));
+        }
 
         // 6. 저장 (cascade로 자식들 같이 저장)
         Product saved = productRepository.save(product);
@@ -110,19 +114,38 @@ public class SellerProductService {
             throw new CustomException(ErrorCode.PRODUCT_010);
         }
 
+        // 심사 대상 정보(이름·설명·썸네일)가 "실제로" 바뀌었는지 추적 — 값이 바뀐 수정만 재승인 대상 (같은 값 재전송은 재승인 안 함)
+        // product.update() 호출 전에 비교해야 기존 값과 대조 가능
+        boolean changed =
+            isChanged(request.getName(), product.getName())
+                || isChanged(request.getDescription(), product.getDescription())
+                || isChanged(request.getThumbnailUrl(), product.getThumbnailUrl());
+
         // 기본 정보 업데이트 (null이면 기존 값 유지)
         product.update(request.getName(), request.getDescription(), request.getThumbnailUrl());
 
-        // 카테고리 교체 (요청에 포함된 경우에만)
+        // 카테고리 교체 (요청에 포함된 경우에만) — 집합이 실제로 달라졌을 때만 변경으로 간주
         if (request.getCategoryIds() != null) {
             List<Category> categories = findAndValidateCategories(request.getCategoryIds());
+            Set<Long> currentIds = new HashSet<>();
+            for (ProductCategoryMapping mapping : product.getCategoryMappings()) {
+                currentIds.add(mapping.getCategory().getId());
+            }
+            if (!currentIds.equals(new HashSet<>(request.getCategoryIds()))) {
+                changed = true;
+            }
             product.getCategoryMappings().clear();
             attachCategoryMappings(product, categories);
         }
 
-        // REJECTED 상태에서 수정 시 APPROVE_REQUESTED로 재전환
-        if (product.getStatus() == ProductStatus.REJECTED) {
-            product.resubmit();
+        // 태그 교체 (요청에 포함된 경우에만, 빈 리스트면 전체 삭제)
+        if (request.getTags() != null) {
+            product.replaceTags(new java.util.HashSet<>(request.getTags()));
+        }
+
+        // 이름·설명·이미지·카테고리가 바뀐 수정이면 재심사 대상으로 전환 (REJECTED·FORCE_INACTIVE도 동일하게 APPROVE_REQUESTED로)
+        if (changed) {
+            markForReapproval(product);
         }
 
         return ProductDetailResponse.from(product);
@@ -196,6 +219,9 @@ public class SellerProductService {
         // 대표 이미지(display_order=1) URL을 상품 썸네일에 동기화
         product.changeThumbnailUrl(remaining.get(0).getImageUrl());
 
+        // 이미지 변경 → 재승인
+        markForReapproval(product);
+
         return ProductImageDeleteResponse.builder()
             .deletedImageId(imageId)
             .remainingImageCount(remaining.size())
@@ -242,6 +268,9 @@ public class SellerProductService {
             product.addProductImage(image);
         }
 
+        // 이미지 변경 → 재승인
+        markForReapproval(product);
+
         return ProductImageAddResponse.builder()
             .addedImageCount(imageUrls.size())
             .totalImageCount(activeImages.size() + imageUrls.size())
@@ -276,6 +305,9 @@ public class SellerProductService {
             .findFirst()
             .orElseThrow(() -> new CustomException(ErrorCode.PRODUCT_011));
 
+        // 재승인 판정용 — 동기화 전 썸네일 URL 보관 (대표 위치가 아니라 실제 URL 변경 여부로 판단)
+        String previousThumbnailUrl = product.getThumbnailUrl();
+
         // 선택 이미지를 대표로 승격, 나머지는 기존 상대 순서 유지
         target.updateDisplayOrder(1);
         int order = 2;
@@ -287,6 +319,11 @@ public class SellerProductService {
 
         // 대표 이미지 URL을 상품 썸네일에 동기화
         product.changeThumbnailUrl(target.getImageUrl());
+
+        // 썸네일 URL이 실제로 바뀐 경우에만 재승인 대상
+        if (!Objects.equals(previousThumbnailUrl, product.getThumbnailUrl())) {
+            markForReapproval(product);
+        }
 
         return ProductImageThumbnailResponse.builder()
             .thumbnailImageId(target.getId())
@@ -303,6 +340,20 @@ public class SellerProductService {
             throw new CustomException(ErrorCode.SELLER_003);
         }
         return seller;
+    }
+
+    // 심사 대상 정보 변경 시 재승인 처리
+    // 이미 심사 대기(APPROVE_REQUESTED)면 그대로 두고, APPROVED/REJECTED/FORCE_INACTIVE는 재심사로 되돌린다.
+    // (가격·재고는 옵션 수정(SellerItemService)에서 처리하며 상태를 바꾸지 않음 = 즉시 반영)
+    private void markForReapproval(Product product) {
+        if (product.getStatus() != ProductStatus.APPROVE_REQUESTED) {
+            product.resubmit();
+        }
+    }
+
+    // 요청값이 있고(non-null) 기존 값과 다르면 "변경"으로 판정 (null = 미변경 의도)
+    private boolean isChanged(String requestValue, String currentValue) {
+        return requestValue != null && !requestValue.equals(currentValue);
     }
 
     // 카테고리 조회 + 존재 검증 + 매핑 개수 검증 (DTO @Size 외 방어 깊이)

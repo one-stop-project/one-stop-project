@@ -25,6 +25,7 @@ public class ProductDetailResponse {
     private List<ProductItemResponse> items;
     private List<String> imageUrls;
     private List<String> categoryNames;
+    private List<String> tags;
 
     public static ProductDetailResponse from(Product product) {
         List<String> optionNames = buildOptionNames(product);
@@ -56,6 +57,7 @@ public class ProductDetailResponse {
             .items(items)
             .imageUrls(imageUrls)
             .categoryNames(categoryNames)
+            .tags(product.getTags().stream().sorted().toList())
             .build();
     }
 

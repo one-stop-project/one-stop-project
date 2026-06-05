@@ -65,26 +65,26 @@ dependencies {
     runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
     runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
 
-// QueryDSL
+    // QueryDSL
     implementation 'com.querydsl:querydsl-jpa:5.1.0:jakarta'
     annotationProcessor 'com.querydsl:querydsl-apt:5.1.0:jakarta'
     annotationProcessor 'jakarta.annotation:jakarta.annotation-api'
     annotationProcessor 'jakarta.persistence:jakarta.persistence-api'
 
-// Swagger
+    // Swagger
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.6'
 
-// Redisson (분산락)
+    // Redisson (분산락)
     implementation 'org.redisson:redisson-spring-boot-starter:3.27.2'
 
-// Spring AI (1.0.0 GA 기준 아티팩트명 변경됨)
+    // Spring AI (1.0.0 GA 기준 아티팩트명 변경됨)
     implementation 'org.springframework.ai:spring-ai-starter-model-openai'
 
-// Resilience4j
+    // Resilience4j
     implementation 'io.github.resilience4j:resilience4j-spring-boot3:2.2.0'
     implementation 'org.springframework.boot:spring-boot-starter-aop'
 
-// Monitoring
+    // Monitoring
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     implementation 'io.micrometer:micrometer-registry-prometheus'
 
@@ -93,6 +93,10 @@ dependencies {
 
     // Batch 처리
     implementation 'org.springframework.boot:spring-boot-starter-batch'
+
+    // kafka
+    implementation 'org.springframework.kafka:spring-kafka'
+    testImplementation 'org.springframework.kafka:spring-kafka-test'
 }
 
 def querydslDir = "build/generated/querydsl"
