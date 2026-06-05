@@ -35,6 +35,7 @@ import java.util.stream.Collectors;
  *
  * [증분 업데이트] lastIncludedReviewId < id ≤ newReviewId 범위 처리 (ORDER BY id ASC)
  *   - 리뷰 작성마다 이벤트 → 비동기 실행
+ *   - 새 리뷰 수 < MIN_REVIEWS_FOR_INCREMENTAL(5) 시 스킵 (다음 이벤트까지 대기)
  *   - 새 리뷰 수 > MAX_REVIEW_FOR_INCREMENTAL(20) 시 전체 재요약으로 폴백
  *   - 내용 없는 리뷰만 있을 때 AI 스킵, lastIncludedReviewId/집계값은 갱신
  *   - 동시 충돌: @Version(낙관적 락) → 리스너에서 1회 재시도 후 포기
@@ -52,6 +53,8 @@ public class AiReviewSummaryService {
     private static final int MAX_REVIEW_FOR_FULL = 50;
     private static final int MAX_REVIEW_FOR_INCREMENTAL = 20;
     private static final int MIN_REVIEW_COUNT = 5;
+    // 마지막 업데이트 이후 새 리뷰가 이 수 이상 누적돼야 증분 업데이트 실행
+    private static final int MIN_REVIEWS_FOR_INCREMENTAL = 5;
 
     private final ReviewRepository reviewRepository;
     private final ProductRepository productRepository;
@@ -125,6 +128,13 @@ public class AiReviewSummaryService {
         long afterId = current.getLastIncludedReviewId() != null ? current.getLastIncludedReviewId() : 0L;
         List<Review> newReviews = reviewRepository.findNewReviewsBetween(productId, afterId, newReviewId);
         if (newReviews.isEmpty()) return;
+
+        // 새 리뷰가 임계값 미만이면 다음 이벤트까지 대기 (AI 호출 비용 절감)
+        if (newReviews.size() < MIN_REVIEWS_FOR_INCREMENTAL) {
+            log.debug("[AI Summary] 새 리뷰 {}건 — 임계값({}) 미달, 업데이트 스킵: productId={}",
+                newReviews.size(), MIN_REVIEWS_FOR_INCREMENTAL, productId);
+            return;
+        }
 
         // 누적 과다 시 전체 재요약으로 폴백
         if (newReviews.size() > MAX_REVIEW_FOR_INCREMENTAL) {
