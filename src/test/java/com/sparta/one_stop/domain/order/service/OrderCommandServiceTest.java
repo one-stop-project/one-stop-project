@@ -24,6 +24,7 @@ import com.sparta.one_stop.domain.point.service.PointService;
 import com.sparta.one_stop.domain.product.entity.Product;
 import com.sparta.one_stop.domain.product.entity.ProductItem;
 import com.sparta.one_stop.domain.product.repository.ProductItemRepository;
+import com.sparta.one_stop.domain.subscription.service.SubscriptionBenefitService;
 import com.sparta.one_stop.domain.user.entity.Seller;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.UserRepository;
@@ -91,6 +92,9 @@ class OrderCommandServiceTest {
 
     @InjectMocks
     private OrderCommandService orderCommandService;
+
+    @Mock
+    private SubscriptionBenefitService subscriptionBenefitService;
 
     @Test
     @DisplayName("createOrder 성공 - DIRECT 주문을 생성하고 재고를 차감한다")
@@ -165,6 +169,46 @@ class OrderCommandServiceTest {
         assertThat(orderItems.get(0).getPrice()).isEqualTo(10000L);
 
         verify(cartItemRepository, never()).deleteAllById(any());
+    }
+
+    @Test
+    @DisplayName("createOrder 성공 - 구독 할인이 적용된 최종 금액을 계산한다")
+    void createOrder_success_withSubscriptionDiscount() {
+        // 1. Given: 데이터 준비
+        Long userId = 1L;
+        Long itemId = 101L;
+        User user = mock(User.class);
+
+        // 10,000원짜리 상품 2개 = 총 20,000원
+        ProductItem productItem = orderableProductItem(itemId, 10000L, 10L);
+        CreateOrderRequest request = directOrderRequest(itemId, 2);
+
+        // Mock 설정
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(productItemRepository.findById(itemId)).thenReturn(Optional.of(productItem));
+
+        // 쿠폰 할인은 0원 (순수 구독 할인만 테스트하기 위함)
+        given(couponQueryService.validateAndCalculateDiscount(anyLong(), any(), anyLong()))
+            .willReturn(CouponDiscountResult.none());
+
+        // 구독 할인 5% (20,000 * 0.05 = 1,000원) 설정
+        given(subscriptionBenefitService.calculateDiscount(userId, 20000L))
+            .willReturn(1000L);
+
+        when(orderRepository.save(any(Order.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+
+        // 2. When: 주문 생성 실행
+        CreateOrderResponse result = orderCommandService.createOrder(userId, request);
+
+        // 3. Then: 검증
+        // 계산식: 20,000(상품가) - 0(쿠폰) - 0(포인트) - 1,000(구독할인) + 3,000(배송비) = 22,000
+        assertThat(result.finalPrice()).isEqualTo(22000L);
+
+        // 엔티티에 구독 할인 금액이 잘 저장되었는지 확인
+        ArgumentCaptor<Order> orderCaptor = ArgumentCaptor.forClass(Order.class);
+        verify(orderRepository).save(orderCaptor.capture());
+        assertThat(orderCaptor.getValue().getSubscriptionDiscount()).isEqualTo(1000L);
     }
 
     @Test
