@@ -1,0 +1,68 @@
+[
+  { "name": "식품", "children": [
+    { "name": "신선식품", "children": [
+      { "name": "과일" }, { "name": "채소" }, { "name": "정육·계란" }
+    ]},
+    { "name": "가공·간편식", "children": [
+      { "name": "라면·면류" }, { "name": "통조림·즉석밥" }, { "name": "냉동식품" }
+    ]},
+    { "name": "음료·기호식품", "children": [
+      { "name": "커피·차" }, { "name": "생수·음료" }, { "name": "과자·스낵" }, { "name": "건강식품" }
+    ]}
+  ]},
+  { "name": "전자제품", "children": [
+    { "name": "모바일·PC", "children": [
+      { "name": "스마트폰" }, { "name": "노트북" }, { "name": "태블릿" }
+    ]},
+    { "name": "생활가전", "children": [
+      { "name": "TV" }, { "name": "냉장고" }, { "name": "세탁기" }, { "name": "청소기" }
+    ]},
+    { "name": "음향·주변기기", "children": [
+      { "name": "이어폰·헤드폰" }, { "name": "키보드·마우스" }, { "name": "모니터" }
+    ]}
+  ]},
+  { "name": "의류", "children": [
+    { "name": "여성의류", "children": [
+      { "name": "원피스" }, { "name": "상의" }, { "name": "아우터" }
+    ]},
+    { "name": "남성의류", "children": [
+      { "name": "셔츠" }, { "name": "팬츠" }, { "name": "점퍼·코트" }
+    ]},
+    { "name": "잡화·언더웨어", "children": [
+      { "name": "신발" }, { "name": "가방" }, { "name": "모자" }, { "name": "속옷·양말" }
+    ]}
+  ]},
+  { "name": "도서", "children": [
+    { "name": "문학", "children": [
+      { "name": "소설" }, { "name": "시·에세이" }, { "name": "자기계발" }
+    ]},
+    { "name": "실용·전문", "children": [
+      { "name": "경제·경영" }, { "name": "IT·컴퓨터" }, { "name": "자격증·수험서" }
+    ]},
+    { "name": "교양·기타", "children": [
+      { "name": "어린이·유아" }, { "name": "만화" }, { "name": "잡지" }, { "name": "외국도서" }
+    ]}
+  ]},
+  { "name": "반려동물 용품", "children": [
+    { "name": "사료·간식", "children": [
+      { "name": "강아지 사료" }, { "name": "고양이 사료" }, { "name": "간식·영양제" }
+    ]},
+    { "name": "용품", "children": [
+      { "name": "장난감" }, { "name": "하우스·방석" }, { "name": "이동장·캐리어" }, { "name": "식기·급수기" }
+    ]},
+    { "name": "위생·미용", "children": [
+      { "name": "배변패드" }, { "name": "미용·목욕" }, { "name": "의류·액세서리" }
+    ]}
+  ]},
+  { "name": "화장품", "children": [
+    { "name": "스킨케어", "children": [
+      { "name": "스킨·토너" }, { "name": "로션·에센스" }, { "name": "크림" }, { "name": "선케어" }
+    ]},
+    { "name": "메이크업", "children": [
+      { "name": "베이스·파운데이션" }, { "name": "립" }, { "name": "아이" }
+    ]},
+    { "name": "클렌징·바디·헤어", "children": [
+      { "name": "클렌징" }, { "name": "바디케어" }, { "name": "헤어케어" }
+    ]}
+  ]}
+]
