@@ -1,6 +1,7 @@
 package com.sparta.one_stop.domain.order.entity;
 
 import com.sparta.one_stop.domain.coupon.entity.UserCoupon;
+import com.sparta.one_stop.domain.subscription.entity.Subscription;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.global.entity.BaseEntity;
 import com.sparta.one_stop.global.enums.order.OrderStatus;
@@ -45,12 +46,11 @@ public class Order extends BaseEntity {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-//    //TODO: MVP 단계에서 구독은 구현 안함(추후 구현 예정)
-//    // 구독 정보
-//    @ManyToOne(fetch = FetchType.LAZY)
-//    @JoinColumn(name = "subscription_id")
-//    private Subscription subscription;
-//
+    // 구독 정보
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "subscription_id")
+    private Subscription subscription;
+
     // 적용 쿠폰 정보
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_coupon_id")
@@ -109,6 +109,7 @@ public class Order extends BaseEntity {
     // == 생성자 ==
     public Order(
         User user,
+        Subscription subscription,
         UserCoupon userCoupon,
         Long totalPrice,
         Long discountPrice,
@@ -123,6 +124,7 @@ public class Order extends BaseEntity {
         OrderType orderType
     ) {
         this.user = user;
+        this.subscription = subscription;
         this.userCoupon = userCoupon;
         this.totalPrice = totalPrice;
         this.discountPrice = discountPrice;

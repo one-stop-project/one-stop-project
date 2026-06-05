@@ -22,6 +22,7 @@ class OrderTest {
         Order order = new Order(
             user,
             null,
+            null,
             10000L,
             0L,
             13000L,
@@ -119,6 +120,7 @@ class OrderTest {
     private Order order() {
         return new Order(
             mock(User.class),
+            null,
             null,
             10000L,
             0L,
