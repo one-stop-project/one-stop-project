@@ -10,7 +10,6 @@ import org.springframework.batch.core.JobParameters;
 import org.springframework.batch.core.JobParametersBuilder;
 import org.springframework.batch.core.explore.JobExplorer;
 import org.springframework.batch.core.launch.JobLauncher;
-import org.springframework.context.annotation.Profile;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -20,7 +19,6 @@ import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Component
-@Profile("!test")
 @RequiredArgsConstructor
 public class PointExpireScheduler {
 
@@ -99,6 +97,12 @@ public class PointExpireScheduler {
      * @throws IllegalStateException 다른 실행이 진행 중일 때
      */
     public String runManually(LocalDate targetDate) {
+        if (targetDate.isAfter(LocalDate.now(KST))) {
+            throw new IllegalArgumentException(
+                "targetDate는 오늘 이전 날짜여야 합니다:" + targetDate
+            );
+        }
+
         log.info("[POINT_EXPIRE_MANUAL] 수동 실행 요청 — targetDate={}", targetDate);
 
         RLock lock = redissonClient.getLock(LOCK_KEY);
