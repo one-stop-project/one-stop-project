@@ -76,11 +76,12 @@ public class PointCalculator {
     //----------------------검증-----------------------
     private static void validateBaseAmount(int amount) {
         if (amount < 0) {
-            throw new CustomException(ErrorCode.POINT_003, "포인트 금액은 0이상 이어야 합니다.");
+            throw new CustomException(ErrorCode.POINT_003,
+                "포인트 금액은 0 이상이어야 합니다: " + amount);
         }
-
         if (amount > SAFE_MAX_AMOUNT) {
-            throw new CustomException(ErrorCode.POINT_009, "안정 상한 초과 :");
+            throw new CustomException(ErrorCode.POINT_003,
+                "포인트 금액이 최대 한도를 초과했습니다: " + amount);
         }
     }
 
