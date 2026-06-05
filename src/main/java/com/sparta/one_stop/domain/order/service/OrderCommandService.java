@@ -26,6 +26,7 @@ import com.sparta.one_stop.domain.order.repository.OrderRepository;
 import com.sparta.one_stop.domain.point.service.PointService;
 import com.sparta.one_stop.domain.product.entity.ProductItem;
 import com.sparta.one_stop.domain.product.repository.ProductItemRepository;
+import com.sparta.one_stop.domain.subscription.service.SubscriptionBenefitService;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.UserRepository;
 import com.sparta.one_stop.global.enums.delivery.DeliveryStatus;
@@ -61,6 +62,7 @@ public class OrderCommandService {
     private final PointService pointService;
     private final CouponQueryService couponQueryService;
     private final CouponCommandService couponCommandService;
+    private final SubscriptionBenefitService subscriptionBenefitService;
 
     /**
      * 주문 생성 1단계
@@ -93,6 +95,11 @@ public class OrderCommandService {
 
         Long totalPrice = calculateTotalPrice(sortedTargets);
 
+        Long subscriptionDiscount =
+            subscriptionBenefitService.calculateDiscount(userId, totalPrice);
+
+        subscriptionDiscount = subscriptionDiscount != null ? subscriptionDiscount : 0L;
+
         validateMinimumOrderPrice(totalPrice);
 
         CouponDiscountResult couponDiscountResult = couponQueryService.validateAndCalculateDiscount(
@@ -111,7 +118,7 @@ public class OrderCommandService {
         );
 
         Long deliveryFee = DEFAULT_DELIVERY_FEE;
-        Long finalPrice = totalPrice - discountPrice - usedPoint + deliveryFee;
+        Long finalPrice = totalPrice - discountPrice - usedPoint - subscriptionDiscount + deliveryFee;
 
         Order order = new Order(
             user,
@@ -120,6 +127,7 @@ public class OrderCommandService {
             discountPrice,
             finalPrice,
             usedPoint,
+            subscriptionDiscount,
             request.receiverName(),
             request.receiverPhone(),
             request.receiverAddress(),

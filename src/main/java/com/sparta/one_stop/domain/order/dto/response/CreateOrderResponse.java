@@ -18,6 +18,8 @@ public record CreateOrderResponse(
 
     Integer usedPoint,
 
+    Long subscriptionDiscount,
+
     Long deliveryFee,
 
     Long finalPrice,
@@ -37,6 +39,7 @@ public record CreateOrderResponse(
             order.getTotalPrice(),
             order.getDiscountPrice(),
             order.getUsedPoint(),
+            order.getSubscriptionDiscount(),
             order.getDeliveryFee(),
             order.getFinalPrice(),
             order.getStatus(),

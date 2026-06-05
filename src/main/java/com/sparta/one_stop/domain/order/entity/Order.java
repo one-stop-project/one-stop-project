@@ -102,6 +102,10 @@ public class Order extends BaseEntity {
     @Column(name = "order_type", nullable = false, length = 20)
     private OrderType orderType;
 
+    // 구독 할인 금액
+    @Column(name = "subscription_discount")
+    private Long subscriptionDiscount;
+
     // == 생성자 ==
     public Order(
         User user,
@@ -110,6 +114,7 @@ public class Order extends BaseEntity {
         Long discountPrice,
         Long finalPrice,
         Integer usedPoint,
+        Long subscriptionDiscount,
         String receiverName,
         String receiverPhone,
         String receiverAddress,
@@ -123,6 +128,7 @@ public class Order extends BaseEntity {
         this.discountPrice = discountPrice;
         this.finalPrice = finalPrice;
         this.usedPoint = usedPoint;
+        this.subscriptionDiscount = subscriptionDiscount != null ? subscriptionDiscount : 0L;
         this.receiverName = receiverName;
         this.receiverPhone = receiverPhone;
         this.receiverAddress = receiverAddress;
