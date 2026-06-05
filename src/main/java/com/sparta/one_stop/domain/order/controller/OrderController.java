@@ -8,6 +8,8 @@ import com.sparta.one_stop.domain.order.dto.response.OrderDetailResponse;
 import com.sparta.one_stop.domain.order.dto.response.OrderPageResponse;
 import com.sparta.one_stop.domain.order.service.OrderService;
 import com.sparta.one_stop.global.enums.order.OrderStatus;
+import com.sparta.one_stop.global.enums.ratelimit.RateLimitPolicy;
+import com.sparta.one_stop.global.ratelimit.RateLimitService;
 import com.sparta.one_stop.global.response.ApiResponse;
 import com.sparta.one_stop.global.security.AuthUser;
 import jakarta.validation.Valid;
@@ -32,6 +34,7 @@ import java.time.LocalDate;
 public class OrderController {
 
     private final OrderService orderService;
+    private final RateLimitService rateLimitService;
 
     // 주문 생성 (1단계)
     @PostMapping
@@ -39,6 +42,13 @@ public class OrderController {
         @AuthenticationPrincipal AuthUser authUser,
         @Valid @RequestBody CreateOrderRequest request
     ) {
+
+        // Rate Limit 체크
+        rateLimitService.tryConsume(
+            RateLimitPolicy.ORDER_CREATE_PER_USER,
+            String.valueOf(authUser.userId())
+        );
+
         CreateOrderResponse response = orderService.createOrder(
             authUser.userId(),
             request
