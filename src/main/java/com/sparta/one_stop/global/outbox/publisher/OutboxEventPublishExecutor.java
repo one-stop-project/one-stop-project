@@ -1,5 +1,6 @@
 package com.sparta.one_stop.global.outbox.publisher;
 
+import com.sparta.one_stop.global.alert.slack.SlackAlertService;
 import com.sparta.one_stop.global.enums.outbox.OutboxEventStatus;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
@@ -20,6 +21,7 @@ public class OutboxEventPublishExecutor {
 
     private final OutboxEventRepository outboxEventRepository;
     private final OutboxKafkaProducer outboxKafkaProducer;
+    private final SlackAlertService slackAlertService;
 
     // 개별 Outbox 이벤트 선점 → Kafka 발행 → 상태 업데이트
     // 이벤트별 독립 트랜잭션으로 처리하여 한 건 실패가 다른 이벤트에 영향을 주지 않는다
@@ -65,6 +67,8 @@ public class OutboxEventPublishExecutor {
                     processingEvent.getEventId(),
                     processingEvent.getRetryCount()
                 );
+
+                slackAlertService.sendOutboxDeadAlert(processingEvent);
             } else {
                 log.warn(
                     "Outbox 이벤트 발행 실패 (재시도 예정) - eventId: {}, retryCount: {}",
