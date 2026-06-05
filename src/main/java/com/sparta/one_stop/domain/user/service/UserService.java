@@ -2,6 +2,8 @@ package com.sparta.one_stop.domain.user.service;
 
 
 import com.sparta.one_stop.domain.auth.event.AllDevicesLogoutEvent;
+import com.sparta.one_stop.domain.subscription.entity.Subscription;
+import com.sparta.one_stop.domain.subscription.repository.SubscriptionRepository;
 import com.sparta.one_stop.domain.user.dto.request.PasswordChangeRequest;
 import com.sparta.one_stop.domain.user.dto.request.UserUpdateRequest;
 import com.sparta.one_stop.domain.user.dto.request.WithdrawRequest;
@@ -9,6 +11,7 @@ import com.sparta.one_stop.domain.user.dto.response.UserMeResponse;
 import com.sparta.one_stop.domain.user.dto.response.UserUpdateResponse;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.UserRepository;
+import com.sparta.one_stop.global.enums.subscription.SubscriptionStatus;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +20,8 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
 
 @Slf4j
 @Service
@@ -27,15 +32,31 @@ public class UserService {
     private final PasswordEncoder passwordEncoder;
     private final ApplicationEventPublisher eventPublisher;
     private final UserStatusCacheService userStatusCacheService;
+    private final SubscriptionRepository subscriptionRepository;
 
     // 내 정보 조회
     @Transactional(readOnly = true)
     public UserMeResponse getMyInfo(Long userId) {
         User user = findUserById(userId);
-        // TODO: 구독 도메인 구현 후 SubscriptionInfo 연동
-        //   예시문 : Subscription sub = subscriptionRepository.findActiveByUserId(userId);
-        //   예시문 : return UserMeResponse.of(user, toSubscriptionInfo(sub));
-        return UserMeResponse.from(user);
+        List<SubscriptionStatus> validStatuses =
+            List.of(SubscriptionStatus.ACTIVE, SubscriptionStatus.CANCELLED);
+        Subscription subscription =
+            subscriptionRepository
+                .findTopByUserIdAndStatusInOrderByCreatedAtDesc(userId, validStatuses)
+                .orElse(null);
+        return UserMeResponse.of(user, toSubscriptionInfo(subscription));
+    }
+
+    // 구독 정보 DTO 변환
+    private UserMeResponse.SubscriptionInfo toSubscriptionInfo(Subscription subscription) {
+        if (subscription == null) {
+            return null;
+        }
+        boolean active = subscription.getStatus() == SubscriptionStatus.ACTIVE;
+        return new UserMeResponse.SubscriptionInfo(
+            active,
+            subscription.getEndAt()
+        );
     }
 
     @Transactional
