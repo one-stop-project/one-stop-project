@@ -10,7 +10,6 @@ import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
 
-import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -69,14 +68,12 @@ import static com.sparta.one_stop.global.common.RedisKeyConstants.REFRESH_TOKEN_
 @RequiredArgsConstructor
 public class DeviceLimitService {
 
-    private final RedisTemplate<String, String> redisTemplate;
     /** 사용자당 최대 동시 로그인 기기 수 */
     public static final int MAX_DEVICES = 5;
     /** ZSET 키 prefix */
     private static final String DEVICES_KEY_PREFIX = "devices:";
     /** 기기 활동 ZSET TTL (RT와 동일 기간) */
     private static final long DEVICES_TTL_SECONDS = 14 * 24 * 60 * 60;  // 14일
-
     /**
      * registerDevice Lua Script — 원자적 기기 등록 + LRU 추방
      *
@@ -115,10 +112,8 @@ public class DeviceLimitService {
     end
     return ''
     """;
-
     private static final RedisScript<String> REGISTER_DEVICE =
         new DefaultRedisScript<>(REGISTER_DEVICE_SCRIPT, String.class);
-
     private static final String REMOVE_ALL_DEVICES_SCRIPT = """
     local devices = redis.call('ZRANGE', KEYS[1], 0, -1)
     local count = #devices
@@ -128,9 +123,9 @@ public class DeviceLimitService {
     redis.call('DEL', KEYS[1])
     return count
     """;
-
     private static final RedisScript<Long> REMOVE_ALL_DEVICES =
         new DefaultRedisScript<>(REMOVE_ALL_DEVICES_SCRIPT, Long.class);
+    private final RedisTemplate<String, String> redisTemplate;
 
     // 새 기기 등록 + 초과 시 가장 오래된 기기 자동 로그아웃(원자적)
     // @return 추방된 deviceId, 한도 내였으면 null
