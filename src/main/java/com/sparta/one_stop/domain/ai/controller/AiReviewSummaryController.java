@@ -22,7 +22,7 @@ public class AiReviewSummaryController {
 
     private final AiReviewSummaryService aiReviewSummaryService;
 
-    @Operation(summary = "AI 리뷰 요약 조회 (리뷰 10개 이상 시 제공)")
+    @Operation(summary = "AI 리뷰 요약 조회 (리뷰 5개 이상 시 제공)")
     @GetMapping("/ai-summary")
     public ResponseEntity<ApiResponse<AiReviewSummaryResponse>> getSummary(
         @PathVariable Long productId

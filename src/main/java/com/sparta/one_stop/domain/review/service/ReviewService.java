@@ -8,6 +8,7 @@ import com.sparta.one_stop.domain.review.dto.response.ReviewResponse;
 import com.sparta.one_stop.domain.review.dto.response.ReviewableOrderItemResponse;
 import com.sparta.one_stop.domain.review.entity.Review;
 import com.sparta.one_stop.domain.review.entity.ReviewImage;
+import com.sparta.one_stop.domain.review.event.ReviewCreatedEvent;
 import com.sparta.one_stop.domain.review.repository.ReviewImageRepository;
 import com.sparta.one_stop.domain.review.repository.ReviewRepository;
 import com.sparta.one_stop.global.enums.order.OrderItemStatus;
@@ -15,6 +16,7 @@ import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import com.sparta.one_stop.global.security.AuthUser;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -31,6 +33,7 @@ public class ReviewService {
     private final ReviewRepository reviewRepository;
     private final ReviewImageRepository reviewImageRepository;
     private final OrderItemRepository orderItemRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 리뷰 작성
@@ -89,6 +92,8 @@ public class ReviewService {
                 );
             }
         }
+
+        eventPublisher.publishEvent(new ReviewCreatedEvent(saved.getProduct().getId(), saved.getId()));
 
         return toResponse(saved);
     }

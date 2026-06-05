@@ -23,9 +23,11 @@ public class ReviewSummaryService {
     private final ChatClient chatClient;
     private final AiPromptProperties promptProperties;
     private final AiTokenLogger tokenLogger;
-
-    // fallback 로직을 AiFallbackHandler 로 위임 – 구현체 교체가 쉽습니다
     private final AiFallbackHandler<ReviewSummary> fallbackHandler;
+
+    // ReviewSummary 스키마·파서는 불변이므로 한 번만 생성 후 공유 (thread-safe)
+    private final BeanOutputConverter<ReviewSummary> converter;
+    private final String formatInstructions;
 
     @Value("${spring.ai.openai.chat.options.model:unknown}")
     private String modelName;
@@ -36,8 +38,9 @@ public class ReviewSummaryService {
         this.chatClient = chatClient;
         this.promptProperties = promptProperties;
         this.tokenLogger = tokenLogger;
-        // 기본 fallback: 빈 요약 반환
         this.fallbackHandler = throwable -> ReviewSummary.unavailable();
+        this.converter = new BeanOutputConverter<>(ReviewSummary.class);
+        this.formatInstructions = this.converter.getFormat();
     }
 
     @PostConstruct
@@ -46,25 +49,36 @@ public class ReviewSummaryService {
         if (promptProperties.electronics() == null) throw new IllegalStateException("ai.prompts.electronics 설정이 누락되었습니다.");
         if (promptProperties.food() == null) throw new IllegalStateException("ai.prompts.food 설정이 누락되었습니다.");
         if (promptProperties.general() == null) throw new IllegalStateException("ai.prompts.general 설정이 누락되었습니다.");
+        if (promptProperties.incremental() == null) throw new IllegalStateException("ai.prompts.incremental 설정이 누락되었습니다.");
     }
 
-    /**
-     * 카테고리별 프롬프트로 리뷰를 AI 에 전송하고 구조화된 요약을 반환합니다.
-     * Circuit Breaker "ai-review" 인스턴스로 보호됩니다.
-     *
-     * @param category 카테고리 타입 (의류/전자제품/식품/기타)
-     * @param reviews  줄바꿈으로 구분된 리뷰 목록 문자열
-     */
     @CircuitBreaker(name = "ai-review", fallbackMethod = "summarizeFallback")
     public ReviewSummary summarize(ReviewCategoryType category, String reviews) {
+        String userMessage = buildUserMessage(category, reviews);
+        return callAiAndParse(userMessage);
+    }
+
+    @CircuitBreaker(name = "ai-review", fallbackMethod = "summarizeIncrementalFallback")
+    public ReviewSummary summarizeIncremental(String existingSummaryJson, String newReviews) {
+        String userMessage = promptProperties.incremental()
+                .replace("{existingSummary}", existingSummaryJson)
+                .replace("{newReviews}", newReviews)
+                + "\n\n응답 형식 지침:\n" + formatInstructions;
+        return callAiAndParse(userMessage);
+    }
+
+    ReviewSummary summarizeFallback(ReviewCategoryType category, String reviews, Throwable t) {
+        log.warn("[AI Fallback] ai-review circuit breaker triggered. category={} reason={}", category, t.getMessage());
+        return fallbackHandler.handle(t);
+    }
+
+    ReviewSummary summarizeIncrementalFallback(String existingSummaryJson, String newReviews, Throwable t) {
+        log.warn("[AI Fallback] 증분 요약 circuit breaker triggered. reason={}", t.getMessage());
+        return fallbackHandler.handle(t);
+    }
+
+    private ReviewSummary callAiAndParse(String userMessage) {
         String requestId = UUID.randomUUID().toString();
-
-        // BeanOutputConverter: ReviewSummary 필드 기반 JSON 스키마 생성 및 응답 파싱
-        BeanOutputConverter<ReviewSummary> converter = new BeanOutputConverter<>(ReviewSummary.class);
-
-        // 카테고리 프롬프트 + {reviews} 치환 + JSON 스키마 지시문 조합
-        String userMessage = buildUserMessage(category, reviews, converter.getFormat());
-
         long start = System.currentTimeMillis();
         try {
             ChatResponse response = chatClient.prompt()
@@ -76,10 +90,7 @@ public class ReviewSummaryService {
                 throw new IllegalStateException("AI 응답이 비어있습니다.");
             }
 
-            String content = response.getResult().getOutput().getText();
-            ReviewSummary result = converter.convert(content);
-
-            // 파싱 성공 후 로깅 — 파싱 실패 시 중복 로그 방지
+            ReviewSummary result = converter.convert(response.getResult().getOutput().getText());
             tokenLogger.logSuccess(requestId, response, System.currentTimeMillis() - start);
             return result;
 
@@ -89,26 +100,13 @@ public class ReviewSummaryService {
         }
     }
 
-    /**
-     * Resilience4j CircuitBreaker fallback 메서드.
-     * 시그니처는 원본 메서드 + Throwable 파라미터여야 합니다.
-     */
-    ReviewSummary summarizeFallback(ReviewCategoryType category, String reviews, Throwable t) {
-        log.warn("[AI Fallback] ai-review circuit breaker triggered. category={} reason={}",
-                category, t.getMessage());
-        return fallbackHandler.handle(t);
-    }
-
-    private String buildUserMessage(ReviewCategoryType category, String reviews, String formatInstructions) {
+    private String buildUserMessage(ReviewCategoryType category, String reviews) {
         String template = switch (category) {
             case CLOTHING -> promptProperties.clothing();
             case ELECTRONICS -> promptProperties.electronics();
             case FOOD -> promptProperties.food();
             case GENERAL -> promptProperties.general();
         };
-
-        // {reviews} 플레이스홀더 치환 후 포맷 지시문 추가
-        return template.replace("{reviews}", reviews)
-                + "\n\n응답 형식 지침:\n" + formatInstructions;
+        return template.replace("{reviews}", reviews) + "\n\n응답 형식 지침:\n" + formatInstructions;
     }
 }

@@ -185,6 +185,9 @@ public enum ErrorCode {
     SELLER_010(HttpStatus.BAD_REQUEST, "SELLER_010", "판매자 상호명은 필수입니다"),
     SELLER_011(HttpStatus.BAD_REQUEST, "SELLER_011", "사업자 등록번호는 필수입니다"),
 
+    // ===== AI - AI 서비스 =====
+    AI_001(HttpStatus.SERVICE_UNAVAILABLE, "AI_001", "AI 서비스가 일시적으로 이용 불가합니다. 잠시 후 다시 시도해주세요"),
+
     // ===== ADMIN - 관리자 =====
     ADMIN_001(HttpStatus.FORBIDDEN, "ADMIN_001", "관리자 권한이 필요합니다"),
     ADMIN_002(HttpStatus.BAD_REQUEST, "ADMIN_002", "이미 승인된 판매자입니다"),

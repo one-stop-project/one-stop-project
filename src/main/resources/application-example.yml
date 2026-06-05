@@ -24,6 +24,20 @@ spring:
       host: localhost
       port: 6379
 
+  # ── Kafka 설정 ──
+  kafka:
+    bootstrap-servers: localhost:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      retries: 3
+    consumer:
+      group-id: one-stop-payment-group
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      auto-offset-reset: earliest
+
   # ── Spring AI (Gemini) 설정 ──
   # Gemini는 OpenAI 호환 엔드포인트를 제공해서 openai 스타터로 호출 가능
   ai:
@@ -96,6 +110,10 @@ resilience4j:
         timeout-duration: 10s   # 10초 넘으면 강제 타임아웃
       ai-review:
         timeout-duration: 30s   # 30초 넘으면 강제 타임아웃
+
+point:
+  integrity:
+    secret: ${POINT_INTEGRITY_SECRET}
 
 coupon:
   issue:
