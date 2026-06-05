@@ -1,5 +1,6 @@
 package com.sparta.one_stop.global.outbox.publisher;
 
+import com.sparta.one_stop.global.alert.slack.SlackAlertService;
 import com.sparta.one_stop.global.enums.outbox.OutboxEventStatus;
 import com.sparta.one_stop.global.enums.outbox.OutboxEventType;
 import com.sparta.one_stop.global.outbox.entity.OutboxEvent;
@@ -28,10 +29,14 @@ class OutboxEventPublishExecutorTest {
     private final OutboxKafkaProducer outboxKafkaProducer =
         mock(OutboxKafkaProducer.class);
 
+    private final SlackAlertService slackAlertService =
+        mock(SlackAlertService.class);
+
     private final OutboxEventPublishExecutor outboxEventPublishExecutor =
         new OutboxEventPublishExecutor(
             outboxEventRepository,
-            outboxKafkaProducer
+            outboxKafkaProducer,
+            slackAlertService
         );
 
     @Test
@@ -171,6 +176,7 @@ class OutboxEventPublishExecutorTest {
             ArgumentCaptor.forClass(OutboxEvent.class);
 
         verify(outboxEventRepository).save(captor.capture());
+        verify(slackAlertService).sendOutboxDeadAlert(any(OutboxEvent.class));
 
         OutboxEvent savedEvent = captor.getValue();
 
