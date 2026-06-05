@@ -1,5 +1,7 @@
 package com.sparta.one_stop.domain.product.service;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import com.sparta.one_stop.domain.product.dto.response.PopularTagResponse;
 import com.sparta.one_stop.domain.product.repository.ProductRepository;
 import lombok.RequiredArgsConstructor;
@@ -11,6 +13,7 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 @Slf4j
 @Service
@@ -20,18 +23,29 @@ public class PopularTagService {
     private static final String POPULAR_TAG_KEY = "popular:tag:top";
     private static final int TOP_N = 100;
     private static final long CACHE_TTL_SECONDS = 4 * 3600L;
+    private static final String LOCAL_CACHE_KEY = "all";
 
     private final RedisTemplate<String, String> redisTemplate;
     private final ProductRepository productRepository;
 
+    // Redis 장애 시 DB 직접 쏠림 완충용 로컬 캐시
+    // Redis 정상 시에는 사용하지 않으며, Redis 장애 fallback 경로에서만 조회/저장
+    private final Cache<String, List<PopularTagResponse>> localCache =
+        Caffeine.newBuilder()
+            .expireAfterWrite(5, TimeUnit.MINUTES)
+            .maximumSize(1)
+            .build();
+
     // 승인된 상품의 태그를 집계해 Redis ZSet에 갱신
     // 임시 키에 적재 후 rename으로 원자적 교체 → 갱신 도중 빈 결과 노출 방지
+    // 성공 시 로컬 캐시도 함께 갱신하여 Redis 장애 대비 데이터 확보
     public void refresh() {
         String tempKey = POPULAR_TAG_KEY + ":tmp";
         try {
             List<Object[]> rows = productRepository.findTopTags(TOP_N);
             if (rows.isEmpty()) {
                 redisTemplate.delete(POPULAR_TAG_KEY);
+                localCache.invalidateAll();
                 return;
             }
             redisTemplate.delete(tempKey);
@@ -42,6 +56,13 @@ public class PopularTagService {
             }
             redisTemplate.expire(tempKey, Duration.ofSeconds(CACHE_TTL_SECONDS));
             redisTemplate.rename(tempKey, POPULAR_TAG_KEY);
+
+            // 로컬 캐시 동기화 — Redis 성공 시 함께 갱신
+            List<PopularTagResponse> allTags = rows.stream()
+                .map(row -> new PopularTagResponse((String) row[0], ((Number) row[1]).longValue()))
+                .toList();
+            localCache.put(LOCAL_CACHE_KEY, allTags);
+
             log.info("[PopularTag] refresh done. tags={}", rows.size());
         } catch (Exception e) {
             redisTemplate.delete(tempKey);
@@ -50,14 +71,14 @@ public class PopularTagService {
     }
 
     // prefix로 시작하는 인기 태그 자동완성 (prefix null/blank이면 전체 반환)
-    // Redis가 비어있으면 DB 직접 조회로 fallback
+    // 흐름: Redis → (장애) 로컬 캐시 → (없으면) DB 조회
     public List<PopularTagResponse> getAutocompleteTags(String prefix, int limit) {
         try {
             Set<TypedTuple<String>> tuples = redisTemplate.opsForZSet()
                 .reverseRangeWithScores(POPULAR_TAG_KEY, 0, TOP_N - 1L);
 
             if (tuples == null || tuples.isEmpty()) {
-                return fallbackFromDb(prefix, limit);
+                return fallbackFromLocalOrDb(prefix, limit);
             }
 
             return tuples.stream()
@@ -67,24 +88,42 @@ public class PopularTagService {
                 .map(t -> new PopularTagResponse(t.getValue(), Math.round(t.getScore())))
                 .toList();
         } catch (Exception e) {
-            log.warn("[PopularTag] autocomplete redis failed, fallback to DB: {}", e.getMessage());
-            return fallbackFromDb(prefix, limit);
+            log.warn("[PopularTag] redis failed, fallback: {}", e.getMessage());
+            return fallbackFromLocalOrDb(prefix, limit);
         }
+    }
+
+    private List<PopularTagResponse> fallbackFromLocalOrDb(String prefix, int limit) {
+        List<PopularTagResponse> cached = localCache.getIfPresent(LOCAL_CACHE_KEY);
+        if (cached != null && !cached.isEmpty()) {
+            log.info("[PopularTag] serving from local cache (Redis unavailable)");
+            return filterAndLimit(cached, prefix, limit);
+        }
+        return fallbackFromDb(prefix, limit);
     }
 
     private List<PopularTagResponse> fallbackFromDb(String prefix, int limit) {
         try {
-            return productRepository.findTopTags(TOP_N).stream()
-                .filter(row -> {
-                    String tag = (String) row[0];
-                    return prefix == null || prefix.isBlank() || tag.startsWith(prefix.trim());
-                })
-                .limit(limit)
+            List<PopularTagResponse> all = productRepository.findTopTags(TOP_N).stream()
                 .map(row -> new PopularTagResponse((String) row[0], ((Number) row[1]).longValue()))
                 .toList();
+
+            if (!all.isEmpty()) {
+                localCache.put(LOCAL_CACHE_KEY, all);
+                log.info("[PopularTag] local cache populated from DB fallback");
+            }
+
+            return filterAndLimit(all, prefix, limit);
         } catch (Exception e) {
-            log.warn("[PopularTag] fallback DB query failed: {}", e.getMessage());
+            log.warn("[PopularTag] DB fallback failed: {}", e.getMessage());
             return List.of();
         }
+    }
+
+    private List<PopularTagResponse> filterAndLimit(List<PopularTagResponse> all, String prefix, int limit) {
+        return all.stream()
+            .filter(r -> prefix == null || prefix.isBlank() || r.tag().startsWith(prefix.trim()))
+            .limit(limit)
+            .toList();
     }
 }
