@@ -23,7 +23,7 @@ public record AiReviewSummaryResponse(
         return new AiReviewSummaryResponse(reviewCount, averageRating, null, SummaryStatus.PENDING);
     }
 
-    public static AiReviewSummaryResponse insufficient(long reviewCount) {
-        return new AiReviewSummaryResponse(reviewCount, 0.0, null, SummaryStatus.INSUFFICIENT);
+    public static AiReviewSummaryResponse insufficient(long reviewCount, double averageRating) {
+        return new AiReviewSummaryResponse(reviewCount, averageRating, null, SummaryStatus.INSUFFICIENT);
     }
 }

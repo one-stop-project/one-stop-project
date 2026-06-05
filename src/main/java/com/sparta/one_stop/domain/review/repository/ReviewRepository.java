@@ -29,7 +29,8 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
     Double findAverageRatingByProductId(@Param("productId") Long productId);
 
     // 증분 업데이트 — lastIncludedId 초과 ~ newReviewId 이하 범위, 오래된 순
-    @Query("SELECT r FROM Review r WHERE r.product.id = :productId AND r.id > :afterId AND r.id <= :upToId ORDER BY r.createdAt ASC")
+    // ID 범위 커서와 정렬 기준을 id ASC로 통일 — createdAt 기준 정렬 시 max(id) 계산이 어긋날 수 있음
+    @Query("SELECT r FROM Review r WHERE r.product.id = :productId AND r.id > :afterId AND r.id <= :upToId ORDER BY r.id ASC")
     List<Review> findNewReviewsBetween(@Param("productId") Long productId,
                                        @Param("afterId") Long afterId,
                                        @Param("upToId") Long upToId);

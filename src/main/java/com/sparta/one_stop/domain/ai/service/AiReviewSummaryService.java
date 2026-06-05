@@ -16,6 +16,7 @@ import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -32,10 +33,12 @@ import java.util.stream.Collectors;
  *   - 최초 생성: MIN_REVIEW_COUNT(5) 도달 시 리뷰 작성 이벤트로 자동 트리거 (비동기)
  *   - 강제 갱신: 관리자 /ai-summary/refresh → 기존 요약 덮어쓰기 (동기)
  *
- * [증분 업데이트] lastIncludedReviewId < id ≤ newReviewId 범위 처리
+ * [증분 업데이트] lastIncludedReviewId < id ≤ newReviewId 범위 처리 (ORDER BY id ASC)
  *   - 리뷰 작성마다 이벤트 → 비동기 실행
  *   - 새 리뷰 수 > MAX_REVIEW_FOR_INCREMENTAL(20) 시 전체 재요약으로 폴백
- *   - 동시 충돌: @Version(낙관적 락) → OptimisticLockException → 다음 이벤트에서 자연 보정
+ *   - 내용 없는 리뷰만 있을 때 AI 스킵, lastIncludedReviewId/집계값은 갱신
+ *   - 동시 충돌: @Version(낙관적 락) → 리스너에서 1회 재시도 후 포기
+ *   - 최초 생성 경쟁: unique 제약 위반 시 리스너가 DataIntegrityViolationException 처리
  *
  * [조회] DB 요약 있으면 캐시된 count/avg 사용 (1 query), 없으면 PENDING 반환
  *   - AI 직접 호출 없음
@@ -65,15 +68,16 @@ public class AiReviewSummaryService {
             .map(e -> AiReviewSummaryResponse.ready(e.getReviewCount(), e.getAverageRating(), toReviewSummary(e)))
             .orElseGet(() -> {
                 long reviewCount = reviewRepository.countByProduct_Id(productId);
+                double averageRating = getAverageRating(productId);
                 if (reviewCount < MIN_REVIEW_COUNT) {
-                    return AiReviewSummaryResponse.insufficient(reviewCount);
+                    return AiReviewSummaryResponse.insufficient(reviewCount, averageRating);
                 }
-                return AiReviewSummaryResponse.pending(reviewCount, getAverageRating(productId));
+                return AiReviewSummaryResponse.pending(reviewCount, averageRating);
             });
     }
 
     /**
-     * 관리자 강제 갱신.
+     * 관리자 강제 갱신 (동기).
      * 기존 요약을 덮어써서 빈 상태 노출을 방지합니다.
      * 리뷰 부족 → INSUFFICIENT 반환.
      * AI 장애 + 기존 요약 없음 → AI_001 예외 반환.
@@ -86,7 +90,7 @@ public class AiReviewSummaryService {
 
         long reviewCount = reviewRepository.countByProduct_Id(productId);
         if (reviewCount < MIN_REVIEW_COUNT) {
-            return AiReviewSummaryResponse.insufficient(reviewCount);
+            return AiReviewSummaryResponse.insufficient(reviewCount, getAverageRating(productId));
         }
 
         generateAndSaveFullSummary(product);
@@ -131,21 +135,45 @@ public class AiReviewSummaryService {
             return;
         }
 
-        String existingSummaryJson = buildSummaryJson(current);
+        // id ASC 정렬이므로 max(id)는 마지막 원소가 맞지만, 안전하게 stream으로 보장
+        long latestId = newReviews.stream().mapToLong(Review::getId).max().getAsLong();
+        double averageRating = getAverageRating(productId);
+
         String newReviewsText = newReviews.stream()
             .map(r -> r.getContent() != null ? r.getContent() : "")
             .filter(c -> !c.isBlank())
             .collect(Collectors.joining("\n"));
 
-        if (newReviewsText.isBlank()) return;
+        if (newReviewsText.isBlank()) {
+            // 내용 없는 리뷰만 있는 경우: AI 호출 스킵, 경계값과 집계값만 갱신
+            current.update(current.getPros(), current.getCons(), current.getKeywords(),
+                current.getSentiment(), latestId, reviewCount, averageRating);
+            return;
+        }
 
+        String existingSummaryJson = buildSummaryJson(current);
         ReviewSummary updated = reviewSummaryService.summarizeIncremental(existingSummaryJson, newReviewsText);
         if (updated.isUnavailable()) return;
 
-        double averageRating = getAverageRating(productId);
-        Long latestId = newReviews.get(newReviews.size() - 1).getId(); // ASC 정렬 → 마지막 = 최신
         current.update(toJson(updated.pros()), toJson(updated.cons()),
             toJson(updated.keywords()), updated.sentiment(), latestId, reviewCount, averageRating);
+    }
+
+    /**
+     * 리뷰 수정/삭제 이벤트 수신 후 전체 재요약.
+     * ReviewSummaryUpdateListener가 @Async("eventExecutor") + AFTER_COMMIT으로 호출합니다.
+     */
+    @Transactional
+    public void refreshSummaryAsync(Long productId) {
+        long reviewCount = reviewRepository.countByProduct_Id(productId);
+        if (reviewCount < MIN_REVIEW_COUNT) {
+            // 리뷰가 최소 기준 아래로 떨어진 경우 요약 삭제
+            summaryRepository.findByProduct_Id(productId).ifPresent(summaryRepository::delete);
+            return;
+        }
+        Product product = productRepository.findById(productId)
+            .orElseThrow(() -> new CustomException(ErrorCode.PRODUCT_001));
+        generateAndSaveFullSummary(product);
     }
 
     // ─────────────────────────────────────────────────────────────
@@ -153,6 +181,7 @@ public class AiReviewSummaryService {
     /**
      * 전체 요약을 생성하고 DB에 저장합니다. 반드시 쓰기 트랜잭션 컨텍스트에서 호출하세요.
      * AI UNAVAILABLE이면 아무것도 저장하지 않고 반환합니다.
+     * 최초 생성 경쟁 조건(unique 제약 위반)은 호출자(리스너)가 DataIntegrityViolationException으로 처리합니다.
      */
     private void generateAndSaveFullSummary(Product product) {
         Long productId = product.getId();
@@ -172,7 +201,8 @@ public class AiReviewSummaryService {
         ReviewSummary summary = reviewSummaryService.summarize(mapToReviewCategory(product), reviewsText);
         if (summary.isUnavailable()) return;
 
-        Long latestId = reviews.isEmpty() ? null : reviews.get(0).getId(); // DESC → index 0 = 최신
+        // createdAt DESC 정렬이지만 ID 경계값은 max(id)로 계산
+        Long latestId = reviews.stream().mapToLong(Review::getId).max().stream().boxed().findFirst().orElse(null);
 
         summaryRepository.findByProduct_Id(productId).ifPresentOrElse(
             existing -> existing.update(toJson(summary.pros()), toJson(summary.cons()),

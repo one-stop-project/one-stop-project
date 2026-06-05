@@ -119,6 +119,8 @@ resilience4j:
 
 point:
   integrity:
+    # 최소 32바이트 이상의 랜덤 문자열 필수 (미달 시 앱 기동 실패)
+    # 생성 예시: openssl rand -base64 32
     secret: ${POINT_INTEGRITY_SECRET}
 
 coupon:
