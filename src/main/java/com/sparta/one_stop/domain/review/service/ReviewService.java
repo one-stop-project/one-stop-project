@@ -93,7 +93,11 @@ public class ReviewService {
             }
         }
 
-        eventPublisher.publishEvent(new ReviewCreatedEvent(saved.getProduct().getId(), saved.getId()));
+        try {
+            eventPublisher.publishEvent(new ReviewCreatedEvent(saved.getProduct().getId(), saved.getId()));
+        } catch (Exception e) {
+            log.warn("[ReviewCreatedEvent] 이벤트 발행 실패 — 리뷰 저장에는 영향 없음: reviewId={}", saved.getId(), e);
+        }
 
         return toResponse(saved);
     }
