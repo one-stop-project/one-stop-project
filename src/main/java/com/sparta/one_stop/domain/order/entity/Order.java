@@ -109,7 +109,6 @@ public class Order extends BaseEntity {
     // == 생성자 ==
     public Order(
         User user,
-        Subscription subscription,
         UserCoupon userCoupon,
         Long totalPrice,
         Long discountPrice,
@@ -124,7 +123,6 @@ public class Order extends BaseEntity {
         OrderType orderType
     ) {
         this.user = user;
-        this.subscription = subscription;
         this.userCoupon = userCoupon;
         this.totalPrice = totalPrice;
         this.discountPrice = discountPrice;

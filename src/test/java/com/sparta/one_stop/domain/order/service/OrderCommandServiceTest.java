@@ -212,6 +212,39 @@ class OrderCommandServiceTest {
     }
 
     @Test
+    @DisplayName("createOrder 성공 - 쿠폰 + 구독 + 포인트 모두 적용")
+    void createOrder_success_withCouponSubscriptionAndPoint() {
+        // given
+        Long userId = 1L;
+        Long itemId = 101L;
+        User user = mock(User.class);
+
+        ProductItem productItem = orderableProductItem(itemId, 10000L, 2L);
+        CreateOrderRequest request = directOrderRequest(itemId, 2);
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(productItemRepository.findById(itemId)).thenReturn(Optional.of(productItem));
+
+        given(couponQueryService.validateAndCalculateDiscount(anyLong(), any(), anyLong()))
+            .willReturn(CouponDiscountResult.none());
+
+        given(subscriptionBenefitService.calculateDiscount(userId, 20000L))
+            .willReturn(1000L); // 구독 1000원
+
+        when(orderRepository.save(any(Order.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+
+        // when
+        CreateOrderResponse result = orderCommandService.createOrder(userId, request);
+
+        // then
+        assertThat(result.finalPrice()).isEqualTo(17000L);
+        // 20000 - 3000 - 1000 + 3000
+
+        verify(orderRepository).save(any(Order.class));
+    }
+
+    @Test
     @DisplayName("createOrder 성공 - CART 주문을 생성하고 cartItem을 삭제한다")
     void createOrder_success_cartOrder() {
         // given
@@ -500,6 +533,25 @@ class OrderCommandServiceTest {
     }
 
     @Test
+    @DisplayName("createOrder 실패 - CART인데 DB에 cartItem 자체가 없음")
+    void createOrder_fail_whenCartItemsNotFoundInDb() {
+        Long userId = 1L;
+        User user = mock(User.class);
+
+        CreateOrderRequest request = cartOrderRequest(10L);
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        when(cartItemRepository.findAllById(List.of(10L)))
+            .thenReturn(List.of()); // 없음
+
+        assertThatThrownBy(() ->
+            orderCommandService.createOrder(userId, request)
+        ).isInstanceOf(CustomException.class);
+
+        verify(orderRepository, never()).save(any());
+    }
+
+    @Test
     @DisplayName("cancelOrder 성공 - 결제 전 주문을 취소한다")
     void cancelOrder_success_whenPendingPaymentOrder() {
         // given
@@ -625,6 +677,28 @@ class OrderCommandServiceTest {
         verify(pointService).refundPointByOrder(order);
         verify(orderCancelHistoryRepository).save(any(OrderCancelHistory.class));
         verify(deliveryHistoryRepository).saveAll(any());
+    }
+
+    @Test
+    @DisplayName("cancelOrder 실패 - PAID인데 배송조회 결과 null이면 예외")
+    void cancelOrder_fail_whenPaidOrderDeliveryMissing() {
+        Long userId = 1L;
+        Long orderId = 10L;
+
+        Order order = orderForStatusValidation(userId, OrderStatus.PAID);
+
+        OrderItem orderItem = orderItemOnlyId(101L);
+
+        when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+        when(orderItemRepository.findAllByOrderId(orderId))
+            .thenReturn(List.of(orderItem));
+
+        when(deliveryRepository.findAllByOrderItemIdIn(List.of(101L)))
+            .thenReturn(List.of()); // 배송 없음
+
+        assertThatThrownBy(() ->
+            orderCommandService.cancelOrder(userId, orderId, new CancelOrderRequest("test"))
+        ).isInstanceOf(CustomException.class);
     }
 
     @Test
