@@ -2,6 +2,7 @@ package com.sparta.one_stop.domain.product.repository;
 
 import com.sparta.one_stop.domain.product.entity.Product;
 import com.sparta.one_stop.global.enums.order.OrderItemStatus;
+import com.sparta.one_stop.global.enums.product.ProductItemStatus;
 import com.sparta.one_stop.global.enums.product.ProductStatus;
 import com.sparta.one_stop.global.enums.user.SellerStatus;
 import jakarta.persistence.LockModeType;
@@ -52,14 +53,21 @@ public interface ProductRepository extends JpaRepository<Product, Long>, Product
     @Query("SELECT p FROM Product p WHERE p.id = :id")
     Optional<Product> findByIdForImageUpdate(@Param("id") Long id);
 
-    // 연관 상품
-    @Query("SELECT DISTINCT p FROM Product p JOIN p.seller s JOIN p.categoryMappings m " +
-           "WHERE m.category.id IN :categoryIds AND p.id <> :excludeId " +
-           "AND p.status = :productStatus AND s.status = :sellerStatus")
+    // 연관 상품 — 같은 카테고리 / 자기 제외 / 상품·판매자 APPROVED
+    // + 판매중(ON_SALE)·재고 있는 옵션이 하나라도 있는 상품만 (품절·STOP 제외)
+    // + 인기순 정렬 (조회수 70% + 판매수 30%)
+    // 카테고리 매칭을 JOIN+DISTINCT 대신 EXISTS로 처리 → 중복행 없음 + 계산식 ORDER BY가 DISTINCT 제약을 안 받음
+    @Query("SELECT p FROM Product p JOIN p.seller s " +
+           "WHERE p.id <> :excludeId " +
+           "AND p.status = :productStatus AND s.status = :sellerStatus " +
+           "AND EXISTS (SELECT 1 FROM ProductCategoryMapping m WHERE m.product = p AND m.category.id IN :categoryIds) " +
+           "AND EXISTS (SELECT 1 FROM ProductItem i WHERE i.product = p AND i.status = :itemStatus AND i.stock > 0) " +
+           "ORDER BY (p.viewCount * 0.7 + p.salesCount * 0.3) DESC")
     List<Product> findRelated(@Param("categoryIds") List<Long> categoryIds,
                               @Param("excludeId") Long excludeId,
                               @Param("productStatus") ProductStatus productStatus,
                               @Param("sellerStatus") SellerStatus sellerStatus,
+                              @Param("itemStatus") ProductItemStatus itemStatus,
                               Pageable pageable);
 
     // 인기 상품

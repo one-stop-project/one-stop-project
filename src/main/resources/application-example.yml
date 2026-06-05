@@ -25,14 +25,20 @@ spring:
       port: 6379
 
   # ── Kafka 설정 ──
+  # OutboxEvent를 Kafka로 발행하기 위한 기본 설정
+  # topic: payment.approved, key: partition_key, value: payload JSON
   kafka:
     bootstrap-servers: localhost:9092
+
     producer:
+      # OutboxEvent의 partitionKey와 payload를 문자열로 발행
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
       acks: all
       retries: 3
+
     consumer:
+      # 로컬 테스트용 Consumer Group
       group-id: one-stop-payment-group
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
       value-deserializer: org.apache.kafka.common.serialization.StringDeserializer

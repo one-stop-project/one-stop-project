@@ -7,6 +7,7 @@ import com.sparta.one_stop.domain.product.entity.Product;
 import com.sparta.one_stop.domain.product.entity.ProductItem;
 import com.sparta.one_stop.domain.product.repository.ProductRepository;
 import com.sparta.one_stop.domain.product.repository.ProductSearchCond;
+import com.sparta.one_stop.global.enums.product.ProductItemStatus;
 import com.sparta.one_stop.global.enums.product.ProductStatus;
 import com.sparta.one_stop.global.enums.product.SortType;
 import com.sparta.one_stop.global.enums.user.SellerStatus;
@@ -32,7 +33,7 @@ import java.util.stream.Collectors;
 @Transactional(readOnly = true)
 public class BuyerProductService {
 
-    private static final int RELATED_PRODUCT_LIMIT = 8;
+    private static final int RELATED_PRODUCT_LIMIT = 10;
 
     private final ProductRepository productRepository;
     private final ProductViewCountService viewCountService;
@@ -146,9 +147,11 @@ public class BuyerProductService {
             return List.of();
         }
 
-        Pageable limit = PageRequest.of(0, RELATED_PRODUCT_LIMIT, Sort.by("salesCount").descending());
+        // 정렬은 쿼리 ORDER BY(조회수 70% + 판매수 30%)에서 처리 → Pageable엔 페이지·크기만
+        Pageable limit = PageRequest.of(0, RELATED_PRODUCT_LIMIT);
         return productRepository.findRelated(
-            categoryIds, productId, ProductStatus.APPROVED, SellerStatus.APPROVED, limit
+            categoryIds, productId, ProductStatus.APPROVED, SellerStatus.APPROVED,
+            ProductItemStatus.ON_SALE, limit
         ).stream().map(ProductSummaryResponse::from).toList();
     }
 
