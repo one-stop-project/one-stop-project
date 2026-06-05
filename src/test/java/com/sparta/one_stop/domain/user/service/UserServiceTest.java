@@ -1,6 +1,7 @@
 package com.sparta.one_stop.domain.user.service;
 
 import com.sparta.one_stop.domain.auth.event.AllDevicesLogoutEvent;
+import com.sparta.one_stop.domain.subscription.repository.SubscriptionRepository;
 import com.sparta.one_stop.domain.user.dto.request.PasswordChangeRequest;
 import com.sparta.one_stop.domain.user.dto.request.UserUpdateRequest;
 import com.sparta.one_stop.domain.user.dto.request.WithdrawRequest;
@@ -59,6 +60,7 @@ class UserServiceTest {
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private UserStatusCacheService userStatusCacheService;
+    @Mock private SubscriptionRepository subscriptionRepository;
 
     private User testUser;
     private User oauth2User;
@@ -103,6 +105,13 @@ class UserServiceTest {
         void getMyInfo_success() {
             // given
             given(userRepository.findById(USER_ID)).willReturn(Optional.of(testUser));
+
+            given(
+                subscriptionRepository.findTopByUserIdAndStatusInOrderByCreatedAtDesc(
+                    eq(USER_ID),
+                    anyList()
+                )
+            ).willReturn(Optional.empty());
 
             // when
             UserMeResponse response = userService.getMyInfo(USER_ID);

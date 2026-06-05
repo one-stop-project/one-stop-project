@@ -1,6 +1,7 @@
 package com.sparta.one_stop.domain.order.entity;
 
 import com.sparta.one_stop.domain.coupon.entity.UserCoupon;
+import com.sparta.one_stop.domain.subscription.entity.Subscription;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.global.entity.BaseEntity;
 import com.sparta.one_stop.global.enums.order.OrderStatus;
@@ -45,12 +46,11 @@ public class Order extends BaseEntity {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
-//    //TODO: MVP 단계에서 구독은 구현 안함(추후 구현 예정)
-//    // 구독 정보
-//    @ManyToOne(fetch = FetchType.LAZY)
-//    @JoinColumn(name = "subscription_id")
-//    private Subscription subscription;
-//
+    // 구독 정보
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "subscription_id")
+    private Subscription subscription;
+
     // 적용 쿠폰 정보
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_coupon_id")
@@ -102,6 +102,10 @@ public class Order extends BaseEntity {
     @Column(name = "order_type", nullable = false, length = 20)
     private OrderType orderType;
 
+    // 구독 할인 금액
+    @Column(name = "subscription_discount")
+    private Long subscriptionDiscount;
+
     // == 생성자 ==
     public Order(
         User user,
@@ -110,6 +114,7 @@ public class Order extends BaseEntity {
         Long discountPrice,
         Long finalPrice,
         Integer usedPoint,
+        Long subscriptionDiscount,
         String receiverName,
         String receiverPhone,
         String receiverAddress,
@@ -123,6 +128,7 @@ public class Order extends BaseEntity {
         this.discountPrice = discountPrice;
         this.finalPrice = finalPrice;
         this.usedPoint = usedPoint;
+        this.subscriptionDiscount = subscriptionDiscount != null ? subscriptionDiscount : 0L;
         this.receiverName = receiverName;
         this.receiverPhone = receiverPhone;
         this.receiverAddress = receiverAddress;
