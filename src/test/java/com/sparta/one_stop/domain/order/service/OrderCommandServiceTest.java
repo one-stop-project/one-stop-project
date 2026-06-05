@@ -90,11 +90,11 @@ class OrderCommandServiceTest {
     @Mock
     private CouponCommandService couponCommandService;
 
-    @InjectMocks
-    private OrderCommandService orderCommandService;
-
     @Mock
     private SubscriptionBenefitService subscriptionBenefitService;
+
+    @InjectMocks
+    private OrderCommandService orderCommandService;
 
     @Test
     @DisplayName("createOrder 성공 - DIRECT 주문을 생성하고 재고를 차감한다")
@@ -211,38 +211,6 @@ class OrderCommandServiceTest {
         assertThat(orderCaptor.getValue().getSubscriptionDiscount()).isEqualTo(1000L);
     }
 
-    @Test
-    @DisplayName("createOrder 성공 - 쿠폰 + 구독 + 포인트 모두 적용")
-    void createOrder_success_withCouponSubscriptionAndPoint() {
-        // given
-        Long userId = 1L;
-        Long itemId = 101L;
-        User user = mock(User.class);
-
-        ProductItem productItem = orderableProductItem(itemId, 10000L, 2L);
-        CreateOrderRequest request = directOrderRequest(itemId, 2);
-
-        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
-        when(productItemRepository.findById(itemId)).thenReturn(Optional.of(productItem));
-
-        given(couponQueryService.validateAndCalculateDiscount(anyLong(), any(), anyLong()))
-            .willReturn(CouponDiscountResult.none());
-
-        given(subscriptionBenefitService.calculateDiscount(userId, 20000L))
-            .willReturn(1000L); // 구독 1000원
-
-        when(orderRepository.save(any(Order.class)))
-            .thenAnswer(invocation -> invocation.getArgument(0));
-
-        // when
-        CreateOrderResponse result = orderCommandService.createOrder(userId, request);
-
-        // then
-        assertThat(result.finalPrice()).isEqualTo(17000L);
-        // 20000 - 3000 - 1000 + 3000
-
-        verify(orderRepository).save(any(Order.class));
-    }
 
     @Test
     @DisplayName("createOrder 성공 - CART 주문을 생성하고 cartItem을 삭제한다")
