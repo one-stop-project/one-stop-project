@@ -1,0 +1,56 @@
+{
+  "lastBuildDate": "Thu, 04 Jun 2026 12:00:00 +0900",
+  "total": 1234,
+  "start": 1,
+  "display": 3,
+  "items": [
+    {
+      "title": "<b>갤럭시</b> S24 자급제 256GB &amp; 케이스",
+      "link": "https://shopping.naver.com/catalog/100000001",
+      "image": "https://shopping-phinf.pstatic.net/main_1000000/100000001.jpg",
+      "lprice": "948000",
+      "hprice": "300000",
+      "brand": "삼성전자",
+      "maker": "삼성전자",
+      "category1": "디지털/가전",
+      "category2": "휴대폰",
+      "category3": "자급제폰",
+      "category4": "안드로이드",
+      "productId": "100000001",
+      "productType": "1",
+      "mallName": "네이버쇼핑"
+    },
+    {
+      "title": "삼성전자 <b>갤럭시</b> 버즈3 프로 &quot;화이트&quot;",
+      "link": "https://shopping.naver.com/catalog/100000002",
+      "image": "https://shopping-phinf.pstatic.net/main_1000000/100000002.jpg",
+      "lprice": "231000",
+      "hprice": "300000",
+      "brand": "삼성전자",
+      "maker": "삼성전자",
+      "category1": "디지털/가전",
+      "category2": "음향가전",
+      "category3": "이어폰",
+      "category4": "블루투스이어폰",
+      "productId": "100000002",
+      "productType": "1",
+      "mallName": "삼성공식파트너"
+    },
+    {
+      "title": "<b>갤럭시</b> 워치7 44mm LTE &#39;실버&#39;",
+      "link": "https://shopping.naver.com/catalog/100000003",
+      "image": "https://shopping-phinf.pstatic.net/main_1000000/100000003.jpg",
+      "lprice": "319000",
+      "hprice": "300000",
+      "brand": "삼성전자",
+      "maker": "삼성전자",
+      "category1": "디지털/가전",
+      "category2": "웨어러블",
+      "category3": "스마트워치",
+      "category4": "LTE",
+      "productId": "100000003",
+      "productType": "1",
+      "mallName": "모바일스토어"
+    }
+  ]
+}
