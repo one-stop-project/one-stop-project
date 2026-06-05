@@ -8,6 +8,8 @@ import com.sparta.one_stop.domain.review.dto.response.ReviewResponse;
 import com.sparta.one_stop.domain.review.dto.response.ReviewableOrderItemResponse;
 import com.sparta.one_stop.domain.review.entity.Review;
 import com.sparta.one_stop.domain.review.entity.ReviewImage;
+import com.sparta.one_stop.domain.review.event.ReviewCreatedEvent;
+import com.sparta.one_stop.domain.review.event.ReviewSummaryRefreshEvent;
 import com.sparta.one_stop.domain.review.repository.ReviewImageRepository;
 import com.sparta.one_stop.domain.review.repository.ReviewRepository;
 import com.sparta.one_stop.global.enums.order.OrderItemStatus;
@@ -15,6 +17,8 @@ import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import com.sparta.one_stop.global.security.AuthUser;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -23,6 +27,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -31,6 +36,7 @@ public class ReviewService {
     private final ReviewRepository reviewRepository;
     private final ReviewImageRepository reviewImageRepository;
     private final OrderItemRepository orderItemRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 리뷰 작성
@@ -90,6 +96,12 @@ public class ReviewService {
             }
         }
 
+        try {
+            eventPublisher.publishEvent(new ReviewCreatedEvent(saved.getProduct().getId(), saved.getId()));
+        } catch (Exception e) {
+            log.warn("[ReviewCreatedEvent] 이벤트 발행 실패 — 리뷰 저장에는 영향 없음: reviewId={}", saved.getId(), e);
+        }
+
         return toResponse(saved);
     }
 
@@ -119,6 +131,7 @@ public class ReviewService {
             throw new CustomException(ErrorCode.REVIEW_004);
         }
 
+        Long productId = review.getProduct().getId();
         review.update(request.getRating(), request.getContent());
 
         reviewImageRepository.deleteAll(review.getImages());
@@ -134,6 +147,12 @@ public class ReviewService {
                         .build()
                 );
             }
+        }
+
+        try {
+            eventPublisher.publishEvent(new ReviewSummaryRefreshEvent(productId));
+        } catch (Exception e) {
+            log.warn("[ReviewSummaryRefreshEvent] 이벤트 발행 실패 — 리뷰 수정에는 영향 없음: reviewId={}", reviewId, e);
         }
 
         return toResponse(review);
@@ -152,7 +171,14 @@ public class ReviewService {
             throw new CustomException(ErrorCode.REVIEW_006);
         }
 
+        Long productId = review.getProduct().getId();
         reviewRepository.delete(review);
+
+        try {
+            eventPublisher.publishEvent(new ReviewSummaryRefreshEvent(productId));
+        } catch (Exception e) {
+            log.warn("[ReviewSummaryRefreshEvent] 이벤트 발행 실패 — 리뷰 삭제에는 영향 없음: reviewId={}", reviewId, e);
+        }
     }
 
     /**
