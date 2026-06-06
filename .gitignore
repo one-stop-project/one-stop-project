@@ -43,6 +43,9 @@ logs/
 *.swp
 *~
 
+# Uploaded images (로컬 이미지 저장 — AWS 도입 전 1단계)
+uploads/
+
 # Environment
 .env
 .env.*
