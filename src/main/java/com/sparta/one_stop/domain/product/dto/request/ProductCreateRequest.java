@@ -28,10 +28,6 @@ public class ProductCreateRequest {
     @Size(min = 1, max = 3, message = "카테고리는 1~3개까지 선택 가능합니다")
     private List<Long> categoryIds;
 
-    @NotEmpty(message = "상품 이미지는 최소 1장 이상 필요합니다")
-    @Size(min = 1, max = 10, message = "상품 이미지는 1~10장까지 등록 가능합니다")
-    private List<@NotBlank(message = "이미지 URL은 비어있을 수 없습니다") String> imageUrls;
-
     @Size(max = 10, message = "태그는 최대 10개까지 가능합니다")
     private List<@NotBlank(message = "태그는 비어있을 수 없습니다") @Size(max = 30, message = "태그는 30자 이하여야 합니다") String> tags;
 
@@ -50,10 +46,5 @@ public class ProductCreateRequest {
             return null;
         }
         return optionNames.get(index);
-    }
-
-    // 썸네일 URL
-    public String getThumbnailUrl() {
-        return imageUrls.get(0);
     }
 }

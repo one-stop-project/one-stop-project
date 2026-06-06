@@ -1,7 +1,6 @@
 package com.sparta.one_stop.domain.product.service;
 
 import com.sparta.one_stop.domain.product.dto.request.ProductCreateRequest;
-import com.sparta.one_stop.domain.product.dto.request.ProductImageAddRequest;
 import com.sparta.one_stop.domain.product.dto.request.ProductItemCreateRequest;
 import com.sparta.one_stop.domain.product.dto.request.ProductUpdateRequest;
 import com.sparta.one_stop.domain.product.dto.response.ProductCreateResponse;
@@ -27,13 +26,19 @@ import com.sparta.one_stop.global.enums.product.ProductStatus;
 import com.sparta.one_stop.global.enums.user.SellerStatus;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
+import com.sparta.one_stop.global.storage.ImageStorage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
@@ -44,11 +49,6 @@ import java.util.Set;
 @Transactional(readOnly = true)
 public class SellerProductService {
 
-    private final ProductRepository productRepository;
-    private final ProductImageRepository productImageRepository;
-    private final CategoryRepository categoryRepository;
-    private final SellerRepository sellerRepository;
-
     // 상품 삭제 차단 기준: 종료 상태(DELIVERED/CANCELLED/REJECTED)가 아닌 진행 중 주문
     private static final List<OrderItemStatus> ACTIVE_ORDER_ITEM_STATUSES = List.of(
         OrderItemStatus.PENDING_PAYMENT,
@@ -56,10 +56,15 @@ public class SellerProductService {
         OrderItemStatus.CONFIRMED,
         OrderItemStatus.SHIPPING
     );
+    private final ProductRepository productRepository;
+    private final ProductImageRepository productImageRepository;
+    private final CategoryRepository categoryRepository;
+    private final SellerRepository sellerRepository;
+    private final ImageStorage imageStorage;
 
     // 상품 등록 (APPROVE_REQUESTED 상태로 생성)
     @Transactional
-    public ProductCreateResponse create(Long sellerId, ProductCreateRequest request) {
+    public ProductCreateResponse create(Long sellerId, ProductCreateRequest request, List<MultipartFile> images) {
         // 1. 승인된 판매자인지 검증
         Seller seller = findApprovedSeller(sellerId);
 
@@ -69,21 +74,26 @@ public class SellerProductService {
         // 3. 옵션 조합 중복 검증
         validateOptionCombinations(request.getItems());
 
-        // 4. Product 엔티티 생성
-        Product product = buildProduct(seller, request);
+        // 4. 이미지 파일 저장 (1~10장) → 저장 URL 확보 (첫 장이 썸네일)
+        validateImageCount(images, 0);
+        List<String> imageUrls = storeImages(images);
+        deleteStoredImagesOnRollback(imageUrls);  // DB 저장 실패 시 방금 쓴 파일 정리
 
-        // 5. 자식 엔티티들 매달기
+        // 5. Product 엔티티 생성 (썸네일 = 첫 이미지)
+        Product product = buildProduct(seller, request, imageUrls.get(0));
+
+        // 6. 자식 엔티티들 매달기
         attachCategoryMappings(product, categories);
-        attachImages(product, request.getImageUrls());
+        attachImages(product, imageUrls);
         attachItems(product, request.getItems());
         if (request.getTags() != null) {
             product.replaceTags(new java.util.HashSet<>(request.getTags()));
         }
 
-        // 6. 저장 (cascade로 자식들 같이 저장)
+        // 7. 저장 (cascade로 자식들 같이 저장)
         Product saved = productRepository.save(product);
 
-        // 7. 응답 변환
+        // 8. 응답 변환
         return ProductCreateResponse.from(saved);
     }
 
@@ -207,6 +217,8 @@ public class SellerProductService {
         }
 
         target.delete();
+        // 저장소의 실제 파일은 DB 커밋 이후 비동기로 정리 (정책: 객체 삭제는 비동기) 롤백 시 파일은 보존
+        deleteStoredImageAfterCommit(target.getImageUrl());
 
         // 남은 이미지 재정렬
         List<ProductImage> remaining = activeImages.stream()
@@ -232,7 +244,7 @@ public class SellerProductService {
     // 상품 이미지 추가
     @Transactional
     @CacheEvict(value = "productDetail", key = "#productId", cacheManager = "redisCacheManager")
-    public ProductImageAddResponse addImages(Long userId, Long productId, ProductImageAddRequest request) {
+    public ProductImageAddResponse addImages(Long userId, Long productId, List<MultipartFile> images) {
         Seller seller = findApprovedSeller(userId);
 
         // 낙관적 락 강제 증가 -> 같은 상품 이미지 동시 변경 직렬화
@@ -251,11 +263,10 @@ public class SellerProductService {
         List<ProductImage> activeImages = productImageRepository
             .findByProductIdAndStatusOrderByDisplayOrderAsc(productId, ProductImageStatus.ACTIVE);
 
-        // 추가 후 ACTIVE 이미지가 최대 10장을 초과하면 거부
-        List<String> imageUrls = request.getImageUrls();
-        if (activeImages.size() + imageUrls.size() > 10) {
-            throw new CustomException(ErrorCode.PRODUCT_006);
-        }
+        // 신규 1장 이상 + 기존+신규 최대 10장 검증 후 파일 저장
+        validateImageCount(images, activeImages.size());
+        List<String> imageUrls = storeImages(images);
+        deleteStoredImagesOnRollback(imageUrls);  // DB 저장 실패 시 방금 쓴 파일 정리
 
         // 기존 이미지 순서(1,2,3...)는 그대로 두고, 새 이미지는 맨 뒤에 이어 붙임
         int nextOrder = activeImages.size();
@@ -385,12 +396,12 @@ public class SellerProductService {
     }
 
     // Product 엔티티 빌드
-    private Product buildProduct(Seller seller, ProductCreateRequest request) {
+    private Product buildProduct(Seller seller, ProductCreateRequest request, String thumbnailUrl) {
         return Product.builder()
             .seller(seller)
             .name(request.getName())
             .description(request.getDescription())
-            .thumbnailUrl(request.getThumbnailUrl())
+            .thumbnailUrl(thumbnailUrl)
             .optionName1(request.getOptionName(0))
             .optionName2(request.getOptionName(1))
             .optionName3(request.getOptionName(2))
@@ -420,6 +431,62 @@ public class SellerProductService {
                 .build();
             product.addProductImage(image);
         }
+    }
+
+    // 이미지 장수 검증: 신규 1장 이상 + 기존+신규 최대 10장
+    private void validateImageCount(List<MultipartFile> files, int existingCount) {
+        if (files == null || files.isEmpty()) {
+            throw new CustomException(ErrorCode.PRODUCT_005);
+        }
+        if (existingCount + files.size() > 10) {
+            throw new CustomException(ErrorCode.PRODUCT_006);
+        }
+    }
+
+    // 업로드 파일을 저장소에 저장하고 저장 URL 목록 반환 (형식 검증은 ImageStorage가 수행)
+    private List<String> storeImages(List<MultipartFile> files) {
+        List<String> urls = new ArrayList<>();
+        for (MultipartFile file : files) {
+            // 내용이 빈(0바이트) 파일은 유효한 이미지가 아니므로 거부
+            if (file == null || file.isEmpty()) {
+                throw new CustomException(ErrorCode.COMMON_006);
+            }
+            try {
+                urls.add(imageStorage.store(file.getBytes(), file.getContentType()));
+            } catch (IOException e) {
+                throw new CustomException(ErrorCode.COMMON_007);
+            }
+        }
+        return urls;
+    }
+
+    // 저장 객체 삭제는 DB 커밋 이후에만 수행 (롤백 시 파일 보존). 실제 삭제는 ImageStorage가 비동기 처리
+    private void deleteStoredImageAfterCommit(String url) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            imageStorage.delete(url);
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCommit() {
+                imageStorage.delete(url);
+            }
+        });
+    }
+
+    // 방금 저장한 파일을 트랜잭션 롤백 시 정리 (DB 저장 실패로 인한 orphan 파일 방지)
+    private void deleteStoredImagesOnRollback(List<String> urls) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            return;
+        }
+        TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+            @Override
+            public void afterCompletion(int status) {
+                if (status == STATUS_ROLLED_BACK) {
+                    urls.forEach(imageStorage::delete);
+                }
+            }
+        });
     }
 
     // 옵션 자식 엔티티

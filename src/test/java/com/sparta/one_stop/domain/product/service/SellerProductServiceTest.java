@@ -2,12 +2,13 @@ package com.sparta.one_stop.domain.product.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
-import com.sparta.one_stop.domain.product.dto.request.ProductImageAddRequest;
 import com.sparta.one_stop.domain.product.dto.request.ProductUpdateRequest;
 import com.sparta.one_stop.domain.product.dto.response.ProductImageAddResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductImageDeleteResponse;
@@ -26,6 +27,7 @@ import com.sparta.one_stop.global.enums.product.ProductStatus;
 import com.sparta.one_stop.global.enums.user.UserRole;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
+import com.sparta.one_stop.global.storage.ImageStorage;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
@@ -36,7 +38,9 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.BeanUtils;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.multipart.MultipartFile;
 
 @ExtendWith(MockitoExtension.class)
 class SellerProductServiceTest {
@@ -52,6 +56,9 @@ class SellerProductServiceTest {
 
     @Mock
     private SellerRepository sellerRepository;
+
+    @Mock
+    private ImageStorage imageStorage;
 
     @InjectMocks
     private SellerProductService sellerProductService;
@@ -111,10 +118,14 @@ class SellerProductServiceTest {
         return image;
     }
 
-    private ProductImageAddRequest addRequest(List<String> imageUrls) {
-        ProductImageAddRequest request = BeanUtils.instantiateClass(ProductImageAddRequest.class);
-        ReflectionTestUtils.setField(request, "imageUrls", imageUrls);
-        return request;
+    // 업로드 이미지 파일 목록 생성 (유효한 jpeg 더미 파일들)
+    private List<MultipartFile> imageFiles(int count) {
+        List<MultipartFile> files = new java.util.ArrayList<>();
+        for (int i = 0; i < count; i++) {
+            files.add(new MockMultipartFile(
+                    "images", "img" + i + ".jpg", "image/jpeg", ("fake-image-" + i).getBytes()));
+        }
+        return files;
     }
 
     private ProductUpdateRequest updateRequest(List<Long> categoryIds) {
@@ -316,16 +327,18 @@ class SellerProductServiceTest {
             ProductImage img2 = createImage(2L, product, 2, "url2");
             mockSellerAndProduct(seller, product);
             mockActiveImages(List.of(img1, img2));
+            given(imageStorage.store(any(), any())).willReturn("stored-3", "stored-4");
 
             // when
             ProductImageAddResponse response = sellerProductService.addImages(
-                    SELLER_USER_ID, PRODUCT_ID, addRequest(List.of("url3", "url4")));
+                    SELLER_USER_ID, PRODUCT_ID, imageFiles(2));
 
             // then
             assertThat(response.getAddedImageCount()).isEqualTo(2);
             assertThat(response.getTotalImageCount()).isEqualTo(4);
             assertThat(response.getThumbnailUrl()).isEqualTo("url1");
             assertThat(displayOrdersOf(product)).containsExactly(3, 4);
+            verify(imageStorage, times(2)).store(any(), any());
         }
 
         @Test
@@ -343,9 +356,28 @@ class SellerProductServiceTest {
 
             // when & then (9장 + 2장 = 11장)
             assertThatThrownBy(() -> sellerProductService.addImages(
-                    SELLER_USER_ID, PRODUCT_ID, addRequest(List.of("url10", "url11"))))
+                    SELLER_USER_ID, PRODUCT_ID, imageFiles(2)))
                     .isInstanceOf(CustomException.class)
                     .extracting("errorCode").isEqualTo(ErrorCode.PRODUCT_006);
+        }
+
+        @Test
+        @DisplayName("내용이 빈(0바이트) 파일이 포함되면 COMMON_006 예외가 발생한다")
+        void addImages_emptyFile_throwsCommon006() {
+            // given
+            Seller seller = approvedSeller(SELLER_ID);
+            Product product = createProduct(seller, ProductStatus.APPROVED);
+            ProductImage img1 = createImage(1L, product, 1, "url1");
+            mockSellerAndProduct(seller, product);
+            mockActiveImages(List.of(img1));
+            List<MultipartFile> emptyFile = List.of(
+                    new MockMultipartFile("images", "empty.jpg", "image/jpeg", new byte[0]));
+
+            // when & then
+            assertThatThrownBy(() -> sellerProductService.addImages(
+                    SELLER_USER_ID, PRODUCT_ID, emptyFile))
+                    .isInstanceOf(CustomException.class)
+                    .extracting("errorCode").isEqualTo(ErrorCode.COMMON_006);
         }
 
         @Test
@@ -357,10 +389,11 @@ class SellerProductServiceTest {
             ProductImage img1 = createImage(1L, product, 1, "url1");
             mockSellerAndProduct(seller, product);
             mockActiveImages(List.of(img1));
+            given(imageStorage.store(any(), any())).willReturn("stored-2");
 
             // when
             ProductImageAddResponse response = sellerProductService.addImages(
-                    SELLER_USER_ID, PRODUCT_ID, addRequest(List.of("url2")));
+                    SELLER_USER_ID, PRODUCT_ID, imageFiles(1));
 
             // then
             assertThat(response.getTotalImageCount()).isEqualTo(2);
@@ -378,7 +411,7 @@ class SellerProductServiceTest {
 
             // when & then
             assertThatThrownBy(() -> sellerProductService.addImages(
-                    SELLER_USER_ID, PRODUCT_ID, addRequest(List.of("url2"))))
+                    SELLER_USER_ID, PRODUCT_ID, imageFiles(1)))
                     .isInstanceOf(CustomException.class)
                     .extracting("errorCode").isEqualTo(ErrorCode.PRODUCT_008);
         }
@@ -393,7 +426,7 @@ class SellerProductServiceTest {
 
             // when & then
             assertThatThrownBy(() -> sellerProductService.addImages(
-                    SELLER_USER_ID, PRODUCT_ID, addRequest(List.of("url2"))))
+                    SELLER_USER_ID, PRODUCT_ID, imageFiles(1)))
                     .isInstanceOf(CustomException.class)
                     .extracting("errorCode").isEqualTo(ErrorCode.PRODUCT_001);
         }
@@ -408,7 +441,7 @@ class SellerProductServiceTest {
 
             // when & then
             assertThatThrownBy(() -> sellerProductService.addImages(
-                    SELLER_USER_ID, PRODUCT_ID, addRequest(List.of("url2"))))
+                    SELLER_USER_ID, PRODUCT_ID, imageFiles(1)))
                     .isInstanceOf(CustomException.class)
                     .extracting("errorCode").isEqualTo(ErrorCode.PRODUCT_010);
         }
