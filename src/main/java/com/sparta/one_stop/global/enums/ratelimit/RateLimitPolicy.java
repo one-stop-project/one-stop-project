@@ -79,6 +79,33 @@ public enum RateLimitPolicy {
         "password-reset:account",
         3, 60 * 60,
         "비밀번호 재설정 동일 계정 1시간 3회 (이메일 폭탄 방어)"
+    ),
+
+    // ──────────────────────────────────────────────
+    //  결제
+    // ──────────────────────────────────────────────
+    PAYMENT_APPROVE_PER_USER(
+        "payment:approve",
+        5, 60,
+        "결제 승인 동일 사용자 1분 5회 (중복 결제 시도 방어)"
+    ),
+
+    // ──────────────────────────────────────────────
+    //  주문
+    // ──────────────────────────────────────────────
+    ORDER_CREATE_PER_USER(
+        "order:create",
+        10, 60,
+        "주문 생성 동일 사용자 1분 10회 (재고 선점 어뷰징 방어)"
+    ),
+
+    // ──────────────────────────────────────────────
+    //  쿠폰
+    // ──────────────────────────────────────────────
+    COUPON_ISSUE_PER_USER(
+        "coupon:issue",
+        10, 60,
+        "쿠폰 발급 동일 사용자 1분 10회 (봇 쿠폰 독점 방어)"
     );
 
     /** Redis 키 prefix (정책 식별자) */
@@ -96,9 +123,11 @@ public enum RateLimitPolicy {
     /**
      * Redis 키 생성 — 정책에 캡슐화
      * 형식: "ratelimit:{keyPrefix}:{identifier}"
-     * 예시: "ratelimit:login:account:user@example.com"
+     * 예시:
+     *   - "ratelimit:login:account:user@example.com"
+     *   - "ratelimit:payment:approve:1"
      *
-     * @param identifier 식별자 (이메일, IP, deviceId 등)
+     * @param identifier 식별자 (이메일, IP, deviceId, userId 등)
      * @return Redis 키
      */
     public String buildKey(String identifier) {

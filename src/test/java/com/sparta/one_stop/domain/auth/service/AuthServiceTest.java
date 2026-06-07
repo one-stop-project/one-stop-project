@@ -27,9 +27,14 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 /**
  * AuthService (퍼사드) 테스트
@@ -48,20 +53,6 @@ import static org.mockito.Mockito.*;
 @DisplayName("AuthService (퍼사드) 테스트")
 class AuthServiceTest {
 
-    @InjectMocks
-    private AuthService authService;
-
-    @Mock private AuthQueryService authQueryService;
-    @Mock private AuthCommandService authCommandService;
-    @Mock private PasswordEncoder passwordEncoder;
-    @Mock private JwtTokenProvider jwtTokenProvider;
-    @Mock private RedisTokenService redisTokenService;
-    @Mock private DeviceLimitService deviceLimitService;
-    @Mock private RateLimitService rateLimitService;
-    @Mock private UserRepository userRepository;
-
-    private User testUser;
-
     private static final Long USER_ID = 1L;
     private static final String EMAIL = "test@example.com";
     private static final String PASSWORD = "Password1!";
@@ -71,6 +62,17 @@ class AuthServiceTest {
     private static final String ACCESS_TOKEN = "access-token-xyz";
     private static final String REFRESH_TOKEN = "refresh-token-xyz";
     private static final String NEW_REFRESH_TOKEN = "new-refresh-token-xyz";
+    @InjectMocks
+    private AuthService authService;
+    @Mock private AuthQueryService authQueryService;
+    @Mock private AuthCommandService authCommandService;
+    @Mock private PasswordEncoder passwordEncoder;
+    @Mock private JwtTokenProvider jwtTokenProvider;
+    @Mock private RedisTokenService redisTokenService;
+    @Mock private DeviceLimitService deviceLimitService;
+    @Mock private RateLimitService rateLimitService;
+    @Mock private UserRepository userRepository;
+    private User testUser;
 
     @BeforeEach
     void setUp() {

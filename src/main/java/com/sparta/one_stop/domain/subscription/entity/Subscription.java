@@ -100,6 +100,9 @@ public class Subscription extends BaseEntity {
      * 자동 결제 실패
      */
     public void expire() {
+        if (this.status == SubscriptionStatus.EXPIRED) {
+            return;
+        }
         this.status = SubscriptionStatus.EXPIRED;
     }
 

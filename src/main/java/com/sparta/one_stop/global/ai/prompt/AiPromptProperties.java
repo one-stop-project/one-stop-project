@@ -13,5 +13,6 @@ public record AiPromptProperties(
         String electronics,
         String food,
         String general,
-        String assistant
+        String assistant,
+        String incremental
 ) {}
