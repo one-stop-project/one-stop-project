@@ -11,6 +11,7 @@ import com.sparta.one_stop.dummy.naver.NaverShopClient;
 import com.sparta.one_stop.dummy.naver.dto.NaverShopItem;
 import com.sparta.one_stop.dummy.seed.CategorySeeder;
 import com.sparta.one_stop.dummy.seed.DummySellerSeeder;
+import com.sparta.one_stop.dummy.source.DummyProductSourceGroupRepository;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,6 +33,7 @@ import java.util.stream.Collectors;
 public class DummyProductOrchestrator {
 
     private static final Logger log = LoggerFactory.getLogger(DummyProductOrchestrator.class);
+    private static final String SOURCE = "NAVER";
     private static final String SORT = "sim";
     private static final int START = 1;
     private static final int MAX_CATEGORY_MAPPING = 3;  // 정책 §13: 상품-카테고리 매핑 1~3개
@@ -44,6 +46,7 @@ public class DummyProductOrchestrator {
     private final NaverVariantGrouper grouper;
     private final DummyImageFetcher imageFetcher;
     private final DummyProductWriter writer;
+    private final DummyProductSourceGroupRepository sourceGroupRepository;
     private final DummySeedProperties properties;
 
     public void run() {
@@ -74,9 +77,12 @@ public class DummyProductOrchestrator {
                 }
                 List<GroupedProduct> groups = grouper.group(deduped, categoryIds, leaf.getName());
                 for (GroupedProduct group : groups) {
+                    // 신규 그룹일 때만 이미지 다운로드 (기존 그룹은 가격만 갱신 → 매 실행 받아 버려지는 orphan 누적 방지)
+                    boolean newGroup = !sourceGroupRepository.existsBySourceAndBaseSourceKey(SOURCE, group.baseSourceKey());
+                    String thumbnail = newGroup ? imageFetcher.fetchOrDefault(group.thumbnailImageUrl()) : null;
                     try {
-                        String thumbnail = imageFetcher.fetchOrDefault(group.thumbnailImageUrl());
-                        DummyWriteResult result = writer.write(seller, withThumbnail(group, thumbnail));
+                        GroupedProduct toWrite = (thumbnail != null) ? withThumbnail(group, thumbnail) : group;
+                        DummyWriteResult result = writer.write(seller, toWrite);
                         if (result == DummyWriteResult.CREATED) {
                             created++;
                         } else {
@@ -84,6 +90,9 @@ public class DummyProductOrchestrator {
                         }
                     } catch (Exception e) {
                         failed++;
+                        if (thumbnail != null) {
+                            imageFetcher.deleteStored(thumbnail);  // 신규 생성 실패 → 방금 받은 이미지 정리
+                        }
                         log.warn("[더미시드] 상품 저장 실패 (category={}, base={})",
                                 leaf.getName(), group.baseSourceKey(), e);
                     }

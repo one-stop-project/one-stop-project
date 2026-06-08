@@ -19,10 +19,12 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 // 그룹핑된 더미 상품을 우리 도메인 엔티티로 멱등 영속화.
@@ -136,16 +138,28 @@ public class DummyProductWriter {
         if (newVariants.isEmpty()) {
             return;
         }
-        // 신규 변형 → ProductItem 추가
+        // 신규 변형 → ProductItem 추가. 단 기존 item과 옵션조합이 겹치면 uk_product_item_options 위반으로
+        // 그룹 전체(가격갱신 포함)가 롤백되므로, 겹치는 조합은 추가하지 않고 건너뛴다.
+        Set<String> combos = product.getProductItems().stream()
+            .map(this::optionCombo)
+            .collect(Collectors.toCollection(HashSet::new));
         List<ProductItem> addedItems = new ArrayList<>();
+        List<ProductVariant> persisted = new ArrayList<>();
         for (ProductVariant variant : newVariants) {
             ProductItem item = buildItem(product, variant);
+            if (!combos.add(optionCombo(item))) {
+                continue;  // 동일 옵션조합 이미 존재 → 중복 추가 방지
+            }
             product.addProductItem(item);
             addedItems.add(item);
+            persisted.add(variant);
+        }
+        if (addedItems.isEmpty()) {
+            return;
         }
         productRepository.saveAndFlush(product);  // 새 ProductItem id 확보
-        for (int i = 0; i < newVariants.size(); i++) {
-            saveListing(grouped.baseSourceKey(), product.getId(), addedItems.get(i), newVariants.get(i));
+        for (int i = 0; i < persisted.size(); i++) {
+            saveListing(grouped.baseSourceKey(), product.getId(), addedItems.get(i), persisted.get(i));
         }
     }
 
@@ -159,6 +173,12 @@ public class DummyProductWriter {
             .lastSourcePrice(variant.sourcePrice())
             .variantSignature(item.getOptionSummary())
             .build());
+    }
+
+    // ProductItem 옵션값 5개를 조합 키로 (동일 조합 중복 판정용)
+    private String optionCombo(ProductItem item) {
+        return String.join("", item.getOptionValue1(), item.getOptionValue2(),
+            item.getOptionValue3(), item.getOptionValue4(), item.getOptionValue5());
     }
 
     private ProductItem buildItem(Product product, ProductVariant variant) {

@@ -55,8 +55,13 @@ public class NaverVariantGrouper {
         if (items == null || items.isEmpty()) {
             return List.of();
         }
+        // 0. 가격 없거나 0 이하인 항목 제외 (0원 더미 상품 방지)
+        List<NaverShopItem> priced = items.stream().filter(i -> price(i) > 0).toList();
+        if (priced.isEmpty()) {
+            return List.of();
+        }
         // 1. 규칙 기반 사전 군집 (결정적 baseKey)
-        List<Cluster> clusters = preGroup(items);
+        List<Cluster> clusters = preGroup(priced);
 
         // 2. cluster 안의 옵션/이름/설명을 LLM 배치 1콜로 채움 (실패 시 빈 맵 → 전체 fallback)
         Map<String, LlmGroup> llm;
@@ -136,7 +141,14 @@ public class NaverVariantGrouper {
         if (llm == null || llm.variants() == null || llm.variants().isEmpty()) {
             return fallbackSingles(cluster, categoryIds, categoryName);
         }
-        List<String> axes = capAxes(llm.optionAxes());
+        List<String> axes = llm.optionAxes() == null ? List.of() : llm.optionAxes();
+        // 옵션축 이름에 빈 값이 섞이면 optionValues 인덱스가 어긋남 → 통째 단일화(false-split)
+        if (axes.stream().anyMatch(a -> a == null || a.isBlank())) {
+            return fallbackSingles(cluster, categoryIds, categoryName);
+        }
+        if (axes.size() > MAX_AXES) {
+            axes = new ArrayList<>(axes.subList(0, MAX_AXES));
+        }
         // 다변형인데 옵션축이 비면 LLM이 구분 정보를 못 살린 것 → false-split이 안전
         if (axes.isEmpty() && cluster.members().size() > 1) {
             return fallbackSingles(cluster, categoryIds, categoryName);
@@ -144,7 +156,7 @@ public class NaverVariantGrouper {
 
         Map<String, List<String>> valuesByListing = new HashMap<>();
         for (LlmVariant v : llm.variants()) {
-            if (v.listingId() != null) {
+            if (v != null && v.listingId() != null) {
                 valuesByListing.put(v.listingId(), v.optionValues());
             }
         }
@@ -153,8 +165,14 @@ public class NaverVariantGrouper {
         Set<String> seenCombo = new HashSet<>();
         for (Member m : cluster.members()) {
             List<String> values = fitValues(valuesByListing.get(m.listingId()), axes.size());
+            // 옵션축이 있는데 값이 비면 LLM이 이 변형을 제대로 라벨 못 한 것(누락/부분 응답).
+            // 일부만 병합하면 그 listing이 빠져 source 매핑이 누락(멱등 깨짐)되므로, 클러스터 전체를 단일화(false-split, 안전)
+            if (!axes.isEmpty() && values.stream().anyMatch(String::isBlank)) {
+                return fallbackSingles(cluster, categoryIds, categoryName);
+            }
             if (!seenCombo.add(String.join("", values))) {
-                continue;  // 같은 옵션 조합 중복 변형 제거 (ProductItem unique 제약 보호)
+                // 같은 옵션 조합이 두 번 나오면 그 listing이 빠져 source 매핑 누락(멱등 깨짐) → 클러스터 단일화(false-split)
+                return fallbackSingles(cluster, categoryIds, categoryName);
             }
             variants.add(new ProductVariant(listingSourceKey(m.item()), values, price(m.item())));
         }
@@ -250,13 +268,6 @@ public class NaverVariantGrouper {
         } catch (Exception e) {
             return 0L;
         }
-    }
-
-    private List<String> capAxes(List<String> axes) {
-        if (axes == null) {
-            return List.of();
-        }
-        return axes.stream().filter(a -> a != null && !a.isBlank()).limit(MAX_AXES).toList();
     }
 
     // optionValues를 축 개수에 맞춤 (모자라면 "" 패딩, 넘치면 자름)

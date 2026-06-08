@@ -72,6 +72,13 @@ public class DummyImageFetcher {
         }
     }
 
+    // 신규 생성 실패 시 방금 저장한 이미지 정리 (기본 이미지는 보존)
+    public void deleteStored(String url) {
+        if (url != null && !url.equals(properties.defaultImageUrl())) {
+            imageStorage.delete(url);
+        }
+    }
+
     // contentType 헤더가 없으면 jpg로 간주 (네이버 썸네일 대부분 jpg)
     private String contentType(MediaType mediaType) {
         if (mediaType == null) {
