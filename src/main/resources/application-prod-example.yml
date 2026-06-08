@@ -124,6 +124,15 @@ naver:
     base-url: https://openapi.naver.com/v1/search/shop.json
     default-sort: sim
 
+dummy:
+  scheduler:
+    enabled: ${DUMMY_SCHEDULER_ENABLED:false}
+    cron: ${DUMMY_SCHEDULER_CRON:0 0 3 * * *}
+  seed:
+    display: ${DUMMY_SEED_DISPLAY:100}
+    throttle-ms: ${DUMMY_SEED_THROTTLE_MS:4000}
+    default-image-url: ${DUMMY_SEED_DEFAULT_IMAGE_URL:/images/default-product.png}
+
 slack:
   alert:
     enabled: ${SLACK_ALERT_ENABLED:false}
