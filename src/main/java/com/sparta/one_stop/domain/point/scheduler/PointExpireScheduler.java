@@ -4,13 +4,13 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.JobExecution;
 import org.springframework.batch.core.JobParameters;
 import org.springframework.batch.core.JobParametersBuilder;
 import org.springframework.batch.core.explore.JobExplorer;
 import org.springframework.batch.core.launch.JobLauncher;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -21,7 +21,6 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 @Component
 @RequiredArgsConstructor
-@ConditionalOnProperty(name = "app.scheduler.enabled", havingValue = "true", matchIfMissing = false)
 public class PointExpireScheduler {
 
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
@@ -29,56 +28,63 @@ public class PointExpireScheduler {
     private static final long LOCK_WAIT_SECONDS = 0L;
     private static final long LOCK_LEASE_HOURS = 1L;
 
+    @Value("${app.scheduler.enabled:false}")
+    private boolean schedulerEnabled;
+
     private final JobLauncher jobLauncher;
     private final Job pointExpireJob;
     private final JobExplorer jobExplorer;
     private final RedissonClient redissonClient;
 
-    // ?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━
-    //  주기 ?�행 ??매일 ?�벽 3??(KST)
-    // ?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    //  주기 실행 — 매일 새벽 3시 (KST)
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     /**
-     * 매일 ?�벽 3??(Asia/Seoul) ??그날 만료 ?�??처리
+     * 매일 새벽 3시 (Asia/Seoul) — 그날 만료 대상 처리
      *
-     * <p>cron ?�드: �?�????????�일
+     * <p>cron 필드: 초 분 시 일 월 요일
      */
     @Scheduled(cron = "0 0 3 * * *", zone = "Asia/Seoul")
     public void runDailyExpiration() {
-        // ?�?� 1�?방어 ??Redisson 분산 ???�?�
+        // S2처럼 app.scheduler.enabled=false인 서버에서는 스케줄 실행 건너뜀
+        if (!schedulerEnabled) {
+            return;
+        }
+
+        // ── 1차 방어 — Redisson 분산 락 ──
         RLock lock = redissonClient.getLock(LOCK_KEY);
 
         try {
-            // ?��?0�? ?��? 1?�간 (배치 최�? ?�상 ?�간)
+            // 대기 0초, 유지 1시간 (배치 최대 예상 시간)
             if (!lock.tryLock(LOCK_WAIT_SECONDS, LOCK_LEASE_HOURS, TimeUnit.HOURS)) {
-                log.info("[POINT_EXPIRE] ?�른 ?�버가 ?�행 �??????�득 ?�패, ?�킵");
+                log.info("[POINT_EXPIRE] 다른 서버가 실행 중 — 락 획득 실패, 스킵");
                 return;
             }
 
-            // ?�?� 2�?방어 ??JobExplorer�?RUNNING ?�태 ?�확???�?�
+            // ── 2차 방어 — JobExplorer로 RUNNING 상태 재확인 ──
             int runningCount = jobExplorer.findRunningJobExecutions(pointExpireJob.getName()).size();
             if (runningCount > 0) {
-                log.warn("[POINT_EXPIRE] ?��? ?�행 중인 Job 존재 ??중복 ?�행 방�? (running={})", runningCount);
+                log.warn("[POINT_EXPIRE] 이미 실행 중인 Job 존재 — 중복 실행 방지 (running={})", runningCount);
                 return;
             }
 
-            // ?�?� ?�제 ?�행 ?�?�
-            LocalDate today = LocalDate.now(KST);  // ??KST 명시
-            log.info("[POINT_EXPIRE] ?�작 ??expireDate={}", today);
+            // ── 실제 실행 ──
+            LocalDate today = LocalDate.now(KST);
+            log.info("[POINT_EXPIRE] 시작 — expireDate={}", today);
 
             JobExecution execution = launch(today);
 
-            log.info("[POINT_EXPIRE] 종료 ??status={}, read={}, write={}",
+            log.info("[POINT_EXPIRE] 종료 — status={}, read={}, write={}",
                 execution.getStatus(),
                 execution.getStepExecutions().stream().mapToLong(s -> s.getReadCount()).sum(),
                 execution.getStepExecutions().stream().mapToLong(s -> s.getWriteCount()).sum());
 
         } catch (InterruptedException e) {
-            log.error("[POINT_EXPIRE] ???�득 �??�터?�트", e);
+            log.error("[POINT_EXPIRE] 락 획득 중 인터럽트", e);
             Thread.currentThread().interrupt();
         } catch (Exception e) {
-            log.error("[POINT_EXPIRE] ?�행 ?�패", e);
-            // TODO: Slack/PagerDuty ?�림 ?�동 (별도 PR ??issue #XXX)
+            log.error("[POINT_EXPIRE] 실행 실패", e);
         } finally {
             if (lock.isLocked() && lock.isHeldByCurrentThread()) {
                 lock.unlock();
@@ -86,39 +92,39 @@ public class PointExpireScheduler {
         }
     }
 
-    // ?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━
-    //  ?�동 ?�행 ??Admin API??
-    // ?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    //  수동 실행 — Admin API용
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     /**
-     * ?�동 ?�행 ??Admin???�정 ?�짜�?만료 처리
+     * 수동 실행 — Admin이 특정 날짜로 만료 처리
      *
-     * <p>주의: ?�동 ?��?줄과 ?�일?????�용 ???�시 ?�행 방�?
+     * <p>주의: 자동 스케줄과 동일한 락 사용 → 동시 실행 방지
      *
-     * @return ?�행 결과 ?�약
-     * @throws IllegalStateException ?�른 ?�행??진행 중일 ??
+     * @return 실행 결과 요약
+     * @throws IllegalStateException 다른 실행이 진행 중일 때
      */
     public String runManually(LocalDate targetDate) {
         if (targetDate.isAfter(LocalDate.now(KST))) {
             throw new IllegalArgumentException(
-                "targetDate???�늘 ?�전 ?�짜?�야 ?�니??" + targetDate
+                "targetDate는 오늘 이전 날짜여야 합니다:" + targetDate
             );
         }
 
-        log.info("[POINT_EXPIRE_MANUAL] ?�동 ?�행 ?�청 ??targetDate={}", targetDate);
+        log.info("[POINT_EXPIRE_MANUAL] 수동 실행 요청 — targetDate={}", targetDate);
 
         RLock lock = redissonClient.getLock(LOCK_KEY);
 
         try {
             if (!lock.tryLock(LOCK_WAIT_SECONDS, LOCK_LEASE_HOURS, TimeUnit.HOURS)) {
                 throw new IllegalStateException(
-                    "?�인??만료 배치가 ?��? ?�행 중입?�다. ?�시 ???�시 ?�도?�주?�요.");
+                    "포인트 만료 배치가 이미 실행 중입니다. 잠시 후 다시 시도해주세요.");
             }
 
             int runningCount = jobExplorer.findRunningJobExecutions(pointExpireJob.getName()).size();
             if (runningCount > 0) {
                 throw new IllegalStateException(
-                    "?�인??만료 Job???��? RUNNING ?�태?�니??");
+                    "포인트 만료 Job이 이미 RUNNING 상태입니다.");
             }
 
             JobExecution execution = launch(targetDate);
@@ -129,12 +135,12 @@ public class PointExpireScheduler {
 
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            throw new IllegalStateException("???�득 �??�터?�트 발생", e);
+            throw new IllegalStateException("락 획득 중 인터럽트 발생", e);
         } catch (IllegalStateException e) {
             throw e;
         } catch (Exception e) {
-            log.error("[POINT_EXPIRE_MANUAL] ?�동 ?�행 ?�패 ??targetDate={}", targetDate, e);
-            throw new RuntimeException("?�동 만료 ?�행 ?�패", e);
+            log.error("[POINT_EXPIRE_MANUAL] 수동 실행 실패 — targetDate={}", targetDate, e);
+            throw new RuntimeException("수동 만료 실행 실패", e);
         } finally {
             if (lock.isLocked() && lock.isHeldByCurrentThread()) {
                 lock.unlock();
@@ -142,14 +148,14 @@ public class PointExpireScheduler {
         }
     }
 
-    // ?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━
-    //  ?��? ??Job ?�행
-    // ?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━?�━
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    //  내부 — Job 실행
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     private JobExecution launch(LocalDate expireDate) throws Exception {
         JobParameters params = new JobParametersBuilder()
             .addString("expireDate", expireDate.toString())
-            .addLong("timestamp", System.currentTimeMillis())  // ?�실??가??(분산 ?�이 ?�시??방어)
+            .addLong("timestamp", System.currentTimeMillis())
             .toJobParameters();
 
         return jobLauncher.run(pointExpireJob, params);
