@@ -1,16 +1,22 @@
-import { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import { useProductListQuery, useCategoriesQuery } from '@/hooks/queries/useProductQuery';
-import { ProductCard, ProductCardSkeleton } from '@/components/product/ProductCard';
-import { EmptyState } from '@/components/common/EmptyState';
+import {useState} from 'react';
+import {useSearchParams} from 'react-router-dom';
+import {useCategoriesQuery, useProductListQuery} from '@/hooks/queries/useProductQuery';
+import {ProductCard, ProductCardSkeleton} from '@/components/product/ProductCard';
+import {EmptyState} from '@/components/common/EmptyState';
 
-type SortOption = 'id,desc' | 'salesCount,desc' | 'viewCount,desc';
+// ★ 백엔드 SortType enum과 1:1 일치 (LATEST / PRICE_ASC / PRICE_DESC / POPULAR)
+//   기존 'salesCount,desc' / 'viewCount,desc' (Spring Pageable 형식)는
+//   백엔드가 SortType으로 변환 못 해 500 발생 → enum 값으로 교체
+type SortOption = 'LATEST' | 'POPULAR' | 'PRICE_ASC' | 'PRICE_DESC';
 
 const SORT_LABELS: Record<SortOption, string> = {
-  'id,desc': '최신순',
-  'salesCount,desc': '인기순',
-  'viewCount,desc': '조회순',
+  'LATEST': '최신순',
+  'POPULAR': '인기순',
+  'PRICE_ASC': '가격 낮은 순',
+  'PRICE_DESC': '가격 높은 순',
 };
+
+const VALID_SORTS = Object.keys(SORT_LABELS) as SortOption[];
 
 export default function ProductListPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -19,7 +25,12 @@ export default function ProductListPage() {
   const keyword = searchParams.get('keyword') || undefined;
   const categoryIdStr = searchParams.get('categoryId');
   const categoryId = categoryIdStr ? Number(categoryIdStr) : undefined;
-  const sort = (searchParams.get('sort') as SortOption) || 'id,desc';
+
+  // 잘못된 sort 값이 URL로 들어와도 안전하게 LATEST로 폴백
+  const rawSort = searchParams.get('sort');
+  const sort: SortOption = VALID_SORTS.includes(rawSort as SortOption)
+    ? (rawSort as SortOption)
+    : 'LATEST';
 
   const { data: categories } = useCategoriesQuery();
   const { data, isLoading } = useProductListQuery({
@@ -29,6 +40,9 @@ export default function ProductListPage() {
     categoryId,
     sort,
   });
+
+  // 응답이 비어도 안전하게 — content가 undefined여도 .map 안 터짐
+  const products = data?.content ?? [];
 
   const updateParam = (key: string, value: string) => {
     const next = new URLSearchParams(searchParams);
@@ -66,7 +80,7 @@ export default function ProductListPage() {
                   전체
                 </button>
               </li>
-              {categories?.map((cat) => (
+              {(categories ?? []).map((cat) => (
                 <li key={cat.categoryId}>
                   <button
                     onClick={() => updateParam('categoryId', String(cat.categoryId))}
@@ -87,8 +101,8 @@ export default function ProductListPage() {
         {/* 메인 */}
         <div className="flex-1 min-w-0">
           {/* 정렬 */}
-          <div className="flex items-center justify-end mb-4 gap-2">
-            {(Object.keys(SORT_LABELS) as SortOption[]).map((s) => (
+          <div className="flex items-center justify-end mb-4 gap-2 flex-wrap">
+            {VALID_SORTS.map((s) => (
               <button
                 key={s}
                 onClick={() => updateParam('sort', s)}
@@ -110,7 +124,7 @@ export default function ProductListPage() {
                 <ProductCardSkeleton key={i} />
               ))}
             </div>
-          ) : data?.content.length === 0 ? (
+          ) : products.length === 0 ? (
             <EmptyState
               title="검색 결과가 없습니다"
               description="다른 검색어로 시도해보세요."
@@ -118,7 +132,7 @@ export default function ProductListPage() {
           ) : (
             <>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 md:gap-6">
-                {data?.content.map((product) => (
+                {products.map((product) => (
                   <ProductCard key={product.productId} product={product} />
                 ))}
               </div>

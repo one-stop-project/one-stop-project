@@ -1,4 +1,4 @@
-import { apiClient, ApiResponse, PageResponse } from '@/api/client';
+import {apiClient, ApiResponse, PageResponse} from '@/api/client';
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  공통 타입 — 백엔드 ProductSummaryResponse 와 1:1
@@ -48,7 +48,7 @@ export interface ProductSearchParams {
   size?: number;
   keyword?: string;
   categoryId?: number;
-  // ★ 백엔드는 Spring Pageable 정렬 사용: "필드,방향" (예: "id,desc")
+  // ★ 백엔드는 Spring Pageable 정렬 사용: "필드,방향" (예: "LATEST")
   sort?: string;
 }
 

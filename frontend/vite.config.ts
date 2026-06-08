@@ -11,9 +11,11 @@ export default defineConfig({
   },
   // ★ 프로덕션 빌드 설정
   build: {
-    // Spring Boot 정적 리소스 폴더로 직접 출력
-    // frontend/ 기준 상대경로 → ../src/main/resources/static
-    outDir: '../src/main/resources/static/dist',
+    // frontend/dist 로 빌드한다.
+    // 이후 build.gradle 의 copyFrontendToStatic 태스크가
+    //   frontend/dist → src/main/resources/static 으로 복사한다.
+    // (Vite가 static 에 직접 쓰지 않고, Gradle 복사 파이프라인을 거치는 구조)
+    outDir: 'dist',
     emptyOutDir: true,
   },
   server: {

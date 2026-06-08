@@ -1,11 +1,17 @@
-import { useState, FormEvent } from 'react';
+import { useState, useEffect, FormEvent } from 'react';
 import { useLocation, Navigate } from 'react-router-dom';
 import { useCreateOrderMutation } from '@/hooks/queries/useOrderQuery';
 import { useMyInfoQuery } from '@/hooks/queries/useUserQuery';
-import { useEffect } from 'react';
+
+// ════════════════════════════════════════════════════════════
+//  P1-④ 연동 수정: 백엔드 CreateOrderRequest 필드명에 맞춤
+//   - CheckoutItem.productItemId → itemId
+//   - form.shippingAddress       → receiverAddress
+//   - form.message               → deliveryMessage
+// ════════════════════════════════════════════════════════════
 
 interface CheckoutItem {
-  productItemId: number;
+  itemId: number;            // ★ productItemId → itemId
   quantity: number;
 }
 
@@ -19,8 +25,8 @@ export default function CheckoutPage() {
   const [form, setForm] = useState({
     receiverName: '',
     receiverPhone: '',
-    shippingAddress: '',
-    message: '',
+    receiverAddress: '',       // ★ shippingAddress → receiverAddress
+    deliveryMessage: '',       // ★ message → deliveryMessage
   });
 
   useEffect(() => {
@@ -29,7 +35,7 @@ export default function CheckoutPage() {
         ...prev,
         receiverName: me.name,
         receiverPhone: me.phone,
-        shippingAddress: me.address,
+        receiverAddress: me.address,
       }));
     }
   }, [me]);
@@ -40,13 +46,21 @@ export default function CheckoutPage() {
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    createOrder.mutate({
-      items,
-      receiverName: form.receiverName,
-      receiverPhone: form.receiverPhone,
-      shippingAddress: form.shippingAddress,
-      message: form.message || undefined,
-    });
+    createOrder.mutate(
+      {
+        orderType: 'DIRECT',
+        items,                                       // [{ itemId, quantity }]
+        receiverName: form.receiverName,
+        receiverPhone: form.receiverPhone,
+        receiverAddress: form.receiverAddress,       // ★
+        deliveryMessage: form.deliveryMessage || undefined,  // ★
+      },
+      {
+        onError: () => {
+          alert('주문 생성에 실패했습니다. 입력 정보를 확인해주세요.');
+        },
+      }
+    );
   };
 
   return (
@@ -93,22 +107,23 @@ export default function CheckoutPage() {
               <input
                 type="text"
                 className="input-field"
-                value={form.shippingAddress}
-                onChange={(e) => setForm({ ...form, shippingAddress: e.target.value })}
+                value={form.receiverAddress}
+                onChange={(e) => setForm({ ...form, receiverAddress: e.target.value })}
                 required
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                배송 요청사항 (선택)
+                배송 요청사항 (선택 · 최대 50자)
               </label>
               <textarea
                 className="input-field"
-                value={form.message}
-                onChange={(e) => setForm({ ...form, message: e.target.value })}
+                value={form.deliveryMessage}
+                onChange={(e) => setForm({ ...form, deliveryMessage: e.target.value })}
                 placeholder="문 앞에 두고 가주세요 등"
                 rows={2}
+                maxLength={50}
               />
             </div>
           </div>

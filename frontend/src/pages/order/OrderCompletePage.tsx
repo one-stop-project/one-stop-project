@@ -1,8 +1,8 @@
-import { useParams, Link } from 'react-router-dom';
-import { CheckCircle2 } from 'lucide-react';
-import { useOrderDetailQuery } from '@/hooks/queries/useOrderQuery';
-import { PageSpinner } from '@/components/common/Spinner';
-import { formatPrice } from '@/utils/format';
+import {Link, useParams} from 'react-router-dom';
+import {CheckCircle2} from 'lucide-react';
+import {useOrderDetailQuery} from '@/hooks/queries/useOrderQuery';
+import {PageSpinner} from '@/components/common/Spinner';
+import {formatPrice} from '@/utils/format';
 
 export default function OrderCompletePage() {
   const { id } = useParams<{ id: string }>();
@@ -35,7 +35,7 @@ export default function OrderCompletePage() {
           </div>
           <div className="flex justify-between py-1">
             <span className="text-gray-600">배송지</span>
-            <span className="font-medium text-right">{order.shippingAddress}</span>
+            <span className="font-medium text-right">{order.receiverAddress}</span>
           </div>
         </div>
 

@@ -1,7 +1,7 @@
-import { useState, FormEvent } from 'react';
-import { Link } from 'react-router-dom';
-import { ShoppingBag } from 'lucide-react';
-import { useSignupMutation } from '@/hooks/queries/useAuthQuery';
+import {FormEvent, useState} from 'react';
+import {Link} from 'react-router-dom';
+import {ShoppingBag} from 'lucide-react';
+import {useSignupMutation} from '@/hooks/queries/useAuthQuery';
 
 type UserType = 'BUYER' | 'SELLER';
 
@@ -21,23 +21,31 @@ export default function SignupPage() {
 
   const signupMutation = useSignupMutation();
 
-  const handleSubmit = (e: FormEvent) => {
-    e.preventDefault();
+    const handleSubmit = (e: FormEvent) => {
+        e.preventDefault();
 
-    if (form.password !== form.passwordConfirm) {
-      alert('비밀번호가 일치하지 않습니다.');
-      return;
-    }
+        if (form.password !== form.passwordConfirm) {
+            alert('비밀번호가 일치하지 않습니다.');
+            return;
+        }
 
-    const { passwordConfirm, ...payload } = form;
+        const { passwordConfirm, ...rest } = form;
 
-    if (userType === 'BUYER') {
-      const { shopName, businessNumber, bankAccount, ...buyerPayload } = payload;
-      signupMutation.mutate(buyerPayload as any);
-    } else {
-      signupMutation.mutate(payload);
-    }
-  };
+        if (userType === 'BUYER') {
+            // BUYER: 판매자 전용 필드 제거 + role 포함
+            const { shopName, businessNumber, bankAccount, ...buyerRest } = rest;
+            signupMutation.mutate({
+                ...buyerRest,
+                role: 'BUYER',          // ★ 백엔드 @NotNull role 충족
+            });
+        } else {
+            // SELLER: 전체 필드 + role 포함
+            signupMutation.mutate({
+                ...rest,
+                role: 'SELLER',         // ★ 백엔드 @NotNull role 충족
+            });
+        }
+    };
 
   const update = (field: keyof typeof form, value: string) =>
     setForm((prev) => ({ ...prev, [field]: value }));

@@ -1,19 +1,20 @@
-import { apiClient, ApiResponse } from '@/api/client';
-import { UserRole } from '@/types/common';
+import {apiClient, ApiResponse} from '@/api/client';
+import {UserRole} from '@/types/common';
 
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 //  Request DTO
 // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 export interface SignUpRequest {
-  email: string;
-  password: string;
-  name: string;
-  phone: string;
-  address: string;
-  shopName?: string;
-  businessNumber?: string;
-  bankAccount?: string;
+    email: string;
+    password: string;
+    name: string;
+    phone: string;
+    address: string;
+    role: UserRole;            // ★ 추가 — 백엔드 @NotNull UserRole 충족 ('BUYER' | 'SELLER')
+    shopName?: string;
+    businessNumber?: string;
+    bankAccount?: string;
 }
 
 export interface LoginRequest {
