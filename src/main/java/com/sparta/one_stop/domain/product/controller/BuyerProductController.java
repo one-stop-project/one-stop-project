@@ -37,7 +37,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class BuyerProductController {
 
-    private static final int MIN_PAGE_SIZE = 10;
+    private static final int MIN_PAGE_SIZE = 1;
     private static final int MAX_PAGE_SIZE = 20;
     private static final int POPULAR_MAX_LIMIT = 20;
     private static final int POPULAR_KEYWORD_MAX_LIMIT = 10;
@@ -55,7 +55,7 @@ public class BuyerProductController {
         @RequestParam(required = false) Long categoryId,
         @RequestParam(required = false) Long minPrice,
         @RequestParam(required = false) Long maxPrice,
-        @RequestParam(defaultValue = "LATEST") SortType sort,
+        @RequestParam(name = "sortType", defaultValue = "LATEST") SortType sort,
         @PageableDefault(size = 20) Pageable pageable,
         @AuthenticationPrincipal AuthUser authUser
     ) {
