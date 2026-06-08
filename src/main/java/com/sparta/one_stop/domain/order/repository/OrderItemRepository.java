@@ -92,4 +92,17 @@ public interface OrderItemRepository extends JpaRepository<OrderItem, Long> {
         where o.user.id = :userId
     """)
     List<OrderItem> findAllReviewableByUserId(@Param("userId") Long userId);
+
+    // 주문 취소용 - ProductItem fetch join
+    // cancelOrder()에서 재고 복구 시 OrderItem → ProductItem Lazy Loading N+1 방지
+    @Query("""
+        select oi
+        from OrderItem oi
+        join fetch oi.productItem
+        where oi.order.id = :orderId
+    """)
+    List<OrderItem> findAllByOrderIdWithProductItem(
+        @Param("orderId") Long orderId
+    );
+
 }

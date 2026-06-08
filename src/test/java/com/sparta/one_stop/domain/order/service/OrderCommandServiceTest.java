@@ -547,7 +547,7 @@ class OrderCommandServiceTest {
 
         when(orderRepository.findById(orderId))
             .thenReturn(Optional.of(order));
-        when(orderItemRepository.findAllByOrderId(orderId))
+        when(orderItemRepository.findAllByOrderIdWithProductItem(orderId))
             .thenReturn(List.of(orderItem));
         when(deliveryRepository.findAllByOrderItemIdIn(List.of(101L)))
             .thenReturn(List.of());
@@ -617,7 +617,7 @@ class OrderCommandServiceTest {
 
         when(orderRepository.findById(orderId))
             .thenReturn(Optional.of(order));
-        when(orderItemRepository.findAllByOrderId(orderId))
+        when(orderItemRepository.findAllByOrderIdWithProductItem(orderId))
             .thenReturn(List.of(orderItem));
         when(deliveryRepository.findAllByOrderItemIdIn(List.of(101L)))
             .thenReturn(List.of(delivery));
@@ -658,7 +658,7 @@ class OrderCommandServiceTest {
         OrderItem orderItem = orderItemOnlyId(101L);
 
         when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
-        when(orderItemRepository.findAllByOrderId(orderId))
+        when(orderItemRepository.findAllByOrderIdWithProductItem(orderId))
             .thenReturn(List.of(orderItem));
 
         when(deliveryRepository.findAllByOrderItemIdIn(List.of(101L)))
@@ -759,7 +759,7 @@ class OrderCommandServiceTest {
 
         when(orderRepository.findById(orderId))
             .thenReturn(Optional.of(order));
-        when(orderItemRepository.findAllByOrderId(orderId))
+        when(orderItemRepository.findAllByOrderIdWithProductItem(orderId))
             .thenReturn(List.of(orderItem));
         when(deliveryRepository.findAllByOrderItemIdIn(List.of(101L)))
             .thenReturn(List.of());
@@ -792,7 +792,7 @@ class OrderCommandServiceTest {
 
         when(orderRepository.findById(orderId))
             .thenReturn(Optional.of(order));
-        when(orderItemRepository.findAllByOrderId(orderId))
+        when(orderItemRepository.findAllByOrderIdWithProductItem(orderId))
             .thenReturn(List.of(orderItem));
         when(deliveryRepository.findAllByOrderItemIdIn(List.of(101L)))
             .thenReturn(List.of(delivery));

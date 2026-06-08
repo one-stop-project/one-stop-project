@@ -19,7 +19,7 @@ class ProductDescriptionGeneratorTest {
         "삼성전자", "삼성전자", "디지털", "휴대폰", "자급제", "안드로이드", "pid-1", "1", "네이버");
 
     private final DummyPromptProperties prompts = new DummyPromptProperties(
-        "너는 쇼핑몰 상품 설명 작성기다. 주어진 사실만 사용해 설명을 쓴다.");
+        "너는 쇼핑몰 상품 설명 작성기다. 주어진 사실만 사용해 설명을 쓴다.", null);
 
     @Test
     @DisplayName("LLM 응답이 있으면 그 내용을 trim 해서 반환")

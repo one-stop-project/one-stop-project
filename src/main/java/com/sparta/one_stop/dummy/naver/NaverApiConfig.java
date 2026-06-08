@@ -22,4 +22,9 @@ public class NaverApiConfig {
                 .defaultHeader("X-Naver-Client-Secret", properties.getClientSecret())
                 .build();
     }
+
+    @Bean
+    public NaverShopClient naverShopClient(RestClient naverRestClient) {
+        return new NaverShopClient(naverRestClient);
+    }
 }
