@@ -1,14 +1,19 @@
-import { ArrowRight, Sparkles } from 'lucide-react';
-import { Link } from 'react-router-dom';
-import { usePopularProductsQuery, useProductListQuery } from '@/hooks/queries/useProductQuery';
-import { ProductCard, ProductCardSkeleton } from '@/components/product/ProductCard';
+import {ArrowRight, Sparkles} from 'lucide-react';
+import {Link} from 'react-router-dom';
+import {usePopularProductsQuery, useProductListQuery} from '@/hooks/queries/useProductQuery';
+import {ProductCard, ProductCardSkeleton} from '@/components/product/ProductCard';
 
 export default function HomePage() {
   const { data: popular, isLoading: popularLoading } = usePopularProductsQuery(8);
   const { data: latest, isLoading: latestLoading } = useProductListQuery({
     page: 0,
     size: 8,
+    sort: 'LATEST',
   });
+
+  // 응답이 깨져도 .map에서 안 터지도록 방어
+  const popularProducts = popular?.content ?? [];
+  const latestProducts = latest?.content ?? [];
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-8">
@@ -41,8 +46,9 @@ export default function HomePage() {
             <Sparkles className="text-primary-600" size={24} />
             <h2 className="text-2xl font-bold text-gray-900">인기 상품</h2>
           </div>
+          {/* ★ salesCount,desc → POPULAR (백엔드 SortType) */}
           <Link
-            to="/products?sort=salesCount,desc"
+            to="/products?sort=POPULAR"
             className="text-sm text-gray-600 hover:text-primary-600 flex items-center gap-1"
           >
             더보기
@@ -53,7 +59,7 @@ export default function HomePage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
           {popularLoading
             ? Array.from({ length: 8 }).map((_, i) => <ProductCardSkeleton key={i} />)
-            : popular?.content.map((product) => (
+            : popularProducts.map((product) => (
                 <ProductCard key={product.productId} product={product} />
               ))}
         </div>
@@ -64,7 +70,7 @@ export default function HomePage() {
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-bold text-gray-900">새로 들어온 상품</h2>
           <Link
-            to="/products?sort=id,desc"
+            to="/products?sort=LATEST"
             className="text-sm text-gray-600 hover:text-primary-600 flex items-center gap-1"
           >
             더보기
@@ -75,7 +81,7 @@ export default function HomePage() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
           {latestLoading
             ? Array.from({ length: 8 }).map((_, i) => <ProductCardSkeleton key={i} />)
-            : latest?.content.map((product) => (
+            : latestProducts.map((product) => (
                 <ProductCard key={product.productId} product={product} />
               ))}
         </div>

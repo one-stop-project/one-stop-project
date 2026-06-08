@@ -11,6 +11,8 @@ import com.sparta.one_stop.domain.auth.dto.result.RefreshResult;
 import com.sparta.one_stop.domain.auth.service.AuthService;
 import com.sparta.one_stop.domain.cart.service.CartMergeService;
 import com.sparta.one_stop.domain.cart.support.GuestCartCookieProvider;
+import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import com.sparta.one_stop.global.response.ApiResponse;
 import com.sparta.one_stop.global.security.AuthUser;
 import com.sparta.one_stop.global.security.JwtTokenProvider;
@@ -140,21 +142,24 @@ public class AuthController {
     )
     @PostMapping("/refresh")
     public ResponseEntity<ApiResponse<TokenRefreshResponse>> refresh(
-        @Parameter(in = ParameterIn.COOKIE, name = "refresh_token", required = true, description = "인증을 위한 리프레시 토큰")
-        @CookieValue(value = "refresh_token") String refreshToken,
-        @Parameter(in = ParameterIn.COOKIE, name = "device_id", required = true, description = "다중 기기 검증을 위한 기기 식별자")
-        @CookieValue(value = "device_id") String deviceId) {
+        @Parameter(in = ParameterIn.COOKIE, name = "refresh_token", description = "인증을 위한 리프레시 토큰")
+        @CookieValue(value = "refresh_token", required = false) String refreshToken,
+        @Parameter(in = ParameterIn.COOKIE, name = "device_id", description = "다중 기기 검증을 위한 기기 식별자")
+        @CookieValue(value = "device_id", required = false) String deviceId) {
 
-        // 1. 쿠키에서 읽은 값으로 TokenRefreshRequest DTO 생성 (또는 Service 파라미터 직접 전달)
+        // ★ 쿠키 누락 시 500이 아니라 401(인증 필요)로 응답
+        //   비로그인 사용자가 앱 진입 시 호출하는 정상 케이스이므로 ERROR 로그도 안 남김
+        if (refreshToken == null || refreshToken.isBlank()
+            || deviceId == null || deviceId.isBlank()) {
+            throw new CustomException(ErrorCode.AUTH_010, "인증 정보가 없습니다. 다시 로그인해주세요.");
+        }
+
         TokenRefreshRequest request = new TokenRefreshRequest(refreshToken);
-
         RefreshResult result = authService.refresh(request, deviceId);
 
-        // 2. RTR(Rotation) 정책에 따라 발급된 새 RT를 쿠키에 덮어쓰기
-        // responseDto.refreshToken() 추출 및 "/api/auth" 인자 추가
         String newRtCookie = cookieUtil.createHttpOnlyCookie(
             "refresh_token",
-            result.newRefreshToken(),  // ← 여기에 새 RT
+            result.newRefreshToken(),
             jwtTokenProvider.getRefreshTokenExpirySeconds(),
             "/api/auth"
         );
