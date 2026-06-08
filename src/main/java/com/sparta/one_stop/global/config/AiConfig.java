@@ -26,12 +26,14 @@ public class AiConfig {
     @Bean
     public ChatClient dummyChatClient(
         @Value("${gemini.dummy-api-key}") String dummyApiKey,
+        @Value("${spring.ai.openai.base-url}") String baseUrl,
+        @Value("${spring.ai.openai.chat.completions-path:/chat/completions}") String completionsPath,
         @Value("${spring.ai.openai.chat.options.model:gemini-2.5-flash-lite}") String model
     ) {
         OpenAiApi api = OpenAiApi.builder()
             .apiKey(dummyApiKey)
-            .baseUrl("https://generativelanguage.googleapis.com/v1beta/openai")
-            .completionsPath("/chat/completions")
+            .baseUrl(baseUrl)
+            .completionsPath(completionsPath)
             .build();
         OpenAiChatModel chatModel = OpenAiChatModel.builder()
             .openAiApi(api)
