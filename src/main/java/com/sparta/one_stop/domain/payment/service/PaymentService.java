@@ -111,7 +111,7 @@ public class PaymentService {
      */
     private void acceptOrderItemsAndCreateDeliveries(Order order) {
 
-        List<OrderItem> orderItems = orderItemRepository.findAllByOrderId(
+        List<OrderItem> orderItems = orderItemRepository.findAllByOrderIdWithProductItem(
             order.getId()
         );
 
