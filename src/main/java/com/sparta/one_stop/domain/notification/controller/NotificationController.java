@@ -19,7 +19,7 @@ public class NotificationController {
 
     /**
      * SSE 알림 구독
-     * - 인증된 사용자(BUYER)만 구독 가능하다
+     * - 인증된 사용자만 구독 가능하다
      * - 연결 성공 시 초기 이벤트(connect)를 전송한다
      * - 사용자당 1개의 연결만 유지하며, 재연결 시 기존 emitter를 교체한다
      * - 타임아웃: 30분

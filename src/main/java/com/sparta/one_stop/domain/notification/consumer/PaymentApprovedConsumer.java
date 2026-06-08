@@ -1,5 +1,6 @@
 package com.sparta.one_stop.domain.notification.consumer;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sparta.one_stop.domain.notification.service.NotificationService;
 import com.sparta.one_stop.domain.payment.event.PaymentApprovedEventPayload;
@@ -11,6 +12,7 @@ import org.springframework.stereotype.Component;
 
 import java.text.NumberFormat;
 import java.util.Locale;
+import java.util.Optional;
 
 @Slf4j
 @Component
@@ -22,9 +24,8 @@ public class PaymentApprovedConsumer {
 
     /**
      * 결제 승인 이벤트 수신
-     * - payment.approved 토픽을 구독하여 결제 완료 알림을 생성한다
-     * - Consumer Group은 one-stop-notification-group으로 알림 전용 그룹을 사용한다
-     * - payload 역직렬화 실패 또는 처리 실패 시 로그를 기록하고 예외를 전파하지 않는다
+     * - payload 역직렬화 실패는 재시도해도 복구 가능성이 낮으므로 로그만 남기고 스킵한다
+     * - 알림 저장 등 처리 실패는 예외를 전파하여 Kafka 재처리 대상이 되도록 한다
      * - Outbox 상태에는 영향을 주지 않는다
      */
     @KafkaListener(
@@ -32,29 +33,47 @@ public class PaymentApprovedConsumer {
         groupId = "one-stop-notification-group"
     )
     public void onPaymentApproved(String payload) {
+        Optional<PaymentApprovedEventPayload> eventOptional = deserialize(payload);
+
+        if (eventOptional.isEmpty()) {
+            return;
+        }
+
+        PaymentApprovedEventPayload event = eventOptional.get();
+
+        log.info(
+            "결제 승인 이벤트 수신 - eventId: {}, orderId: {}, userId: {}",
+            event.eventId(), event.orderId(), event.userId()
+        );
+
+        notificationService.notify(
+            event.userId(),
+            event.eventId(),
+            NotificationType.PAYMENT_APPROVED,
+            "결제 완료",
+            formatMessage(event)
+        );
+    }
+
+    /**
+     * payload 역직렬화
+     * - JSON 형식 오류는 재시도해도 복구 가능성이 낮으므로 빈 Optional을 반환한다
+     */
+    private Optional<PaymentApprovedEventPayload> deserialize(String payload) {
         try {
-            PaymentApprovedEventPayload event = objectMapper.readValue(
-                payload,
-                PaymentApprovedEventPayload.class
+            return Optional.of(
+                objectMapper.readValue(
+                    payload,
+                    PaymentApprovedEventPayload.class
+                )
             );
-
-            log.info(
-                "결제 승인 이벤트 수신 - eventId: {}, orderId: {}, userId: {}",
-                event.eventId(), event.orderId(), event.userId()
-            );
-
-            notificationService.notify(
-                event.userId(),
-                event.eventId(),
-                NotificationType.PAYMENT_APPROVED,
-                "결제 완료",
-                formatMessage(event)
-            );
-        } catch (Exception e) {
+        } catch (JsonProcessingException e) {
             log.error(
-                "결제 승인 이벤트 처리 실패 - payload: {}",
+                "결제 승인 이벤트 역직렬화 실패 - payload: {}",
                 payload, e
             );
+
+            return Optional.empty();
         }
     }
 
