@@ -7,6 +7,7 @@ import com.sparta.one_stop.global.enums.notification.NotificationType;
 import com.sparta.one_stop.global.sse.SseConnectionManager;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,14 +47,21 @@ public class NotificationService {
             message
         );
 
-        notificationRepository.save(notification);
+        Notification savedNotification;
+
+        try {
+            savedNotification = notificationRepository.saveAndFlush(notification);
+        } catch (DataIntegrityViolationException e) {
+            log.info("중복 알림 이벤트 저장 스킵 - eventId: {}", eventId);
+            return;
+        }
 
         log.info(
             "알림 저장 완료 - eventId: {}, userId: {}, type: {}",
             eventId, userId, type
         );
 
-        sendSse(userId, notification);
+        sendSse(userId, savedNotification);
     }
 
     /**
