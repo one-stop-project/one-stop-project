@@ -235,4 +235,57 @@ public class DeliveryService {
 
         return UpdateDeliveryStatusResponse.from(delivery);
     }
+
+    /**
+     * 결제 승인 완료 후 주문 상품 접수 및 배송 생성
+     * - OrderItem 상태를 PENDING_PAYMENT → ORDERED 로 변경
+     * - 주문 상품 1개당 Delivery 1개 생성
+     * - 최초 배송 상태는 ACCEPT
+     * - 배송 이력에도 ACCEPT 기록
+     */
+    @Transactional
+    public void createDeliveriesForPayment(Order order) {
+        List<OrderItem> orderItems = orderItemRepository.findAllByOrderIdWithProductItem(
+            order.getId()
+        );
+
+        if (orderItems.isEmpty()) {
+            throw new CustomException(ErrorCode.ORDER_001);
+        }
+
+        List<Long> orderItemIds = orderItems.stream()
+            .map(OrderItem::getId)
+            .toList();
+
+        // 동일 주문에 대한 배송 중복 생성 방지
+        List<Delivery> existingDeliveries = deliveryRepository.findAllByOrderItemIdIn(
+            orderItemIds
+        );
+
+        if (!existingDeliveries.isEmpty()) {
+            throw new CustomException(ErrorCode.PAYMENT_003);
+        }
+
+        List<Delivery> deliveries = orderItems.stream()
+            .map(orderItem -> {
+                orderItem.markOrdered();
+
+                return Delivery.builder()
+                    .orderItem(orderItem)
+                    .build();
+            })
+            .toList();
+
+        List<Delivery> savedDeliveries = deliveryRepository.saveAll(deliveries);
+
+        List<DeliveryHistory> histories = savedDeliveries.stream()
+            .map(delivery -> new DeliveryHistory(
+                delivery,
+                DeliveryStatus.ACCEPT
+            ))
+            .toList();
+
+        deliveryHistoryRepository.saveAll(histories);
+    }
+
 }
