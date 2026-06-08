@@ -1,0 +1,139 @@
+spring:
+  application:
+    name: one_stop
+  config:
+    import: "classpath:prompts.yml"
+
+  datasource:
+    url: jdbc:mysql://${DB_HOST:localhost}:3306/one_stop_db?useSSL=false&allowPublicKeyRetrieval=true&characterEncoding=UTF-8
+    username: ${DB_USERNAME:one_stop}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+
+  batch:
+    jdbc:
+      initialize-schema: always
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: 6379
+
+  kafka:
+    bootstrap-servers: ${KAFKA_HOST:localhost}:9092
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      retries: 3
+    consumer:
+      group-id: one-stop-payment-group
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      auto-offset-reset: earliest
+
+  ai:
+    openai:
+      api-key: ${GEMINI_API_KEY}
+      base-url: https://generativelanguage.googleapis.com/v1beta/openai
+      chat:
+        completions-path: /chat/completions
+        options:
+          model: gemini-2.5-flash-lite
+
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      max-request-size: 100MB
+
+jwt:
+  secret:
+    key: ${JWT_SECRET_KEY}
+  access-token-expiry: 15m
+  refresh-token-expiry: 14d
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  api-docs:
+    path: /v3/api-docs
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health, info, metrics, prometheus
+  endpoint:
+    prometheus:
+      enabled: true
+    health:
+      show-details: when-authorized
+
+app:
+  cors:
+    allowed-origins: ${ALLOWED_ORIGINS:http://localhost:8080}
+  image:
+    local-dir: ${IMAGE_LOCAL_DIR:/app/uploads/images}
+    url-prefix: /images
+  security:
+    csp:
+      policy: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data:; font-src 'self' data: https://cdn.jsdelivr.net;"
+
+resilience4j:
+  circuitbreaker:
+    instances:
+      ai-assistant:
+        failure-rate-threshold: 50
+        minimum-number-of-calls: 10
+        wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        sliding-window-size: 10
+      ai-review:
+        failure-rate-threshold: 50
+        minimum-number-of-calls: 5
+        wait-duration-in-open-state: 60s
+        permitted-number-of-calls-in-half-open-state: 2
+        sliding-window-size: 10
+  timelimiter:
+    instances:
+      ai-assistant:
+        timeout-duration: 10s
+      ai-review:
+        timeout-duration: 30s
+
+point:
+  integrity:
+    secret: ${POINT_INTEGRITY_SECRET}
+
+coupon:
+  issue:
+    strategy: decr
+
+naver:
+  api:
+    client-id: ${NAVER_CLIENT_ID:}
+    client-secret: ${NAVER_CLIENT_SECRET:}
+    base-url: https://openapi.naver.com/v1/search/shop.json
+    default-sort: sim
+
+dummy:
+  scheduler:
+    enabled: ${DUMMY_SCHEDULER_ENABLED:false}
+    cron: ${DUMMY_SCHEDULER_CRON:0 0 3 * * *}
+  seed:
+    display: ${DUMMY_SEED_DISPLAY:100}
+    throttle-ms: ${DUMMY_SEED_THROTTLE_MS:4000}
+    default-image-url: ${DUMMY_SEED_DEFAULT_IMAGE_URL:/images/default-product.png}
+
+slack:
+  alert:
+    enabled: ${SLACK_ALERT_ENABLED:false}
+    webhook-url: ${SLACK_ALERT_WEBHOOK_URL:}

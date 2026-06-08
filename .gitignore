@@ -49,6 +49,7 @@ uploads/
 # Environment
 .env
 .env.*
+ec2-dummy.env
 
 # Application Config
 src/main/resources/application.yml
@@ -57,4 +58,5 @@ src/main/resources/application-prod.yml
 
 # Allow example configs
 !src/main/resources/application-example.yml
+!src/main/resources/application-prod-example.yml
 !docker-compose.yml
