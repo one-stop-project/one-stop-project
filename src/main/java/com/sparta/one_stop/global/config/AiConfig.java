@@ -2,6 +2,11 @@ package com.sparta.one_stop.global.config;
 
 import com.sparta.one_stop.global.ai.prompt.AiPromptProperties;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.openai.OpenAiChatModel;
+import org.springframework.ai.openai.OpenAiChatOptions;
+import org.springframework.ai.openai.api.OpenAiApi;
+import org.springframework.beans.factory.annotation.Primary;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -10,12 +15,25 @@ import org.springframework.context.annotation.Configuration;
 @EnableConfigurationProperties(AiPromptProperties.class)
 public class AiConfig {
 
-    /**
-     * Spring AI ChatClient 빈 등록.
-     * Builder 는 Spring AI 자동 설정이 주입하며, 내부적으로 OpenAI ChatModel 을 사용합니다.
-     */
+    // 메인 AI (eunjiom 키) — AI 리뷰 요약 · 어시스턴트 · 연관상품 추천
     @Bean
-    public ChatClient chatClient(ChatClient.Builder builder) {
+    @Primary
+    public ChatClient mainChatClient(ChatClient.Builder builder) {
         return builder.build();
+    }
+
+    // 더미 AI (junghyun 키) — 상품 더미데이터 생성 전용
+    @Bean
+    public ChatClient dummyChatClient(
+        @Value("${gemini.dummy-api-key}") String dummyApiKey,
+        @Value("${spring.ai.openai.chat.options.model:gemini-2.5-flash-lite}") String model
+    ) {
+        OpenAiApi api = OpenAiApi.builder()
+            .apiKey(dummyApiKey)
+            .baseUrl("https://generativelanguage.googleapis.com/v1beta/openai")
+            .completionsPath("/chat/completions")
+            .build();
+        OpenAiChatModel chatModel = new OpenAiChatModel(api, OpenAiChatOptions.builder().model(model).build());
+        return ChatClient.builder(chatModel).build();
     }
 }
