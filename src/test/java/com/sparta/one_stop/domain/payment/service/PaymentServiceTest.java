@@ -1,5 +1,6 @@
 package com.sparta.one_stop.domain.payment.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sparta.one_stop.domain.coupon.service.CouponCommandService;
 import com.sparta.one_stop.domain.delivery.service.DeliveryService;
@@ -135,6 +136,67 @@ class PaymentServiceTest {
         verify(outboxEventService).savePaymentApprovedEvent(
             anyString(),
             eq(orderId),
+            anyString()
+        );
+    }
+
+    @Test
+    @DisplayName("approvePayment 성공 - Outbox payload 직렬화 실패해도 결제는 성공한다")
+    void approvePayment_success_whenOutboxPayloadSerializationFails() throws Exception {
+        // given
+        Long userId = 1L;
+        Long orderId = 10L;
+        Long amount = 30000L;
+
+        ApprovePaymentRequest request = new ApprovePaymentRequest(
+            orderId,
+            amount
+        );
+
+        willDoNothing()
+            .given(couponCommandService)
+            .useCouponByOrder(any(Order.class));
+
+        AtomicReference<OrderStatus> orderStatus =
+            new AtomicReference<>(OrderStatus.PENDING_PAYMENT);
+
+        Order order = payableOrder(
+            orderId,
+            userId,
+            amount,
+            orderStatus
+        );
+
+        when(orderRepository.findById(orderId))
+            .thenReturn(Optional.of(order));
+        when(paymentRepository.existsByOrderId(orderId))
+            .thenReturn(false);
+        when(paymentRepository.save(any(Payment.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+
+        when(objectMapper.writeValueAsString(any(PaymentApprovedEventPayload.class)))
+            .thenThrow(new JsonProcessingException("serialize error") {});
+
+        // when
+        ApprovePaymentResponse result = paymentService.approvePayment(
+            userId,
+            request
+        );
+
+        // then
+        assertThat(result).isNotNull();
+        assertThat(result.orderId()).isEqualTo(orderId);
+        assertThat(result.finalPrice()).isEqualTo(amount);
+        assertThat(result.status()).isEqualTo(OrderStatus.PAID);
+
+        verify(paymentRepository).save(any(Payment.class));
+        verify(order).completePayment();
+        verify(couponCommandService).useCouponByOrder(order);
+        verify(deliveryService).createDeliveriesForPayment(order);
+
+        verify(outboxEventService, never()).savePaymentApprovedEvent(
+            anyString(),
+            any(),
             anyString()
         );
     }
