@@ -10,6 +10,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Component;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -30,6 +33,7 @@ public class NaverVariantGrouper {
     private static final Logger log = LoggerFactory.getLogger(NaverVariantGrouper.class);
     private static final String SOURCE_PREFIX = "NAVER|";
     private static final int MAX_AXES = 5;
+    private static final int MAX_KEY_LEN = 255;  // source 키 컬럼 길이 상한
 
     // 변형 토큰(용량) — 숫자+단위. 모델/버전 토큰은 보존(false-merge 방지)
     private static final Pattern CAPACITY =
@@ -188,14 +192,35 @@ public class NaverVariantGrouper {
     }
 
     private String baseSourceKey(String baseKey) {
-        return SOURCE_PREFIX + baseKey;
+        return boundKey(SOURCE_PREFIX + baseKey);
     }
 
     private String listingSourceKey(NaverShopItem item) {
         if (item.productId() != null && !item.productId().isBlank()) {
-            return SOURCE_PREFIX + "pid:" + item.productId().trim();
+            return boundKey(SOURCE_PREFIX + "pid:" + item.productId().trim());
         }
-        return SOURCE_PREFIX + "t:" + norm(item.brand()) + "|" + norm(item.maker()) + "|" + norm(item.title());
+        return boundKey(SOURCE_PREFIX + "t:" + norm(item.brand()) + "|" + norm(item.maker()) + "|" + norm(item.title()));
+    }
+
+    // 소스 키 길이 상한(255) 보장 — 초과 시 결정적 해시로 대체(영속화 실패·재실행 매칭 깨짐 방지)
+    private String boundKey(String key) {
+        if (key.length() <= MAX_KEY_LEN) {
+            return key;
+        }
+        return SOURCE_PREFIX + "h:" + sha256Hex(key);
+    }
+
+    private String sha256Hex(String value) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder(64);
+            for (byte b : digest) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 미지원", e);
+        }
     }
 
     private String stripVariantTokens(String title) {

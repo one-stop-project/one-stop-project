@@ -115,7 +115,7 @@ public class DummyProductWriter {
         }
 
         Map<String, DummyProductSourceListing> existing = sourceListingRepository
-            .findAllByBaseSourceKey(grouped.baseSourceKey()).stream()
+            .findAllBySourceAndBaseSourceKey(SOURCE, grouped.baseSourceKey()).stream()
             .collect(Collectors.toMap(DummyProductSourceListing::getListingSourceKey, l -> l, (a, b) -> a));
 
         List<ProductVariant> newVariants = new ArrayList<>();

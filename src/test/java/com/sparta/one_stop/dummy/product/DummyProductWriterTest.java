@@ -64,7 +64,7 @@ class DummyProductWriterTest {
         Product product = mock(Product.class);
         when(productRepository.findById(10L)).thenReturn(Optional.of(product));
         when(product.getProductItems()).thenReturn(new HashSet<>());
-        when(sourceListingRepository.findAllByBaseSourceKey(any())).thenReturn(List.of());
+        when(sourceListingRepository.findAllBySourceAndBaseSourceKey(any(), any())).thenReturn(List.of());
         when(productRepository.saveAndFlush(any(Product.class))).thenReturn(product);
 
         DummyWriteResult result = writer.write(seller, grouped);

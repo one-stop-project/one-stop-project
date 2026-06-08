@@ -11,5 +11,6 @@ public interface DummyProductSourceListingRepository extends JpaRepository<Dummy
     Optional<DummyProductSourceListing> findBySourceAndListingSourceKey(String source, String listingSourceKey);
 
     // 한 그룹에 속한 기존 변형 전체 (신규 변형 추가 / 사라진 변형 stale 판단용)
-    List<DummyProductSourceListing> findAllByBaseSourceKey(String baseSourceKey);
+    // source 포함 — 마켓 추가 시 baseSourceKey 충돌로 교차 오염되지 않게
+    List<DummyProductSourceListing> findAllBySourceAndBaseSourceKey(String source, String baseSourceKey);
 }

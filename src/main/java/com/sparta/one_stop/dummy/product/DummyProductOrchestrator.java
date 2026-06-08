@@ -61,6 +61,10 @@ public class DummyProductOrchestrator {
         int categoriesDone = 0;
 
         for (Category leaf : leaves) {
+            if (Thread.currentThread().isInterrupted()) {
+                log.warn("[더미시드] 인터럽트 감지 — 실행 중단 (카테고리 {}/{})", categoriesDone, leaves.size());
+                break;
+            }
             try {
                 List<Long> categoryIds = categoryChain(leaf);
                 List<NaverShopItem> items = naverShopClient.search(leaf.getName(), properties.display(), START, SORT);
