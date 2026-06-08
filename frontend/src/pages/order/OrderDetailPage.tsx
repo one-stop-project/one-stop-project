@@ -1,10 +1,10 @@
-import { useParams, Link } from 'react-router-dom';
-import { Package, Truck, MapPin, Phone } from 'lucide-react';
-import { useOrderDetailQuery, useCancelOrderMutation } from '@/hooks/queries/useOrderQuery';
-import { useOrderDeliveriesQuery } from '@/hooks/queries/useDeliveryQuery';
-import { PageSpinner } from '@/components/common/Spinner';
-import { formatPrice, formatDateTime } from '@/utils/format';
-import { OrderStatus, DeliveryStatus } from '@/types/common';
+import {Link, useParams} from 'react-router-dom';
+import {MapPin, Package, Phone, Truck} from 'lucide-react';
+import {useCancelOrderMutation, useOrderDetailQuery} from '@/hooks/queries/useOrderQuery';
+import {useOrderDeliveriesQuery} from '@/hooks/queries/useDeliveryQuery';
+import {PageSpinner} from '@/components/common/Spinner';
+import {formatDateTime, formatPrice} from '@/utils/format';
+import {DeliveryStatus, OrderStatus} from '@/types/common';
 
 const ORDER_STATUS_LABELS: Record<OrderStatus, string> = {
   PENDING: '결제 대기',
@@ -95,7 +95,7 @@ export default function OrderDetailPage() {
           </p>
           <p className="flex items-start gap-2">
             <span className="text-gray-500 w-16">주소</span>
-            <span className="font-medium">{order.shippingAddress}</span>
+            <span className="font-medium">{order.receiverAddress}</span>
           </p>
         </div>
       </section>
