@@ -49,6 +49,7 @@ uploads/
 # Environment
 .env
 .env.*
+ec2-dummy.env
 
 # Application Config
 src/main/resources/application.yml
