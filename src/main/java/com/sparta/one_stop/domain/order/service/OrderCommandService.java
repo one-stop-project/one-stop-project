@@ -26,7 +26,6 @@ import com.sparta.one_stop.domain.order.repository.OrderRepository;
 import com.sparta.one_stop.domain.point.service.PointService;
 import com.sparta.one_stop.domain.product.entity.ProductItem;
 import com.sparta.one_stop.domain.product.repository.ProductItemRepository;
-import com.sparta.one_stop.domain.subscription.entity.Subscription;
 import com.sparta.one_stop.domain.subscription.service.SubscriptionBenefitService;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.UserRepository;
@@ -188,7 +187,7 @@ public class OrderCommandService {
             throw new CustomException(ErrorCode.ORDER_008);
         }
 
-        List<OrderItem> orderItems = orderItemRepository.findAllByOrderId(orderId);
+        List<OrderItem> orderItems = orderItemRepository.findAllByOrderIdWithProductItem(orderId);
 
         List<Delivery> deliveries = findDeliveriesForCancel(
             order,

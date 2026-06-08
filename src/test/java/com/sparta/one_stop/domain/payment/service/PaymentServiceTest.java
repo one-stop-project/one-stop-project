@@ -114,7 +114,7 @@ class PaymentServiceTest {
             .thenReturn(false);
         when(paymentRepository.save(any(Payment.class)))
             .thenAnswer(invocation -> invocation.getArgument(0));
-        when(orderItemRepository.findAllByOrderId(orderId))
+        when(orderItemRepository.findAllByOrderIdWithProductItem(orderId))
             .thenReturn(List.of(orderItem1, orderItem2));
         when(deliveryRepository.findAllByOrderItemIdIn(List.of(101L, 102L)))
             .thenReturn(List.of());
@@ -391,7 +391,7 @@ class PaymentServiceTest {
             .thenReturn(false);
         when(paymentRepository.save(any(Payment.class)))
             .thenAnswer(invocation -> invocation.getArgument(0));
-        when(orderItemRepository.findAllByOrderId(orderId))
+        when(orderItemRepository.findAllByOrderIdWithProductItem(orderId))
             .thenReturn(List.of());
 
         // when & then
@@ -443,7 +443,7 @@ class PaymentServiceTest {
             .thenReturn(false);
         when(paymentRepository.save(any(Payment.class)))
             .thenAnswer(invocation -> invocation.getArgument(0));
-        when(orderItemRepository.findAllByOrderId(orderId))
+        when(orderItemRepository.findAllByOrderIdWithProductItem(orderId))
             .thenReturn(List.of(orderItem));
         when(deliveryRepository.findAllByOrderItemIdIn(List.of(101L)))
             .thenReturn(List.of(existingDelivery));
