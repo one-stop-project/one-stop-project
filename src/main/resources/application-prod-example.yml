@@ -78,7 +78,7 @@ management:
       show-details: when-authorized
 
 gemini:
-  dummy-api-key: ${GEMINI_DUMMY_API_KEY}
+  dummy-api-key: ${GEMINI_DUMMY_API_KEY:${GEMINI_API_KEY}}
 
 app:
   scheduler:

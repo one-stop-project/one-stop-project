@@ -90,11 +90,10 @@ management:
       show-details: when-authorized
 
 # ── Gemini 더미 전용 API 키 (junghyun) ──
-# AI 리뷰 요약·어시스턴트는 GEMINI_API_KEY 사용, 상품 더미데이터 생성은 이 키 사용
-# S1(메인): 두 키 모두 넣되 더미 스케줄러 비활성(DUMMY_SCHEDULER_ENABLED 생략)
-# S2(더미): 두 키 모두 넣고 DUMMY_SCHEDULER_ENABLED=true + APP_SCHEDULER_ENABLED=false
+# S1(메인): GEMINI_DUMMY_API_KEY 설정 + DUMMY_SCHEDULER_ENABLED=true → 더미 스케줄러 포함 전체 실행
+# S2(리드온리): GEMINI_DUMMY_API_KEY 미설정 시 GEMINI_API_KEY로 fallback (빈 생성용) + APP_SCHEDULER_ENABLED=false
 gemini:
-  dummy-api-key: ${GEMINI_DUMMY_API_KEY}
+  dummy-api-key: ${GEMINI_DUMMY_API_KEY:${GEMINI_API_KEY}}
 
 app:
   # ── 스케줄러 실행 서버 분리 ──
