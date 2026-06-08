@@ -4,7 +4,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-import java.io.IOException;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -28,20 +27,25 @@ public class SseConnectionManager {
 
         emitter.onCompletion(() -> {
             log.debug("SSE 연결 완료 - userId: {}", userId);
-            emitters.remove(userId);
+            emitters.remove(userId, emitter);
         });
 
         emitter.onTimeout(() -> {
             log.debug("SSE 연결 타임아웃 - userId: {}", userId);
-            emitters.remove(userId);
+            emitters.remove(userId, emitter);
         });
 
         emitter.onError(e -> {
             log.warn("SSE 연결 에러 - userId: {}", userId, e);
-            emitters.remove(userId);
+            emitters.remove(userId, emitter);
         });
 
-        emitters.put(userId, emitter);
+        SseEmitter previousEmitter = emitters.put(userId, emitter);
+
+        if (previousEmitter != null) {
+            previousEmitter.complete();
+            log.debug("기존 SSE 연결 교체 - userId: {}", userId);
+        }
 
         sendInitialEvent(userId, emitter);
 
@@ -71,9 +75,10 @@ public class SseConnectionManager {
             );
 
             log.debug("SSE 알림 전송 성공 - userId: {}", userId);
-        } catch (IOException e) {
+        } catch (Exception e) {
             log.warn("SSE 알림 전송 실패 - userId: {}", userId, e);
-            emitters.remove(userId);
+            emitters.remove(userId, emitter);
+            emitter.completeWithError(e);
         }
     }
 
@@ -102,9 +107,10 @@ public class SseConnectionManager {
                     .name("connect")
                     .data("SSE 연결 성공")
             );
-        } catch (IOException e) {
+        } catch (Exception e) {
             log.warn("SSE 초기 이벤트 전송 실패 - userId: {}", userId, e);
-            emitters.remove(userId);
+            emitters.remove(userId, emitter);
+            emitter.completeWithError(e);
         }
     }
 
