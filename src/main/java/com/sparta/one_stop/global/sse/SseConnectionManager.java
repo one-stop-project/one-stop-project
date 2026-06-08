@@ -12,16 +12,17 @@ import java.util.concurrent.ConcurrentHashMap;
 @Component
 public class SseConnectionManager {
 
-    // SseEmitter 타임아웃: 30분
     private static final long TIMEOUT = 30 * 60 * 1000L;
 
-    // userId별 SseEmitter 관리
-    // 사용자당 1개의 연결만 유지한다
     private final Map<Long, SseEmitter> emitters = new ConcurrentHashMap<>();
 
-    // SSE 연결 생성
-    // 동일 사용자가 재연결하면 기존 emitter를 교체한다
-    // 연결 성공 시 초기 이벤트(connect)를 전송하여 연결 성공을 알린다
+    /**
+     * SSE 연결 생성
+     * - SseEmitter 타임아웃: 30분
+     * - 동일 사용자가 재연결하면 기존 emitter를 교체한다
+     * - 연결 성공 시 초기 이벤트(connect)를 전송하여 연결 성공을 알린다
+     * - 타임아웃, 에러, 완료 시 emitter를 자동 제거한다
+     */
     public SseEmitter connect(Long userId) {
         SseEmitter emitter = new SseEmitter(TIMEOUT);
 
@@ -49,9 +50,11 @@ public class SseConnectionManager {
         return emitter;
     }
 
-    // 특정 사용자에게 SSE 알림 전송
-    // 연결이 없는 사용자에게는 전송을 시도하지 않는다
-    // 전송 실패 시 해당 emitter를 제거하고 로그를 기록한다
+    /**
+     * 특정 사용자에게 SSE 알림 전송
+     * - 연결이 없는 사용자에게는 전송을 시도하지 않는다
+     * - 전송 실패 시 해당 emitter를 제거하고 로그를 기록한다
+     */
     public void send(Long userId, Object data) {
         SseEmitter emitter = emitters.get(userId);
 
@@ -74,7 +77,10 @@ public class SseConnectionManager {
         }
     }
 
-    // SSE 연결 해제
+    /**
+     * SSE 연결 해제
+     * - emitter를 제거하고 complete 처리한다
+     */
     public void disconnect(Long userId) {
         SseEmitter emitter = emitters.remove(userId);
 
@@ -84,8 +90,11 @@ public class SseConnectionManager {
         }
     }
 
-    // 연결 직후 초기 이벤트 전송
-    // SSE 스펙상 연결 후 데이터를 보내지 않으면 타임아웃이 발생할 수 있다
+    /**
+     * 연결 직후 초기 이벤트 전송
+     * - SSE 스펙상 연결 후 데이터를 보내지 않으면 타임아웃이 발생할 수 있다
+     * - 전송 실패 시 emitter를 제거한다
+     */
     private void sendInitialEvent(Long userId, SseEmitter emitter) {
         try {
             emitter.send(
