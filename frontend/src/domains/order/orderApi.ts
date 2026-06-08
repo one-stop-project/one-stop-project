@@ -40,7 +40,6 @@ export interface Order {
   deliveryMessage?: string;      // ★ message → deliveryMessage
   paymentMethod?: PaymentMethod;
   createdAt: string;
-  shippingAddress: string;
 }
 
 export interface CreateOrderItemRequest {
