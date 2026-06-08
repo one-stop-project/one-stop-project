@@ -37,7 +37,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class BuyerProductController {
 
-    private static final int MIN_PAGE_SIZE = 1;
+    private static final int MIN_PAGE_SIZE = 10;
     private static final int MAX_PAGE_SIZE = 20;
     private static final int POPULAR_MAX_LIMIT = 20;
     private static final int POPULAR_KEYWORD_MAX_LIMIT = 10;
