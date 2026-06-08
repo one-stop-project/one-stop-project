@@ -151,6 +151,18 @@ naver:
     base-url: https://openapi.naver.com/v1/search/shop.json
     default-sort: sim
 
+# ── AI 더미데이터 시드 (네이버 키 있을 때만 동작) ──
+# enabled=true 일 때만 스케줄러 빈이 뜨고, cron 시각에 1회 더미 상품을 채운다. 운영은 false 유지.
+# 테스트/초기 적재는 cron을 임박한 시각으로(예: "0 */1 * * * *" 매분) 잠깐 바꿔 실행하면 된다.
+dummy:
+  scheduler:
+    enabled: ${DUMMY_SCHEDULER_ENABLED:false}    # 더미 채울 때만 true (운영 안전 기본 false)
+    cron: ${DUMMY_SCHEDULER_CRON:0 0 3 * * *}     # 매일 새벽 3시 (Asia/Seoul)
+  seed:
+    display: ${DUMMY_SEED_DISPLAY:100}            # 키워드당 네이버 검색 건수 (1~100)
+    throttle-ms: ${DUMMY_SEED_THROTTLE_MS:4000}   # 카테고리 사이 대기(ms) — LLM 분당 한도(RPM) 보호
+    default-image-url: ${DUMMY_SEED_DEFAULT_IMAGE_URL:/images/default-product.png}
+
 # ── Slack 운영 알림 설정 ──
 # OutboxEvent DEAD 전이 등 운영자가 확인해야 하는 이벤트를 Slack 채널로 알림
 # Webhook URL은 보안 값이므로 Git에 커밋하지 않고 환경변수로 주입
