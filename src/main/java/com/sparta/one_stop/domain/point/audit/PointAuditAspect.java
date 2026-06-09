@@ -3,6 +3,7 @@ package com.sparta.one_stop.domain.point.audit;
 import com.sparta.one_stop.global.audit.AdminAuditLog;
 import com.sparta.one_stop.global.audit.AdminAuditLogRepository;
 import com.sparta.one_stop.global.security.AuthUser;
+import com.sparta.one_stop.global.util.ClientIpExtractor;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -26,23 +27,20 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class PointAuditAspect {
 
-    private final AdminAuditLogRepository auditRepository;
-
     // 메서드명 → 정규 액션 매핑 (성공/실패 일관성)
     private static final Map<String, String> METHOD_TO_ACTION = Map.of(
         "chargePoint",        "POINT_CHARGE",
         "usePoint",           "POINT_USE",
         "refundPointByOrder", "POINT_REFUND"
     );
-
     private static final String DEFAULT_ACTION = "POINT_UNKNOWN";
-
     // 필드 길이 상한 (AdminAuditLog 엔티티 컬럼 정의와 일치)
     private static final int MAX_ARGS_LENGTH = 500;
     private static final int MAX_ERROR_DETAIL_LENGTH = 500;
     private static final int MAX_USER_AGENT_LENGTH = 255;
     private static final int MAX_METHOD_NAME_LENGTH = 200;
     private static final int MAX_CLIENT_IP_LENGTH = 45;  // ★ 추가 — IPv6 호환
+    private final AdminAuditLogRepository auditRepository;
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     //  성공 케이스 — PointService에 실제 존재하는 메서드만 가리킴
@@ -91,7 +89,7 @@ public class PointAuditAspect {
     private void record(String action, JoinPoint jp, String result, String errorDetail) {
         try {
             HttpServletRequest req = getCurrentRequest();
-            String clientIp = req != null ? extractIp(req) : "SYSTEM";
+            String clientIp = req != null ? ClientIpExtractor.extract(req) : "SYSTEM";
             String userAgent = req != null ? req.getHeader("User-Agent") : "SCHEDULER";
 
             ActorInfo actor = resolveActor();
@@ -141,8 +139,6 @@ public class PointAuditAspect {
         );
     }
 
-    private record ActorInfo(Long id, String username) {}
-
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     //  유틸리티 — 동일 (변경 없음)
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -152,18 +148,6 @@ public class PointAuditAspect {
             return sra.getRequest();
         }
         return null;
-    }
-
-    private String extractIp(HttpServletRequest req) {
-        String xff = req.getHeader("X-Forwarded-For");
-        if (xff != null && !xff.isBlank()) {
-            return xff.split(",")[0].trim();
-        }
-        String realIp = req.getHeader("X-Real-IP");
-        if (realIp != null && !realIp.isBlank()) {
-            return realIp;
-        }
-        return req.getRemoteAddr();
     }
 
     private String truncate(String s, int max) {
@@ -197,4 +181,6 @@ public class PointAuditAspect {
         String name = arg.getClass().getSimpleName().toLowerCase();
         return name.contains("password") || name.contains("credential") || name.contains("secret");
     }
+
+    private record ActorInfo(Long id, String username) {}
 }

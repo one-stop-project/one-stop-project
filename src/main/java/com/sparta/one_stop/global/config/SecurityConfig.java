@@ -22,7 +22,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-import org.springframework.boot.autoconfigure.security.servlet.PathRequest;
 
 // 필터 체인 순서
 // 1. CORS -> Preflight OPTIONS 먼저 통과시켜야 함
@@ -128,7 +127,7 @@ public class SecurityConfig {
                 ).permitAll()
 
                 // logout 별도 구성 / 인증 반드시 필요
-                .requestMatchers(HttpMethod.POST,"/api/auth/logout").authenticated()
+                .requestMatchers(HttpMethod.POST,"/api/auth/logout").permitAll()
 
                 // 인증 없이 접근 가능
                 // AUTH부분은 정책 변경 소요 대비 분리 작성

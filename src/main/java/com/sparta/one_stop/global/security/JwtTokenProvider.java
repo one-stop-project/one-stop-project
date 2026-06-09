@@ -30,18 +30,15 @@ import java.util.UUID;
 @Component
 public class JwtTokenProvider {
 
+    public static final String BEARER_PREFIX = "Bearer ";
     private static final int MINIMUM_KEY_LENGTH_BYTES = 32; // H256 = 256bit = 32bytes
-
     @Value("${jwt.secret.key}")
     private String secretKeyBase64;
-
     @Value("${jwt.access-token-expiry}")
     private Duration accessTokenExpiry;
-
     @DurationUnit(ChronoUnit.SECONDS)
     @Value("${jwt.refresh-token-expiry}")
     private Duration refreshTokenExpiry;
-
     private SecretKey secretKey;
 
     @PostConstruct
@@ -131,13 +128,14 @@ public class JwtTokenProvider {
     }
 
     /**
-     * AT 만료 시간 (초 단위) - 블랙리스트 TTL 산정용
+     * 토큰 발급시각(iat) 추출 — epoch 초
+     *
+     * <p>user-level 토큰 무효화(iat-cutoff) 검증용.
+     * @return iat(epoch seconds), 없으면 0
      */
-    public long getRemainingSeconds(Claims claims) {
-        long now = System.currentTimeMillis();
-        long expiration = claims.getExpiration().getTime();
-        long remainTime = expiration - now;
-        return remainTime > 0 ? remainTime / 1000 : 0;
+    public long getIssuedAtEpochSeconds(Claims claims) {
+        java.util.Date issuedAt = claims.getIssuedAt();
+        return issuedAt != null ? issuedAt.getTime() / 1000 : 0L;
     }
 
     /**
@@ -189,8 +187,6 @@ public class JwtTokenProvider {
         }
     }
 
-    public static final String BEARER_PREFIX = "Bearer ";
-
     /**
      * 헤더에서 순수 토큰만 추출합니다.
      */
@@ -201,6 +197,30 @@ public class JwtTokenProvider {
         }
         return null;
     }
+
+    /**
+     * 토큰에서 userId 추출 (만료된 토큰도 허용 — logout용)
+     *
+     * 서명이 유효하면 만료 여부와 무관하게 subject(userId)를 반환한다.
+     * 로그아웃처럼 "만료된 AT로도 정리해야 하는" 경우에 사용.
+     *
+     * @return userId, 파싱 불가 시 null
+     */
+    public Long getUserIdAllowExpired(String token) {
+        if (token == null) {
+            return null;
+        }
+        try {
+            return Long.parseLong(parseClaims(token).getSubject());
+        } catch (ExpiredJwtException e) {
+            // 만료됐어도 subject는 읽을 수 있음
+            return Long.parseLong(e.getClaims().getSubject());
+        } catch (Exception e) {
+            log.debug("logout용 userId 추출 실패 (무시): {}", e.getMessage());
+            return null;
+        }
+    }
+
 
 }
 

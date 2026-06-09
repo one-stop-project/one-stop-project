@@ -2,6 +2,7 @@ package com.sparta.one_stop.domain.admin.service;
 
 import com.sparta.one_stop.domain.admin.entity.AdminActionHistory;
 import com.sparta.one_stop.domain.admin.repository.AdminActionHistoryRepository;
+import com.sparta.one_stop.domain.auth.event.AllDevicesLogoutEvent;
 import com.sparta.one_stop.domain.order.entity.OrderCancelHistory;
 import com.sparta.one_stop.domain.order.entity.OrderItem;
 import com.sparta.one_stop.domain.order.repository.OrderCancelHistoryRepository;
@@ -9,6 +10,7 @@ import com.sparta.one_stop.domain.order.repository.OrderItemRepository;
 import com.sparta.one_stop.domain.product.repository.ProductRepository;
 import com.sparta.one_stop.domain.user.entity.Seller;
 import com.sparta.one_stop.domain.user.repository.SellerRepository;
+import com.sparta.one_stop.domain.user.service.UserStatusCacheService;
 import com.sparta.one_stop.global.enums.admin.AdminActionTarget;
 import com.sparta.one_stop.global.enums.admin.AdminActionType;
 import com.sparta.one_stop.global.enums.order.CancelActorType;
@@ -37,6 +39,8 @@ public class AdminSellerService {
     private final AdminActionHistoryRepository adminActionHistoryRepository;
     private final OrderItemRepository orderItemRepository;
     private final OrderCancelHistoryRepository orderCancelHistoryRepository;
+    private final org.springframework.context.ApplicationEventPublisher eventPublisher;
+    private final UserStatusCacheService userStatusCacheService;
 
     // 대기 중인 판매자 목록 조회
     public List<Seller> getPendingSellers() {
@@ -102,6 +106,14 @@ public class AdminSellerService {
 
         cancelActiveOrdersBySeller(sellerId, actorId);
 
+        // 캐시 무효화 — 정지 즉시 인증 차단 (캐시 ACTIVE 잔존 우회 방지)
+        Long userId = seller.getUser().getId();
+        userStatusCacheService.evict(userId);
+
+        // 전기기 로그아웃 — RT 삭제 + AT 무효화 (정지 판매자 RT 무기한 재발급 차단)
+        eventPublisher.publishEvent(
+            new AllDevicesLogoutEvent(userId, "SUSPENDED"));
+
         // 강제비활성화 이력 저장 (reason 필수)
         adminActionHistoryRepository.save(AdminActionHistory.builder()
             .actorId(actorId)
@@ -124,6 +136,9 @@ public class AdminSellerService {
 
         seller.reactivate();
         seller.getUser().reactivate();
+
+        Long userId = seller.getUser().getId();
+        userStatusCacheService.evict(userId);
 
         // 정지 해제 이력 저장 (상품은 정책상 자동 복구하지 않음)
         adminActionHistoryRepository.save(AdminActionHistory.builder()
