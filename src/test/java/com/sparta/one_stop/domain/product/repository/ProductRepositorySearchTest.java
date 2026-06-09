@@ -1,7 +1,5 @@
 package com.sparta.one_stop.domain.product.repository;
 
-import static org.assertj.core.api.Assertions.assertThat;
-
 import com.sparta.one_stop.domain.product.entity.Category;
 import com.sparta.one_stop.domain.product.entity.Product;
 import com.sparta.one_stop.domain.product.entity.ProductCategoryMapping;
@@ -10,6 +8,7 @@ import com.sparta.one_stop.domain.user.entity.Seller;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.SellerRepository;
 import com.sparta.one_stop.domain.user.repository.UserRepository;
+import com.sparta.one_stop.global.config.QuerydslConfig;
 import com.sparta.one_stop.global.enums.product.ProductItemStatus;
 import com.sparta.one_stop.global.enums.product.ProductStatus;
 import com.sparta.one_stop.global.enums.product.SortType;
@@ -17,23 +16,32 @@ import com.sparta.one_stop.global.enums.user.SellerStatus;
 import com.sparta.one_stop.global.enums.user.UserRole;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
-import java.util.List;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
+import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
 
 // 상품 검색 QueryDSL 동적 쿼리 통합 테스트 (실제 H2 실행)
 // FULLTEXT(MATCH AGAINST) 키워드 경로는 H2 미지원이라 여기서 제외 — MySQL 수동 검증 대상.
 // 여기서는 키워드 없는 동적 쿼리 로직(정렬/카테고리/가격필터/ON_SALE 의미/페이징)을 검증한다.
-@SpringBootTest
+// JPA 슬라이스 — @Scheduled 백그라운드 빈을 안 띄워서 전역 통계 카운터가 오염되지 않음
+// (N+1 검증의 쿼리 수가 백그라운드 쿼리에 밀려 흔들리던 문제 제거). H2(MODE=MySQL) test 프로필 그대로 사용.
+@DataJpaTest
+@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
 @ActiveProfiles("test")
-@Transactional
+@Import(QuerydslConfig.class)
 @DisplayName("ProductRepository.search - QueryDSL 동적 검색 (키워드 제외)")
 class ProductRepositorySearchTest {
 
@@ -224,6 +232,26 @@ class ProductRepositorySearchTest {
         p.getCategoryMappings().add(
             ProductCategoryMapping.builder().product(p).category(category).build());
         return productRepository.save(p);
+    }
+
+    @Test
+    @DisplayName("검색 목록은 옵션을 묶어 가져온다 — 상품 수만큼 쿼리가 늘지 않음 (N+1 없음)")
+    void search_batchesProductItems_noNPlusOne() {
+        Statistics stats = em.getEntityManagerFactory().unwrap(SessionFactory.class).getStatistics();
+        stats.setStatisticsEnabled(true);
+        em.flush();
+        em.clear();
+
+        // 승인 상품 4건(각 옵션 보유)을 검색으로 로드 — 이 시점엔 옵션 미로딩
+        Page<Product> page = productRepository.search(
+            cond(SortType.LATEST, null, null, null), PageRequest.of(0, 10));
+
+        // 검색 쿼리는 빼고, 옵션 접근으로 발생하는 쿼리만 센다
+        stats.clear();
+        page.getContent().forEach(p -> p.getProductItems().size());
+
+        // @BatchSize로 모든 상품 옵션이 한 번에 묶여 1쿼리 없으면 상품 수만큼 발생
+        assertThat(stats.getPrepareStatementCount()).isEqualTo(1);
     }
 
     private ProductSearchCond cond(SortType sort, Long categoryId, Long minPrice, Long maxPrice) {

@@ -28,6 +28,9 @@ spring:
         options:
           model: "gpt-4o-mini"
 
+gemini:
+  dummy-api-key: "test-dummy-key"
+
   autoconfigure:
     exclude:
       - org.redisson.spring.starter.RedissonAutoConfigurationV2

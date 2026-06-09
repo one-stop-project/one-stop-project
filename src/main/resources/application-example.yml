@@ -56,7 +56,7 @@ spring:
         # /v1/chat/completions 대신 /chat/completions로 덮어씀
         completions-path: /chat/completions
         options:
-          model: gemini-3.1-flash-lite
+          model: gemini-2.5-flash-lite
 
   # ── 파일 업로드(이미지) 한도 ──
   servlet:
@@ -89,7 +89,18 @@ management:
     health:
       show-details: when-authorized
 
+# ── Gemini 더미 전용 API 키 (junghyun) ──
+# S1(메인): GEMINI_DUMMY_API_KEY 설정 + DUMMY_SCHEDULER_ENABLED=true → 더미 스케줄러 포함 전체 실행
+# S2(리드온리): GEMINI_DUMMY_API_KEY 미설정 시 GEMINI_API_KEY로 fallback (빈 생성용) + APP_SCHEDULER_ENABLED=false
+gemini:
+  dummy-api-key: ${GEMINI_DUMMY_API_KEY:${GEMINI_API_KEY}}
+
 app:
+  # ── 스케줄러 실행 서버 분리 ──
+  # S1: APP_SCHEDULER_ENABLED 생략(기본 true) → 인기상품·키워드·구독·포인트 스케줄러 실행
+  # S2: APP_SCHEDULER_ENABLED=false → 스케줄러 비활성, DB·Redis에서 읽기만 수행
+  scheduler:
+    enabled: ${APP_SCHEDULER_ENABLED:true}
   cors:
     # 허용할 프론트엔드 Origin을 입력하세요 (로컬: http://localhost:8080, 배포: 실제 도메인)
     allowed-origins: "http://localhost:8080"

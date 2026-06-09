@@ -4,7 +4,6 @@ import com.sparta.one_stop.domain.product.dto.response.CacheableProductList;
 import com.sparta.one_stop.domain.product.dto.response.ProductDetailResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductSummaryResponse;
 import com.sparta.one_stop.domain.product.entity.Product;
-import com.sparta.one_stop.domain.product.entity.ProductItem;
 import com.sparta.one_stop.domain.product.repository.ProductRepository;
 import com.sparta.one_stop.domain.product.repository.ProductSearchCond;
 import com.sparta.one_stop.global.enums.product.ProductItemStatus;
@@ -25,6 +24,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
@@ -94,7 +94,8 @@ public class BuyerProductService {
         }
 
         int limit = pageable.getPageSize();
-        List<Long> popularIds = popularProductService.getPopularProductIds(limit);
+        // 비활성·판매중단 상품이 걸러져 화면이 덜 차지 않도록 여유분(2배) 가져와 거른 뒤 limit개만 노출
+        List<Long> popularIds = popularProductService.getPopularProductIds(limit * 2);
 
         // 랭킹이 비었거나 Redis 장애면 DB에서 판매수 높은 순으로 대체
         if (popularIds.isEmpty()) {
@@ -110,17 +111,13 @@ public class BuyerProductService {
 
         List<ProductSummaryResponse> ordered = popularIds.stream()
             .map(productMap::get)
-            .filter(this::isVisibleAndOnSale)
+            .filter(Objects::nonNull)
+            .filter(Product::isVisibleOnSale)
+            .limit(limit)
             .map(ProductSummaryResponse::from)
             .toList();
 
         return new PageImpl<>(ordered, pageable, ordered.size());
-    }
-
-    private boolean isVisibleAndOnSale(Product p) {
-        if (p == null || !p.isApproved()) return false;
-        if (p.getSeller().getStatus() != SellerStatus.APPROVED) return false;
-        return p.getProductItems().stream().anyMatch(ProductItem::isOnSale);
     }
 
     // 단건 응답만 캐시 (10분)
