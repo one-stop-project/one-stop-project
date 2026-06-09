@@ -344,8 +344,9 @@ public class OrderCommandService {
 
     /**
      * CART 주문 대상 생성
-     * - 장바구니 상품 조회 후 본인 장바구니인지 검증한다.
-     * - CartItem의 ProductItem을 그대로 사용하지 않고, item_id ASC 순서로 비관적 락을 걸어 재조회한다.
+     * - 장바구니 상품 조회 후 즉시 소유자 검증을 수행한다.
+     * - 소유자 검증을 통과한 CartItem에 대해서만 ProductItem을 비관적 락으로 재조회한다.
+     * - CartItem의 ProductItem을 그대로 사용하지 않고, item_id ASC 순서로 락을 걸어 재고 차감 대상을 조회한다.
      * - 주문 가능 여부 검증 후 재고를 차감한다.
      */
     private List<OrderTarget> getCartOrderTargets(

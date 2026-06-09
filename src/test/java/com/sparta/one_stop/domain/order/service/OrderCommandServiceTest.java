@@ -123,8 +123,12 @@ class OrderCommandServiceTest {
 
         when(userRepository.findById(userId))
             .thenReturn(Optional.of(user));
-        when(productItemRepository.findAllByIdInForUpdate(List.of(itemId)))
-            .thenReturn(List.of(productItem));
+
+        mockProductItemsWithLock(
+            List.of(itemId),
+            List.of(productItem)
+        );
+
         when(orderRepository.save(any(Order.class)))
             .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -186,8 +190,11 @@ class OrderCommandServiceTest {
         // Mock 설정
         when(userRepository.findById(userId))
             .thenReturn(Optional.of(user));
-        when(productItemRepository.findAllByIdInForUpdate(List.of(itemId)))
-            .thenReturn(List.of(productItem));
+
+        mockProductItemsWithLock(
+            List.of(itemId),
+            List.of(productItem)
+        );
 
         // 쿠폰 할인은 0원 (순수 구독 할인만 테스트하기 위함)
         given(couponQueryService.validateAndCalculateDiscount(anyLong(), any(), anyLong()))
@@ -248,8 +255,12 @@ class OrderCommandServiceTest {
             .thenReturn(Optional.of(user));
         when(cartItemRepository.findAllById(List.of(cartItemId)))
             .thenReturn(List.of(cartItem));
-        when(productItemRepository.findAllByIdInForUpdate(List.of(itemId)))
-            .thenReturn(List.of(productItem));
+
+        mockProductItemsWithLock(
+            List.of(itemId),
+            List.of(productItem)
+        );
+
         when(orderRepository.save(any(Order.class)))
             .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -378,8 +389,10 @@ class OrderCommandServiceTest {
 
         when(userRepository.findById(userId))
             .thenReturn(Optional.of(user));
-        when(productItemRepository.findAllByIdInForUpdate(List.of(itemId)))
-            .thenReturn(List.of());
+        mockProductItemsWithLock(
+            List.of(itemId),
+            List.of()
+        );
 
         // when & then
         assertThatThrownBy(() -> orderCommandService.createOrder(
@@ -409,8 +422,10 @@ class OrderCommandServiceTest {
 
         when(userRepository.findById(userId))
             .thenReturn(Optional.of(user));
-        when(productItemRepository.findAllByIdInForUpdate(List.of(itemId)))
-            .thenReturn(List.of(productItem));
+        mockProductItemsWithLock(
+            List.of(itemId),
+            List.of(productItem)
+        );
 
         // when & then
         assertThatThrownBy(() -> orderCommandService.createOrder(
@@ -442,8 +457,11 @@ class OrderCommandServiceTest {
 
         when(userRepository.findById(userId))
             .thenReturn(Optional.of(user));
-        when(productItemRepository.findAllByIdInForUpdate(List.of(itemId)))
-            .thenReturn(List.of(productItem));
+
+        mockProductItemsWithLock(
+            List.of(itemId),
+            List.of(productItem)
+        );
 
         // when & then
         assertThatThrownBy(() -> orderCommandService.createOrder(
@@ -1012,6 +1030,14 @@ class OrderCommandServiceTest {
         when(user.getId()).thenReturn(userId);
 
         return cartItem;
+    }
+
+    private void mockProductItemsWithLock(
+        List<Long> itemIds,
+        List<ProductItem> productItems
+    ) {
+        when(productItemRepository.findAllByIdInForUpdate(itemIds))
+            .thenReturn(productItems);
     }
 
 }

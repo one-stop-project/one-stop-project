@@ -18,6 +18,7 @@ public interface ProductItemRepository extends JpaRepository<ProductItem, Long> 
     Optional<ProductItem> findByIdForUpdate(@Param("itemId") Long itemId);
 
     // 주문 생성 시 재고 차감 대상 상품 옵션을 비관적 락으로 일괄 조회
+    // @Lock(PESSIMISTIC_WRITE)를 통해 트랜잭션 내에서 SELECT FOR UPDATE 계열 잠금을 획득한다.
     // item_id ASC 순서로 락을 획득하여 다중 상품 주문 시 데드락 가능성을 줄인다.
     // Product / Seller까지 fetch join하여 주문 가능 여부 검증 및 OrderItem 스냅샷 생성 시 N+1을 방지한다.
     @Lock(LockModeType.PESSIMISTIC_WRITE)
