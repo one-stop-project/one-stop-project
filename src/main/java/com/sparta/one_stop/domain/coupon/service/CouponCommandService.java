@@ -3,6 +3,7 @@ package com.sparta.one_stop.domain.coupon.service;
 import com.sparta.one_stop.domain.coupon.dto.CouponRestoreResult;
 import com.sparta.one_stop.domain.coupon.dto.response.IssueCouponResponse;
 import com.sparta.one_stop.domain.coupon.entity.UserCoupon;
+import com.sparta.one_stop.domain.coupon.repository.UserCouponRepository;
 import com.sparta.one_stop.domain.coupon.service.issue.CouponIssueStrategyProvider;
 import com.sparta.one_stop.domain.order.entity.Order;
 import com.sparta.one_stop.global.enums.order.OrderStatus;
@@ -19,6 +20,7 @@ import java.time.LocalDateTime;
 public class CouponCommandService {
 
     private final CouponIssueStrategyProvider couponIssueStrategyProvider;
+    private final UserCouponRepository userCouponRepository;
 
     /**
      * 선착순 쿠폰 발급
@@ -39,7 +41,9 @@ public class CouponCommandService {
     /**
      * 결제 성공 시 쿠폰 사용 처리
      * - 주문에 적용된 쿠폰이 없으면 처리하지 않음
-     * - 결제 승인 성공 시점에 최종 사용 가능 여부를 검증
+     * - 결제 승인 성공 시점에 UserCoupon을 비관적 락으로 재조회
+     * - 같은 쿠폰이 서로 다른 주문에서 동시에 결제되는 경우 이중사용을 방지
+     * - 락 획득 후 최종 사용 가능 여부를 다시 검증
      * - UserCoupon 상태를 AVAILABLE → USED로 변경
      * - usedAt, usedOrder 저장
      */
@@ -49,13 +53,18 @@ public class CouponCommandService {
             throw new CustomException(ErrorCode.ORDER_006);
         }
 
-        UserCoupon userCoupon = order.getUserCoupon();
+        UserCoupon orderUserCoupon = order.getUserCoupon();
 
-        if (userCoupon == null) {
+        if (orderUserCoupon == null) {
             return;
         }
 
         LocalDateTime now = LocalDateTime.now();
+
+        Long userCouponId = orderUserCoupon.getId();
+
+        UserCoupon userCoupon = userCouponRepository.findByIdWithLock(userCouponId)
+            .orElseThrow(() -> new CustomException(ErrorCode.COUPON_011));
 
         userCoupon.validateUsable(
             order.getUser().getId(),
@@ -72,6 +81,8 @@ public class CouponCommandService {
      * 주문 취소 시 쿠폰 복구
      * - 주문에 적용된 쿠폰이 없으면 null 반환
      * - 결제 전 주문이면 쿠폰이 아직 USED 처리되지 않았으므로 복구하지 않음
+     * - 쿠폰 복구 시 UserCoupon을 비관적 락으로 재조회
+     * - 쿠폰 사용/복구가 동시에 처리되는 상황에서 UserCoupon 상태 변경 충돌을 방지
      * - 쿠폰 만료 전이면 AVAILABLE로 복구
      * - 쿠폰 만료 후이면 EXPIRED로 변경
      */
@@ -81,9 +92,9 @@ public class CouponCommandService {
             throw new CustomException(ErrorCode.ORDER_006);
         }
 
-        UserCoupon userCoupon = order.getUserCoupon();
+        UserCoupon orderUserCoupon = order.getUserCoupon();
 
-        if (userCoupon == null) {
+        if (orderUserCoupon == null) {
             return null;
         }
 
@@ -92,6 +103,11 @@ public class CouponCommandService {
         }
 
         LocalDateTime now = LocalDateTime.now();
+
+        Long userCouponId = orderUserCoupon.getId();
+
+        UserCoupon userCoupon = userCouponRepository.findByIdWithLock(userCouponId)
+            .orElseThrow(() -> new CustomException(ErrorCode.COUPON_011));
 
         userCoupon.restore(now);
 
