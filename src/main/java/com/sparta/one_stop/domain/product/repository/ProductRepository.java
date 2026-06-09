@@ -99,8 +99,8 @@ public interface ProductRepository extends JpaRepository<Product, Long>, Product
            nativeQuery = true)
     List<Object[]> findTopTags(@Param("limit") int limit);
 
-    // 인기 상품 응답용 배치 fetch (productItems 같이 로드)
-    @Query("SELECT DISTINCT p FROM Product p LEFT JOIN FETCH p.productItems WHERE p.id IN :ids")
+    // 인기/검색 목록 배치 fetch (seller·옵션 같이 로드)
+    @Query("SELECT DISTINCT p FROM Product p LEFT JOIN FETCH p.seller LEFT JOIN FETCH p.productItems WHERE p.id IN :ids")
     List<Product> findAllByIdsWithItems(@Param("ids") List<Long> ids);
 
     // 인기 상품 판매수 시간 가중 집계 — 3일 윈도우, 1일 단위 3구간 (recent/middle/oldest)
