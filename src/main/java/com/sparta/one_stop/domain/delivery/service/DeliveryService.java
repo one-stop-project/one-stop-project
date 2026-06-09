@@ -117,6 +117,35 @@ public class DeliveryService {
         });
     }
 
+    // 결제 완료 후 배송 생성
+    // - OrderItem 상태를 ORDERED로 변경
+    // - 주문 상품별 Delivery 생성
+    // - 최초 배송 상태 ACCEPT 이력 생성
+    @Transactional
+    public void createDeliveriesForPayment(Order order) {
+
+        List<OrderItem> orderItems =
+            orderItemRepository.findAllByOrderId(order.getId());
+
+        for (OrderItem orderItem : orderItems) {
+
+            orderItem.markOrdered();
+
+            Delivery delivery = Delivery.builder()
+                .orderItem(orderItem)
+                .build();
+
+            deliveryRepository.save(delivery);
+
+            deliveryHistoryRepository.save(
+                DeliveryHistory.builder()
+                    .delivery(delivery)
+                    .status(DeliveryStatus.ACCEPT)
+                    .build()
+            );
+        }
+    }
+
     // 발주 확인 (ORDERED → CONFIRMED / ACCEPT → INSTRUCT)
     @Transactional
     public ConfirmOrderResponse confirmOrder(Long orderItemId, Long userId) {
