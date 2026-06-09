@@ -38,6 +38,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.PessimisticLockingFailureException;
 
 import java.util.List;
 import java.util.Optional;
@@ -829,6 +830,27 @@ class OrderCommandServiceTest {
             orderId,
             request
         )).isInstanceOf(CustomException.class);
+
+        verify(orderCancelHistoryRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("cancelOrder 실패 - 주문 락 획득 실패 시 예외 발생")
+    void cancelOrder_fail_whenOrderLockTimeout() {
+        // given
+        Long userId = 1L;
+        Long orderId = 10L;
+        CancelOrderRequest request = new CancelOrderRequest("단순 변심");
+
+        when(orderRepository.findByIdWithLock(orderId))
+            .thenThrow(new PessimisticLockingFailureException("lock timeout"));
+
+        // when & then
+        assertThatThrownBy(() -> orderCommandService.cancelOrder(
+            userId,
+            orderId,
+            request
+        )).isInstanceOf(PessimisticLockingFailureException.class);
 
         verify(orderCancelHistoryRepository, never()).save(any());
     }

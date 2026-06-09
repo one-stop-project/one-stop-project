@@ -3,11 +3,13 @@ package com.sparta.one_stop.domain.order.repository;
 import com.sparta.one_stop.domain.order.entity.Order;
 import com.sparta.one_stop.global.enums.order.OrderStatus;
 import jakarta.persistence.LockModeType;
+import jakarta.persistence.QueryHint;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 
 import java.time.LocalDateTime;
@@ -51,17 +53,17 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     // 관리자 전체 주문 조회
     // 상태 / 기간 / 키워드(구매자 이름 or 이메일) 조건 선택적 적용
     @Query("""
-    select o
-    from Order o
-    join fetch o.user u
-    where (:status is null or o.status = :status)
-      and (:from is null or o.createdAt >= :from)
-      and (:to is null or o.createdAt <= :to)
-      and (:keyword is null
-           or u.name like concat('%', :keyword, '%')
-           or u.email like concat('%', :keyword, '%'))
-    order by o.createdAt desc
-""")
+        select o
+        from Order o
+        join fetch o.user u
+        where (:status is null or o.status = :status)
+          and (:from is null or o.createdAt >= :from)
+          and (:to is null or o.createdAt <= :to)
+          and (:keyword is null
+               or u.name like concat('%', :keyword, '%')
+               or u.email like concat('%', :keyword, '%'))
+        order by o.createdAt desc
+    """)
     Page<Order> searchAllOrders(
         @Param("status") OrderStatus status,
         @Param("from") LocalDateTime from,
@@ -72,20 +74,27 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
 
     // 주문별 상품 수 조회 (N+1 방지용)
     @Query("""
-    select o.id, count(oi)
-    from Order o
-    join OrderItem oi on oi.order.id = o.id
-    where o.id in :orderIds
-    group by o.id
-""")
+        select o.id, count(oi)
+        from Order o
+        join OrderItem oi on oi.order.id = o.id
+        where o.id in :orderIds
+        group by o.id
+    """)
     List<Object[]> countItemsByOrderIds(@Param("orderIds") List<Long> orderIds);
 
     /**
      * 주문 취소 동시성 제어용 주문 조회
      * - 동일 주문에 대한 동시 취소 요청을 직렬화하기 위해 PESSIMISTIC_WRITE 락을 획득한다.
      * - 트랜잭션 내에서 SELECT FOR UPDATE 계열 잠금을 적용하여 재고/포인트/쿠폰 중복 복구를 방지한다.
+     * - 락 경쟁 시 최대 3초까지만 대기하고, 초과 시 락 타임아웃 예외를 발생시킨다.
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @QueryHints({
+        @QueryHint(
+            name = "jakarta.persistence.lock.timeout",
+            value = "3000"
+        )
+    })
     @Query("""
         select o
         from Order o

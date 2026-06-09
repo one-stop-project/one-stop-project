@@ -1,8 +1,11 @@
 package com.sparta.one_stop.global.exception;
 
 import com.sparta.one_stop.global.response.ErrorResponse;
+import jakarta.persistence.LockTimeoutException;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.CannotAcquireLockException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.web.HttpRequestMethodNotSupportedException;
@@ -59,6 +62,34 @@ public class GlobalExceptionHandler {
         return ResponseEntity
             .status(ErrorCode.ORDER_009.getStatus())
             .body(ErrorResponse.of(ErrorCode.ORDER_009, null, request.getRequestURI()));
+    }
+
+    /**
+     * 비관적 락 획득 실패 / 락 타임아웃 처리
+     * 동일 주문에 대한 동시 처리 요청이 진행 중이면 ORDER_013 반환
+     */
+    @ExceptionHandler({
+        PessimisticLockingFailureException.class,
+        CannotAcquireLockException.class,
+        LockTimeoutException.class
+    })
+    public ResponseEntity<ErrorResponse> handlePessimisticLockException(
+        Exception e,
+        HttpServletRequest request
+    ) {
+        log.warn(
+            "LockAcquireException: {} - {}",
+            request.getRequestURI(),
+            e.getMessage()
+        );
+
+        return ResponseEntity
+            .status(ErrorCode.ORDER_013.getStatus())
+            .body(ErrorResponse.of(
+                ErrorCode.ORDER_013,
+                null,
+                request.getRequestURI()
+            ));
     }
 
     /**
