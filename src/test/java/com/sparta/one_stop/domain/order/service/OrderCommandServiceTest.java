@@ -123,8 +123,12 @@ class OrderCommandServiceTest {
 
         when(userRepository.findById(userId))
             .thenReturn(Optional.of(user));
-        when(productItemRepository.findById(itemId))
-            .thenReturn(Optional.of(productItem));
+
+        mockProductItemsWithLock(
+            List.of(itemId),
+            List.of(productItem)
+        );
+
         when(orderRepository.save(any(Order.class)))
             .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -184,8 +188,13 @@ class OrderCommandServiceTest {
         CreateOrderRequest request = directOrderRequest(itemId, 2);
 
         // Mock 설정
-        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
-        when(productItemRepository.findById(itemId)).thenReturn(Optional.of(productItem));
+        when(userRepository.findById(userId))
+            .thenReturn(Optional.of(user));
+
+        mockProductItemsWithLock(
+            List.of(itemId),
+            List.of(productItem)
+        );
 
         // 쿠폰 할인은 0원 (순수 구독 할인만 테스트하기 위함)
         given(couponQueryService.validateAndCalculateDiscount(anyLong(), any(), anyLong()))
@@ -246,6 +255,12 @@ class OrderCommandServiceTest {
             .thenReturn(Optional.of(user));
         when(cartItemRepository.findAllById(List.of(cartItemId)))
             .thenReturn(List.of(cartItem));
+
+        mockProductItemsWithLock(
+            List.of(itemId),
+            List.of(productItem)
+        );
+
         when(orderRepository.save(any(Order.class)))
             .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -374,8 +389,10 @@ class OrderCommandServiceTest {
 
         when(userRepository.findById(userId))
             .thenReturn(Optional.of(user));
-        when(productItemRepository.findById(itemId))
-            .thenReturn(Optional.empty());
+        mockProductItemsWithLock(
+            List.of(itemId),
+            List.of()
+        );
 
         // when & then
         assertThatThrownBy(() -> orderCommandService.createOrder(
@@ -393,7 +410,10 @@ class OrderCommandServiceTest {
         Long userId = 1L;
         Long itemId = 101L;
         User user = mock(User.class);
-        ProductItem productItem = productItemOnlyOnSale(false);
+        ProductItem productItem = productItemOnlyOnSale(
+            itemId,
+            false
+        );
 
         CreateOrderRequest request = directOrderRequest(
             itemId,
@@ -402,8 +422,10 @@ class OrderCommandServiceTest {
 
         when(userRepository.findById(userId))
             .thenReturn(Optional.of(user));
-        when(productItemRepository.findById(itemId))
-            .thenReturn(Optional.of(productItem));
+        mockProductItemsWithLock(
+            List.of(itemId),
+            List.of(productItem)
+        );
 
         // when & then
         assertThatThrownBy(() -> orderCommandService.createOrder(
@@ -423,6 +445,7 @@ class OrderCommandServiceTest {
         Long itemId = 101L;
         User user = mock(User.class);
         ProductItem productItem = productItemForStockValidation(
+            itemId,
             true,
             1L
         );
@@ -434,8 +457,11 @@ class OrderCommandServiceTest {
 
         when(userRepository.findById(userId))
             .thenReturn(Optional.of(user));
-        when(productItemRepository.findById(itemId))
-            .thenReturn(Optional.of(productItem));
+
+        mockProductItemsWithLock(
+            List.of(itemId),
+            List.of(productItem)
+        );
 
         // when & then
         assertThatThrownBy(() -> orderCommandService.createOrder(
@@ -867,20 +893,26 @@ class OrderCommandServiceTest {
         return productItem;
     }
 
-    private ProductItem productItemOnlyOnSale(boolean onSale) {
+    private ProductItem productItemOnlyOnSale(
+        Long itemId,
+        boolean onSale
+    ) {
         ProductItem productItem = mock(ProductItem.class);
 
+        when(productItem.getId()).thenReturn(itemId);
         when(productItem.isOnSale()).thenReturn(onSale);
 
         return productItem;
     }
 
     private ProductItem productItemForStockValidation(
+        Long itemId,
         boolean onSale,
         Long stock
     ) {
         ProductItem productItem = mock(ProductItem.class);
 
+        when(productItem.getId()).thenReturn(itemId);
         when(productItem.isOnSale()).thenReturn(onSale);
         when(productItem.getStock()).thenReturn(stock);
 
@@ -998,6 +1030,14 @@ class OrderCommandServiceTest {
         when(user.getId()).thenReturn(userId);
 
         return cartItem;
+    }
+
+    private void mockProductItemsWithLock(
+        List<Long> itemIds,
+        List<ProductItem> productItems
+    ) {
+        when(productItemRepository.findAllByIdInForUpdate(itemIds))
+            .thenReturn(productItems);
     }
 
 }
