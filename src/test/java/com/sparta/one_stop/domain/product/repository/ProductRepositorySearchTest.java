@@ -18,6 +18,8 @@ import com.sparta.one_stop.global.enums.user.UserRole;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 import java.util.List;
+import org.hibernate.SessionFactory;
+import org.hibernate.stat.Statistics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -224,6 +226,26 @@ class ProductRepositorySearchTest {
         p.getCategoryMappings().add(
             ProductCategoryMapping.builder().product(p).category(category).build());
         return productRepository.save(p);
+    }
+
+    @Test
+    @DisplayName("검색 목록은 옵션을 묶어 가져온다 — 상품 수만큼 쿼리가 늘지 않음 (N+1 없음)")
+    void search_batchesProductItems_noNPlusOne() {
+        Statistics stats = em.getEntityManagerFactory().unwrap(SessionFactory.class).getStatistics();
+        stats.setStatisticsEnabled(true);
+        em.flush();
+        em.clear();
+
+        // 승인 상품 4건(각 옵션 보유)을 검색으로 로드 — 이 시점엔 옵션 미로딩
+        Page<Product> page = productRepository.search(
+            cond(SortType.LATEST, null, null, null), PageRequest.of(0, 10));
+
+        // 검색 쿼리는 빼고, 옵션 접근으로 발생하는 쿼리만 센다
+        stats.clear();
+        page.getContent().forEach(p -> p.getProductItems().size());
+
+        // @BatchSize로 모든 상품 옵션이 한 번에 묶여 1쿼리. 없으면 상품 수만큼 발생.
+        assertThat(stats.getPrepareStatementCount()).isEqualTo(1);
     }
 
     private ProductSearchCond cond(SortType sort, Long categoryId, Long minPrice, Long maxPrice) {

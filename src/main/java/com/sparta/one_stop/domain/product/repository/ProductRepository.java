@@ -43,8 +43,8 @@ public interface ProductRepository extends JpaRepository<Product, Long>, Product
     // 검색/목록(키워드 FULLTEXT + 카테고리 + 가격 + 정렬)은 QueryDSL 동적 쿼리로 이동
     // → ProductRepositoryCustom.search() / ProductRepositoryImpl
 
-    // 단건 상세 조회
-    @EntityGraph(attributePaths = {"seller", "productItems", "productImages", "categoryMappings", "categoryMappings.category", "tags"})
+    // 단건 상세 조회 (카테고리만 함께 — 자식 여럿 합치면 데이터 부풀어 느려짐)
+    @EntityGraph(attributePaths = {"seller", "categoryMappings", "categoryMappings.category"})
     @Query("SELECT p FROM Product p WHERE p.id = :id")
     Optional<Product> findWithCollectionsById(@Param("id") Long id);
 
