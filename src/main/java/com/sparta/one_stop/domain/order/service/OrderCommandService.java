@@ -178,7 +178,7 @@ public class OrderCommandService {
         Long orderId,
         CancelOrderRequest request
     ) {
-        Order order = orderRepository.findById(orderId)
+        Order order = orderRepository.findByIdWithLock(orderId)
             .orElseThrow(() -> new CustomException(ErrorCode.ORDER_006));
 
         validateOrderOwner(

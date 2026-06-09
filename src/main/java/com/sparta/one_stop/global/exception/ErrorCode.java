@@ -103,6 +103,7 @@ public enum ErrorCode {
     ORDER_010(HttpStatus.BAD_REQUEST, "ORDER_010", "최소 주문 금액은 1,000원입니다"),
     ORDER_011(HttpStatus.BAD_REQUEST, "ORDER_011", "미승인 판매자의 상품은 주문할 수 없습니다"),
     ORDER_012(HttpStatus.BAD_REQUEST, "ORDER_012", "쿠폰 할인 금액과 사용 포인트의 합은 상품 금액을 초과할 수 없습니다"),
+    ORDER_013(HttpStatus.CONFLICT, "ORDER_013", "주문 처리 중입니다. 잠시 후 다시 시도해주세요."),
 
     // ===== PAYMENT - 결제 =====
     PAYMENT_001(HttpStatus.BAD_REQUEST, "PAYMENT_001", "이미 결제가 완료된 주문입니다"),
