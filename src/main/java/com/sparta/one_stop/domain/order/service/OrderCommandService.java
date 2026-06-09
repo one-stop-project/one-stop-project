@@ -42,6 +42,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -296,17 +299,33 @@ public class OrderCommandService {
 
     /**
      * DIRECT 주문 대상 생성
-     * - 상품 옵션 조회
-     * - 주문 가능 여부 검증
-     * - 재고 차감
+     * - 요청 상품 옵션 ID를 item_id ASC 순서로 정렬한 뒤 비관적 락으로 일괄 조회한다.
+     * - 동일한 순서로 락을 획득하여 다중 상품 주문 시 데드락 가능성을 줄인다.
+     * - 주문 가능 여부 검증 후 재고를 차감한다.
      */
     private List<OrderTarget> getDirectOrderTargets(
         List<CreateOrderItemRequest> items
     ) {
+        List<Long> itemIds = items.stream()
+            .map(CreateOrderItemRequest::itemId)
+            .distinct()
+            .sorted()
+            .toList();
+
+        Map<Long, ProductItem> productItemMap = productItemRepository.findAllByIdInForUpdate(itemIds)
+            .stream()
+            .collect(Collectors.toMap(
+                ProductItem::getId,
+                Function.identity()
+            ));
+
         return items.stream()
             .map(itemRequest -> {
-                ProductItem productItem = productItemRepository.findById(itemRequest.itemId())
-                    .orElseThrow(() -> new CustomException(ErrorCode.PRODUCT_001));
+                ProductItem productItem = productItemMap.get(itemRequest.itemId());
+
+                if (productItem == null) {
+                    throw new CustomException(ErrorCode.PRODUCT_001);
+                }
 
                 validateOrderableProductItem(
                     productItem,
@@ -325,10 +344,9 @@ public class OrderCommandService {
 
     /**
      * CART 주문 대상 생성
-     * - 장바구니 상품 조회
-     * - 본인 장바구니 검증
-     * - 주문 가능 여부 검증
-     * - 재고 차감
+     * - 장바구니 상품 조회 후 본인 장바구니인지 검증한다.
+     * - CartItem의 ProductItem을 그대로 사용하지 않고, item_id ASC 순서로 비관적 락을 걸어 재조회한다.
+     * - 주문 가능 여부 검증 후 재고를 차감한다.
      */
     private List<OrderTarget> getCartOrderTargets(
         Long userId,
@@ -340,16 +358,33 @@ public class OrderCommandService {
             throw new CustomException(ErrorCode.CART_004);
         }
 
+        validateCartItemOwner(
+            userId,
+            cartItems
+        );
+
+        List<Long> itemIds = cartItems.stream()
+            .map(cartItem -> cartItem.getProductItem().getId())
+            .distinct()
+            .sorted()
+            .toList();
+
+        Map<Long, ProductItem> productItemMap = productItemRepository.findAllByIdInForUpdate(itemIds)
+            .stream()
+            .collect(Collectors.toMap(
+                ProductItem::getId,
+                Function.identity()
+            ));
+
         return cartItems.stream()
             .map(cartItem -> {
-                if (!cartItem.getCart()
-                    .getUser()
-                    .getId()
-                    .equals(userId)) {
-                    throw new CustomException(ErrorCode.CART_006);
-                }
+                Long itemId = cartItem.getProductItem().getId();
 
-                ProductItem productItem = cartItem.getProductItem();
+                ProductItem productItem = productItemMap.get(itemId);
+
+                if (productItem == null) {
+                    throw new CustomException(ErrorCode.PRODUCT_001);
+                }
 
                 validateOrderableProductItem(
                     productItem,
@@ -364,6 +399,24 @@ public class OrderCommandService {
                 );
             })
             .toList();
+    }
+
+    /**
+     * 장바구니 상품 소유자 검증
+     * - 요청 사용자의 장바구니 상품만 주문할 수 있다.
+     */
+    private void validateCartItemOwner(
+        Long userId,
+        List<CartItem> cartItems
+    ) {
+        for (CartItem cartItem : cartItems) {
+            if (!cartItem.getCart()
+                .getUser()
+                .getId()
+                .equals(userId)) {
+                throw new CustomException(ErrorCode.CART_006);
+            }
+        }
     }
 
     /**
