@@ -80,7 +80,7 @@ public interface OrderItemRepository extends JpaRepository<OrderItem, Long> {
         @Param("orderItemId") Long orderItemId
     );
 
-    // 리뷰 도메인 - 리뷰 작성 가능 목록 조회 (최적화 버전)
+    // 리뷰 도메인 - 리뷰 작성 가능 목록 조회
     // 리뷰 화면에서 필요한 데이터(Product, Option, OrderUser)까지 한 번에 조회
     @Query("""
         select oi
@@ -93,6 +93,16 @@ public interface OrderItemRepository extends JpaRepository<OrderItem, Long> {
     """)
     List<OrderItem> findAllReviewableByUserId(@Param("userId") Long userId);
 
+    // 포인트 적립 - 주문의 모든 OrderItem이 DELIVERED 상태인지 확인
+    // DELIVERED가 아닌 OrderItem이 하나도 없으면 true 반환
+    @Query("""
+    select count(oi) = 0
+    from OrderItem oi
+    where oi.order.id = :orderId
+      and oi.status != com.sparta.one_stop.global.enums.order.OrderItemStatus.DELIVERED
+    """)
+    boolean isAllDelivered(@Param("orderId") Long orderId);
+
     // 주문 취소용 - ProductItem fetch join
     // cancelOrder()에서 재고 복구 시 OrderItem → ProductItem Lazy Loading N+1 방지
     @Query("""
@@ -104,5 +114,6 @@ public interface OrderItemRepository extends JpaRepository<OrderItem, Long> {
     List<OrderItem> findAllByOrderIdWithProductItem(
         @Param("orderId") Long orderId
     );
+
 
 }

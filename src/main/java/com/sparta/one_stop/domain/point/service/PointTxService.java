@@ -1,6 +1,8 @@
 package com.sparta.one_stop.domain.point.service;
 
 import com.sparta.one_stop.domain.order.entity.Order;
+import com.sparta.one_stop.domain.order.repository.OrderItemRepository;
+import com.sparta.one_stop.domain.order.repository.OrderRepository;
 import com.sparta.one_stop.domain.point.dto.request.PointChargeRequest;
 import com.sparta.one_stop.domain.point.dto.response.ExpiringSoonPointResponse;
 import com.sparta.one_stop.domain.point.dto.response.PointChargeResponse;
@@ -19,6 +21,7 @@ import com.sparta.one_stop.global.enums.point.PointHistoryType;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -28,7 +31,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 
-
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -50,6 +53,8 @@ public class PointTxService {
     private final PointHistoryRepository pointHistoryRepository;
     private final PointUsageDetailRepository pointUsageDetailRepository;
     private final UserRepository userRepository;
+    private final OrderItemRepository orderItemRepository;
+    private final OrderRepository orderRepository;
 
     /**
      * 내 포인트 잔액 + 이력 조회
@@ -265,6 +270,81 @@ public class PointTxService {
         pointHistoryRepository.saveAll(refundHistories);
 
         return restoredPoint;
+    }
+
+    /**
+     * 배송 완료 후 포인트 적립
+     * - 주문의 모든 OrderItem이 DELIVERED 상태일 때만 적립 (주문 단위 1회)
+     * - 이미 해당 주문에 EARN 이력이 있으면 중복 적립 방지
+     * - 적립 기준 금액 = 상품금액 - 쿠폰할인 - 사용포인트 (배송비 제외)
+     * - 적립 포인트 = floor(적립 기준 금액 * 0.01)
+     * - 적립 포인트 만료일 = 적립일 기준 1년 후
+     */
+    @Transactional
+    public void earnPointByDelivery(Long orderId) {
+
+        // 주문의 모든 OrderItem이 DELIVERED 상태인지 확인
+        // 일부만 배송 완료된 경우 포인트 적립하지 않음
+        if (!orderItemRepository.isAllDelivered(orderId)) {
+            return;
+        }
+
+        Order order = orderRepository.findById(orderId)
+            .orElseThrow(() -> new CustomException(ErrorCode.ORDER_006));
+
+        // 중복 적립 방지 - 이미 해당 주문에 EARN 이력이 있으면 스킵
+        List<PointHistory> existingEarn = pointHistoryRepository.findAllByOrderIdAndType(
+            orderId,
+            PointHistoryType.EARN
+        );
+
+        if (!existingEarn.isEmpty()) {
+            log.warn("[POINT_EARN] 중복 적립 시도 감지 — orderId={}", orderId);
+            return;
+        }
+
+        Long userId = order.getUser().getId();
+
+        // Point 계정 없으면 새로 생성
+        Point point = pointRepository.findByUserId(userId)
+            .orElseGet(() -> {
+                User user = order.getUser();
+                return pointRepository.save(Point.createInitial(user));
+            });
+
+        // 적립 기준 금액 = 상품금액 - 쿠폰할인 - 사용포인트 (배송비 제외)
+        long baseAmount = order.getTotalPrice()
+            - order.getDiscountPrice()
+            - order.getUsedPoint();
+
+        if (baseAmount <= 0) {
+            log.info("[POINT_EARN] 적립 기준 금액이 0 이하 — orderId={}, baseAmount={}", orderId, baseAmount);
+            return;
+        }
+
+        // 적립 포인트 = floor(적립 기준 금액 * 0.01)
+        int earnAmount = (int) Math.floor(baseAmount * 0.01);
+
+        if (earnAmount <= 0) {
+            log.info("[POINT_EARN] 적립 포인트가 0 이하 — orderId={}, earnAmount={}", orderId, earnAmount);
+            return;
+        }
+
+        LocalDate expireAt = LocalDate.now().plusYears(1);
+
+        PointHistory earnHistory = PointHistory.earn(
+            point,
+            order,
+            earnAmount,
+            String.format("주문 #%d 배송 완료 적립 (1%%)", orderId),
+            expireAt
+        );
+
+        pointHistoryRepository.save(earnHistory);
+        point.increaseBalance(earnAmount);
+
+        log.info("[POINT_EARN] 포인트 적립 완료 — orderId={}, userId={}, earnAmount={}",
+            orderId, userId, earnAmount);
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

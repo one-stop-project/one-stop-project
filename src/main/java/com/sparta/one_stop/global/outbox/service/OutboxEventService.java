@@ -34,6 +34,24 @@ public class OutboxEventService {
         return outboxEventRepository.save(outboxEvent);
     }
 
+    // 배송 완료 Outbox 이벤트 저장
+    // 배송 완료 후 Kafka 발행 전 DB에 이벤트를 먼저 기록한다
+    public OutboxEvent saveDeliveryCompletedEvent(
+        String eventId,
+        Long orderId,
+        String payload
+    ) {
+        validateDuplicateEvent(eventId);
+
+        OutboxEvent outboxEvent = OutboxEvent.deliveryCompleted(
+            eventId,
+            orderId,
+            payload
+        );
+
+        return outboxEventRepository.save(outboxEvent);
+    }
+
     // 범용 Outbox 이벤트 저장
     // 도메인별 이벤트 타입, 토픽, payload를 받아 Outbox 이벤트를 저장한다
     public OutboxEvent saveEvent(
