@@ -18,11 +18,13 @@ import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import com.sparta.one_stop.global.outbox.service.OutboxEventService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -167,7 +169,8 @@ public class PaymentService {
      * 결제 승인 Outbox 이벤트 저장
      * - 결제 승인 완료 후 Kafka 발행 대신 Outbox 테이블에 이벤트를 저장한다
      * - eventId는 payment ID 기반으로 생성하여 동일 결제에 대한 중복 이벤트를 방지한다
-     * - payload는 Jackson ObjectMapper로 JSON 직렬화한다
+     * - payload 직렬화 실패 시 예외를 전파하지 않고 로그만 기록한다
+     * - Outbox 저장 실패도 예외를 전파하지 않도록 방어한다
      */
     private void savePaymentApprovedOutboxEvent(
         Long userId,
@@ -185,16 +188,29 @@ public class PaymentService {
             payment.getApprovedAt()
         );
 
-        try {
-            String payloadJson = objectMapper.writeValueAsString(eventPayload);
+        String payloadJson;
 
+        try {
+            payloadJson = objectMapper.writeValueAsString(eventPayload);
+        } catch (JsonProcessingException e) {
+            log.error(
+                "Outbox 이벤트 payload 직렬화 실패 - orderId: {}, paymentId: {}, eventId: {}",
+                order.getId(), payment.getId(), eventId, e
+            );
+            return;
+        }
+
+        try {
             outboxEventService.savePaymentApprovedEvent(
                 eventId,
                 order.getId(),
                 payloadJson
             );
-        } catch (JsonProcessingException e) {
-            throw new CustomException(ErrorCode.COMMON_007);
+        } catch (Exception e) {
+            log.error(
+                "Outbox 이벤트 저장 실패 - orderId: {}, paymentId: {}, eventId: {}",
+                order.getId(), payment.getId(), eventId, e
+            );
         }
     }
 
