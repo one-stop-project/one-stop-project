@@ -50,7 +50,7 @@ import java.time.LocalDateTime;
        })
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-class SecurityAuditLog {
+public class SecurityAuditLog {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

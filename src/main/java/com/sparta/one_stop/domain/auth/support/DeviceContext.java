@@ -109,14 +109,25 @@ public final class DeviceContext {
         }
         String ip = clientIp.trim();
 
-        // IPv6 (콜론 포함)
+        // IPv6 (콜론 포함) — 축약 표기(::)를 InetAddress로 정규화 후 앞 3그룹(/48)
         if (ip.contains(":")) {
-            String[] groups = ip.split(":");
-            if (groups.length < 3) {
+            try {
+                java.net.InetAddress addr = java.net.InetAddress.getByName(ip);
+                if (addr instanceof java.net.Inet6Address) {
+                    byte[] b = addr.getAddress(); // 16바이트 풀 표현
+                    // 앞 6바이트(3그룹 = /48)를 hex로
+                    StringBuilder sb = new StringBuilder();
+                    for (int i = 0; i < 6; i += 2) {
+                        if (i > 0) sb.append(":");
+                        int group = ((b[i] & 0xFF) << 8) | (b[i + 1] & 0xFF);
+                        sb.append(Integer.toHexString(group));
+                    }
+                    return sb.append(":x").toString();
+                }
+                // IPv4-mapped 등은 아래 IPv4 처리로 흘려보냄
+            } catch (Exception e) {
                 return "NO_IP";
             }
-            // 앞 3그룹(/48)만 사용 — ISP 할당 단위 수준
-            return groups[0] + ":" + groups[1] + ":" + groups[2] + ":x";
         }
 
         // IPv4

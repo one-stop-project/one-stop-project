@@ -70,6 +70,13 @@ public class AuthCommandService {
         }
 
         catch (DataIntegrityViolationException e) {
+            // JPA UNIQUE 위반은 보통 DIVE로 옴 (DuplicateKeyException이 아닐 수 있음).
+            // 이메일 UNIQUE 제약 충돌이면 AUTH_002로 변환, 그 외는 rethrow.
+            String msg = e.getMostSpecificCause().getMessage();
+            if (msg != null && (msg.contains("email") || msg.toUpperCase().contains("UNIQUE"))) {
+                log.warn("회원가입 동시성 충돌(DIVE) — 이메일 중복: {}", maskEmail(request.email()));
+                throw new CustomException(ErrorCode.AUTH_002);
+            }
             log.error("회원가입 무결성 오류", e);
             throw e;
         }

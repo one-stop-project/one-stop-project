@@ -55,9 +55,6 @@ public class AllDevicesLogoutEventListener {
             log.info("[AllDevicesLogoutEvent] 처리 완료: userId={}, reason={}, deletedCount={}",
                 event.userId(), event.reason(), deletedCount);
 
-            log.info("[AllDevicesLogoutEvent] 처리 완료: userId={}, reason={}, deletedCount={}",
-                event.userId(), event.reason(), deletedCount);
-
             // TODO: 알림 도메인 연동 시
             // notificationService.send(event.userId(), buildMessage(event.reason()));
 

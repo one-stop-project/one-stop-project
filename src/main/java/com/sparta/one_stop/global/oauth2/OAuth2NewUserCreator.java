@@ -8,7 +8,6 @@ import com.sparta.one_stop.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.dao.DuplicateKeyException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,22 +45,21 @@ public class OAuth2NewUserCreator {
                 saved.getId(), userInfo.getProvider());
             return saved;
 
-        } catch (DuplicateKeyException e) {
-            // ★ 1. UNIQUE 제약 위반 — 동시 가입 충돌 (정상 시나리오)
-            log.warn("[OAuth2] 동시 가입 충돌 — provider={}, providerId={}",
+        } catch (DataIntegrityViolationException e) {
+            // UNIQUE 제약 위반 — 동시 가입 충돌 (정상 시나리오).
+            // JPA는 보통 DataIntegrityViolationException으로 던지므로 둘 다 잡아
+            // 기존 가입자 복구를 시도한다.
+            log.warn("[OAuth2] 가입 충돌(복구 시도) — provider={}, providerId={}",
                 userInfo.getProvider(), userInfo.getProviderId());
 
             return userRepository.findByProviderAndProviderId(
                 userInfo.getProvider(), userInfo.getProviderId()
-            ).orElseThrow(() -> new CustomException(ErrorCode.AUTH_018,
-                "OAuth2 사용자 생성 중 알 수 없는 오류"));
-
-        } catch (DataIntegrityViolationException e) {
-            // ★ 2. 그 외 무결성 위반 — 진짜 오류 (NOT NULL, FK, CHECK 등)
-            log.error("[OAuth2] 무결성 위반 — provider={}, providerId={}",
-                userInfo.getProvider(), userInfo.getProviderId(), e);
-            throw new CustomException(ErrorCode.AUTH_018,
-                "OAuth2 사용자 생성 실패");
+            ).orElseThrow(() -> {
+                // 복구도 실패 = UNIQUE 충돌이 아닌 진짜 무결성 오류 (NOT NULL/FK 등)
+                log.error("[OAuth2] 무결성 위반(복구 실패) — provider={}, providerId={}",
+                    userInfo.getProvider(), userInfo.getProviderId(), e);
+                return new CustomException(ErrorCode.AUTH_018, "OAuth2 사용자 생성 실패");
+            });
         }
     }
 }

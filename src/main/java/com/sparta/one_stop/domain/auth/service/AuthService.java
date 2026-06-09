@@ -320,25 +320,30 @@ public class AuthService {
     public void logout(Long userId, String deviceId, String accessToken) {
         // 각 작업이 독립적으로 실패해도 다른 작업은 진행 (best-effort)
 
-        // 1. RT 삭제 (특정 기기만)
-        try {
-            redisTokenService.deleteRefreshToken(userId, deviceId);
-        } catch (Exception e) {
-            log.error("로그아웃 부분 실패 — RT 삭제: userId={}", userId, e);
-        }
+        // deviceId가 있을 때만 기기 단위 정리 (null이면 ...:userId:null 키 삭제 시도 방지)
+        if (deviceId != null && !deviceId.isBlank()) {
+            // 1. RT 삭제 (특정 기기만)
+            try {
+                redisTokenService.deleteRefreshToken(userId, deviceId);
+            } catch (Exception e) {
+                log.error("로그아웃 부분 실패 — RT 삭제: userId={}", userId, e);
+            }
 
-        // 2. 기기 목록에서 제거
-        try {
-            deviceLimitService.removeDevice(userId, deviceId);
-        } catch (Exception e) {
-            log.error("로그아웃 부분 실패 — 기기 제거: userId={}", userId, e);
-        }
+            // 2. 기기 목록에서 제거
+            try {
+                deviceLimitService.removeDevice(userId, deviceId);
+            } catch (Exception e) {
+                log.error("로그아웃 부분 실패 — 기기 제거: userId={}", userId, e);
+            }
 
-        // 2-1. 기기 컨텍스트 제거
-        try {
-            deviceContextService.removeContext(userId, deviceId);
-        } catch (Exception e) {
-            log.error("로그아웃 부분 실패 — 컨텍스트 제거: userId={}", userId, e);
+            // 2-1. 기기 컨텍스트 제거
+            try {
+                deviceContextService.removeContext(userId, deviceId);
+            } catch (Exception e) {
+                log.error("로그아웃 부분 실패 — 컨텍스트 제거: userId={}", userId, e);
+            }
+        } else {
+            log.debug("logout — deviceId 없음, 기기 단위 정리 생략: userId={}", userId);
         }
 
         // 3. AT 블랙리스트 등록

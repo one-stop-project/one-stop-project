@@ -333,8 +333,6 @@ class AuthServiceTest {
             given(jwtTokenProvider.createAccessToken(USER_ID, UserRole.BUYER)).willReturn(ACCESS_TOKEN);
             given(jwtTokenProvider.createRefreshToken(USER_ID, DEVICE_ID)).willReturn(NEW_REFRESH_TOKEN);
             given(jwtTokenProvider.getRefreshTokenExpirySeconds()).willReturn(604_800L);
-            given(deviceContextService.verifyContext(USER_ID, DEVICE_ID, USER_AGENT, CLIENT_IP))
-                .willReturn(DeviceContextService.ContextVerifyResult.MATCH);
             // CAS 실패 (저장된 RT와 불일치 — 동시성 충돌 or 탈취)
             given(redisTokenService.rotateRefreshTokenCAS(
                 anyLong(), anyString(), anyString(), anyString(), anyLong()
