@@ -26,7 +26,7 @@ public class PopularKeywordScheduler {
         popularKeywordService.refresh();
     }
 
-    // ?�정 직후 ?�제??final 보존 ??관리자 date 조회??
+    // 자정 직후 어제자 final 보존 — 관리자 date 조회용
     @Scheduled(cron = "0 0 0 * * *", zone = "Asia/Seoul")
     public void midnightRotate() {
         LocalDate yesterday = LocalDate.now(KST).minusDays(1);

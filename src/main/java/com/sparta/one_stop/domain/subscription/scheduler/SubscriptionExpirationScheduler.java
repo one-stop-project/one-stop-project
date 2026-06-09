@@ -15,13 +15,13 @@ public class SubscriptionExpirationScheduler {
     private final SubscriptionExpirationSchedulerService expirationSchedulerService;
 
     /**
-     * 구독 만료 ?��?줄러
-     * 매일 ?�정 ?�행
+     * 구독 만료 스케줄러
+     * 매일 자정 실행
      */
     @Scheduled(cron = "0 0 0 * * *")
     public void processExpiration() {
-        log.info("구독 만료 ?��?줄러 ?�작");
+        log.info("구독 만료 스케줄러 시작");
         expirationSchedulerService.processExpiration();
-        log.info("구독 만료 ?��?줄러 종료");
+        log.info("구독 만료 스케줄러 종료");
     }
 }
