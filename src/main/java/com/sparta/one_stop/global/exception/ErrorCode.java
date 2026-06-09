@@ -114,6 +114,7 @@ public enum ErrorCode {
     PAYMENT_006(HttpStatus.BAD_REQUEST, "PAYMENT_006", "결제 대기 시간이 초과되었습니다"),
     PAYMENT_007(HttpStatus.BAD_REQUEST, "PAYMENT_007", "지원하지 않는 결제 수단입니다"),
     PAYMENT_008(HttpStatus.BAD_REQUEST, "PAYMENT_008", "취소된 주문은 결제할 수 없습니다"),
+    PAYMENT_009(HttpStatus.NOT_FOUND, "PAYMENT_009", "결제 정보를 찾을 수 없습니다"),
 
     // ===== OUTBOX - 이벤트 발행 =====
     OUTBOX_001(HttpStatus.CONFLICT, "OUTBOX_001", "이미 저장된 Outbox 이벤트입니다"),

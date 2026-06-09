@@ -20,6 +20,8 @@ import com.sparta.one_stop.domain.order.entity.OrderItem;
 import com.sparta.one_stop.domain.order.repository.OrderCancelHistoryRepository;
 import com.sparta.one_stop.domain.order.repository.OrderItemRepository;
 import com.sparta.one_stop.domain.order.repository.OrderRepository;
+import com.sparta.one_stop.domain.payment.entity.Payment;
+import com.sparta.one_stop.domain.payment.repository.PaymentRepository;
 import com.sparta.one_stop.domain.point.service.PointService;
 import com.sparta.one_stop.domain.product.entity.Product;
 import com.sparta.one_stop.domain.product.entity.ProductItem;
@@ -31,6 +33,7 @@ import com.sparta.one_stop.domain.user.repository.UserRepository;
 import com.sparta.one_stop.global.enums.order.OrderStatus;
 import com.sparta.one_stop.global.enums.order.OrderType;
 import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -81,6 +84,9 @@ class OrderCommandServiceTest {
 
     @Mock
     private DeliveryHistoryRepository deliveryHistoryRepository;
+
+    @Mock
+    private PaymentRepository paymentRepository;
 
     @Mock
     private PointService pointService;
@@ -613,6 +619,7 @@ class OrderCommandServiceTest {
         assertThat(history.getCancelledPrice()).isEqualTo(23000L);
 
         verify(deliveryHistoryRepository, never()).saveAll(any());
+        verify(paymentRepository, never()).findByOrderId(orderId);
     }
 
     @Test
@@ -639,6 +646,7 @@ class OrderCommandServiceTest {
             2
         );
         Delivery delivery = mock(Delivery.class);
+        Payment payment = mock(Payment.class);
 
         CancelOrderRequest request = new CancelOrderRequest("단순 변심");
 
@@ -654,6 +662,8 @@ class OrderCommandServiceTest {
             .thenReturn(null);
         when(pointService.refundPointByOrder(order))
             .thenReturn(0);
+        when(paymentRepository.findByOrderId(orderId))
+            .thenReturn(Optional.of(payment));
 
         // when
         CancelOrderResponse result = orderCommandService.cancelOrder(
@@ -668,6 +678,8 @@ class OrderCommandServiceTest {
         verify(productItem).increaseStock(2);
         verify(orderItem).cancel();
         verify(delivery).cancelOrder();
+        verify(paymentRepository).findByOrderId(orderId);
+        verify(payment).cancel();
         verify(order).cancel();
         verify(pointService).refundPointByOrder(order);
         verify(orderCancelHistoryRepository).save(any(OrderCancelHistory.class));
@@ -695,6 +707,49 @@ class OrderCommandServiceTest {
         assertThatThrownBy(() ->
             orderCommandService.cancelOrder(userId, orderId, new CancelOrderRequest("test"))
         ).isInstanceOf(CustomException.class);
+    }
+
+    @Test
+    @DisplayName("cancelOrder 실패 - PAID 주문의 결제 정보가 없으면 예외 발생")
+    void cancelOrder_fail_whenPaidOrderPaymentDoesNotExist() {
+        // given
+        Long userId = 1L;
+        Long orderId = 10L;
+
+        Order order = orderForStatusAndIdValidation(
+            orderId,
+            userId,
+            OrderStatus.PAID
+        );
+
+        OrderItem orderItem = orderItemOnlyId(101L);
+        Delivery delivery = mock(Delivery.class);
+        CancelOrderRequest request = new CancelOrderRequest("단순 변심");
+
+        mockOrderWithLock(orderId, order);
+
+        when(orderItemRepository.findAllByOrderIdWithProductItem(orderId))
+            .thenReturn(List.of(orderItem));
+        when(deliveryRepository.findAllByOrderItemIdIn(List.of(101L)))
+            .thenReturn(List.of(delivery));
+        when(delivery.isCancelable())
+            .thenReturn(true);
+        when(paymentRepository.findByOrderId(orderId))
+            .thenReturn(Optional.empty());
+
+        // when & then
+        assertThatThrownBy(() -> orderCommandService.cancelOrder(
+            userId,
+            orderId,
+            request
+        ))
+            .isInstanceOf(CustomException.class)
+            .extracting("errorCode")
+            .isEqualTo(ErrorCode.PAYMENT_009);
+
+        verify(paymentRepository).findByOrderId(orderId);
+        verify(orderCancelHistoryRepository, never()).save(any());
+        verify(pointService, never()).refundPointByOrder(any());
     }
 
     @Test

@@ -23,6 +23,8 @@ import com.sparta.one_stop.domain.order.entity.OrderItem;
 import com.sparta.one_stop.domain.order.repository.OrderCancelHistoryRepository;
 import com.sparta.one_stop.domain.order.repository.OrderItemRepository;
 import com.sparta.one_stop.domain.order.repository.OrderRepository;
+import com.sparta.one_stop.domain.payment.entity.Payment;
+import com.sparta.one_stop.domain.payment.repository.PaymentRepository;
 import com.sparta.one_stop.domain.point.service.PointService;
 import com.sparta.one_stop.domain.product.entity.ProductItem;
 import com.sparta.one_stop.domain.product.repository.ProductItemRepository;
@@ -62,6 +64,7 @@ public class OrderCommandService {
     private final DeliveryRepository deliveryRepository;
     private final OrderCancelHistoryRepository orderCancelHistoryRepository;
     private final DeliveryHistoryRepository deliveryHistoryRepository;
+    private final PaymentRepository paymentRepository;
     private final PointService pointService;
     private final CouponQueryService couponQueryService;
     private final CouponCommandService couponCommandService;
@@ -202,6 +205,8 @@ public class OrderCommandService {
             orderItems,
             deliveries
         );
+
+        cancelPaymentIfPaidOrder(order);
 
         // 재고 복구 및 주문 상품 취소 처리
         for (OrderItem orderItem : orderItems) {
@@ -574,6 +579,22 @@ public class OrderCommandService {
         if (discountPrice + usedPoint.longValue() > totalPrice) {
             throw new CustomException(ErrorCode.ORDER_012);
         }
+    }
+
+    /**
+     * 결제 완료 주문 취소 시 Payment 상태 취소 처리
+     * - 결제 전 주문(PENDING_PAYMENT)은 Payment가 없을 수 있으므로 처리하지 않는다.
+     * - 결제 완료 주문(PAID)은 연결된 Payment도 함께 취소 상태로 변경한다.
+     */
+    private void cancelPaymentIfPaidOrder(Order order) {
+        if (order.getStatus() != OrderStatus.PAID) {
+            return;
+        }
+
+        Payment payment = paymentRepository.findByOrderId(order.getId())
+            .orElseThrow(() -> new CustomException(ErrorCode.PAYMENT_009));
+
+        payment.cancel();
     }
 
     /**
