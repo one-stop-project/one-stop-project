@@ -4,6 +4,7 @@ import com.sparta.one_stop.domain.product.service.PopularKeywordService;
 import com.sparta.one_stop.domain.product.service.SearchHistorySyncService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @Component
 @RequiredArgsConstructor
+@ConditionalOnProperty(name = "app.scheduler.enabled", havingValue = "true", matchIfMissing = false)
 public class SearchHistoryScheduler {
 
     private static final long FIVE_MINUTES_MS = 5L * 60 * 1000;

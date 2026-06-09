@@ -77,7 +77,12 @@ management:
     health:
       show-details: when-authorized
 
+gemini:
+  dummy-api-key: ${GEMINI_DUMMY_API_KEY:${GEMINI_API_KEY}}
+
 app:
+  scheduler:
+    enabled: ${APP_SCHEDULER_ENABLED:true}
   cors:
     allowed-origins: ${ALLOWED_ORIGINS:http://localhost:8080}
   image:

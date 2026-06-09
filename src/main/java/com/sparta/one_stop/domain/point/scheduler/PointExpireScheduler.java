@@ -10,6 +10,7 @@ import org.springframework.batch.core.JobParameters;
 import org.springframework.batch.core.JobParametersBuilder;
 import org.springframework.batch.core.explore.JobExplorer;
 import org.springframework.batch.core.launch.JobLauncher;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -27,6 +28,9 @@ public class PointExpireScheduler {
     private static final long LOCK_WAIT_SECONDS = 0L;
     private static final long LOCK_LEASE_HOURS = 1L;
 
+    @Value("${app.scheduler.enabled:false}")
+    private boolean schedulerEnabled;
+
     private final JobLauncher jobLauncher;
     private final Job pointExpireJob;
     private final JobExplorer jobExplorer;
@@ -43,6 +47,11 @@ public class PointExpireScheduler {
      */
     @Scheduled(cron = "0 0 3 * * *", zone = "Asia/Seoul")
     public void runDailyExpiration() {
+        // S2처럼 app.scheduler.enabled=false인 서버에서는 스케줄 실행 건너뜀
+        if (!schedulerEnabled) {
+            return;
+        }
+
         // ── 1차 방어 — Redisson 분산 락 ──
         RLock lock = redissonClient.getLock(LOCK_KEY);
 
@@ -61,7 +70,7 @@ public class PointExpireScheduler {
             }
 
             // ── 실제 실행 ──
-            LocalDate today = LocalDate.now(KST);  // ★ KST 명시
+            LocalDate today = LocalDate.now(KST);
             log.info("[POINT_EXPIRE] 시작 — expireDate={}", today);
 
             JobExecution execution = launch(today);
@@ -76,7 +85,6 @@ public class PointExpireScheduler {
             Thread.currentThread().interrupt();
         } catch (Exception e) {
             log.error("[POINT_EXPIRE] 실행 실패", e);
-            // TODO: Slack/PagerDuty 알림 연동 (별도 PR — issue #XXX)
         } finally {
             if (lock.isLocked() && lock.isHeldByCurrentThread()) {
                 lock.unlock();
@@ -147,7 +155,7 @@ public class PointExpireScheduler {
     private JobExecution launch(LocalDate expireDate) throws Exception {
         JobParameters params = new JobParametersBuilder()
             .addString("expireDate", expireDate.toString())
-            .addLong("timestamp", System.currentTimeMillis())  // 재실행 가능 (분산 락이 동시성 방어)
+            .addLong("timestamp", System.currentTimeMillis())
             .toJobParameters();
 
         return jobLauncher.run(pointExpireJob, params);
