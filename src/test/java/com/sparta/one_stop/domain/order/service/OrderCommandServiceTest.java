@@ -571,8 +571,8 @@ class OrderCommandServiceTest {
 
         CancelOrderRequest request = new CancelOrderRequest("단순 변심");
 
-        when(orderRepository.findById(orderId))
-            .thenReturn(Optional.of(order));
+        mockOrderWithLock(orderId, order);
+
         when(orderItemRepository.findAllByOrderIdWithProductItem(orderId))
             .thenReturn(List.of(orderItem));
         when(deliveryRepository.findAllByOrderItemIdIn(List.of(101L)))
@@ -641,8 +641,8 @@ class OrderCommandServiceTest {
 
         CancelOrderRequest request = new CancelOrderRequest("단순 변심");
 
-        when(orderRepository.findById(orderId))
-            .thenReturn(Optional.of(order));
+        mockOrderWithLock(orderId, order);
+
         when(orderItemRepository.findAllByOrderIdWithProductItem(orderId))
             .thenReturn(List.of(orderItem));
         when(deliveryRepository.findAllByOrderItemIdIn(List.of(101L)))
@@ -683,7 +683,8 @@ class OrderCommandServiceTest {
 
         OrderItem orderItem = orderItemOnlyId(101L);
 
-        when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+        mockOrderWithLock(orderId, order);
+
         when(orderItemRepository.findAllByOrderIdWithProductItem(orderId))
             .thenReturn(List.of(orderItem));
 
@@ -703,8 +704,7 @@ class OrderCommandServiceTest {
         Long orderId = 10L;
         CancelOrderRequest request = new CancelOrderRequest("단순 변심");
 
-        when(orderRepository.findById(orderId))
-            .thenReturn(Optional.empty());
+        mockOrderNotFoundWithLock(orderId);
 
         // when & then
         assertThatThrownBy(() -> orderCommandService.cancelOrder(
@@ -727,8 +727,7 @@ class OrderCommandServiceTest {
         Order order = orderForOwnerValidation(orderOwnerId);
         CancelOrderRequest request = new CancelOrderRequest("단순 변심");
 
-        when(orderRepository.findById(orderId))
-            .thenReturn(Optional.of(order));
+        mockOrderWithLock(orderId, order);
 
         // when & then
         assertThatThrownBy(() -> orderCommandService.cancelOrder(
@@ -754,8 +753,7 @@ class OrderCommandServiceTest {
         );
         CancelOrderRequest request = new CancelOrderRequest("단순 변심");
 
-        when(orderRepository.findById(orderId))
-            .thenReturn(Optional.of(order));
+        mockOrderWithLock(orderId, order);
 
         // when & then
         assertThatThrownBy(() -> orderCommandService.cancelOrder(
@@ -783,8 +781,8 @@ class OrderCommandServiceTest {
         OrderItem orderItem = orderItemOnlyId(101L);
         CancelOrderRequest request = new CancelOrderRequest("단순 변심");
 
-        when(orderRepository.findById(orderId))
-            .thenReturn(Optional.of(order));
+        mockOrderWithLock(orderId, order);
+
         when(orderItemRepository.findAllByOrderIdWithProductItem(orderId))
             .thenReturn(List.of(orderItem));
         when(deliveryRepository.findAllByOrderItemIdIn(List.of(101L)))
@@ -816,8 +814,8 @@ class OrderCommandServiceTest {
         Delivery delivery = mock(Delivery.class);
         CancelOrderRequest request = new CancelOrderRequest("단순 변심");
 
-        when(orderRepository.findById(orderId))
-            .thenReturn(Optional.of(order));
+        mockOrderWithLock(orderId, order);
+
         when(orderItemRepository.findAllByOrderIdWithProductItem(orderId))
             .thenReturn(List.of(orderItem));
         when(deliveryRepository.findAllByOrderItemIdIn(List.of(101L)))
@@ -1038,6 +1036,19 @@ class OrderCommandServiceTest {
     ) {
         when(productItemRepository.findAllByIdInForUpdate(itemIds))
             .thenReturn(productItems);
+    }
+
+    private void mockOrderWithLock(
+        Long orderId,
+        Order order
+    ) {
+        when(orderRepository.findByIdWithLock(orderId))
+            .thenReturn(Optional.of(order));
+    }
+
+    private void mockOrderNotFoundWithLock(Long orderId) {
+        when(orderRepository.findByIdWithLock(orderId))
+            .thenReturn(Optional.empty());
     }
 
 }
