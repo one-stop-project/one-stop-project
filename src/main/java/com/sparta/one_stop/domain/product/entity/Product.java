@@ -3,13 +3,34 @@ package com.sparta.one_stop.domain.product.entity;
 import com.sparta.one_stop.domain.user.entity.Seller;
 import com.sparta.one_stop.global.entity.BaseEntity;
 import com.sparta.one_stop.global.enums.product.ProductStatus;
-import jakarta.persistence.*;
-import lombok.*;
+import com.sparta.one_stop.global.enums.user.SellerStatus;
+import jakarta.persistence.CascadeType;
+import jakarta.persistence.CollectionTable;
+import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Index;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.Table;
+import jakarta.persistence.Version;
+import lombok.AccessLevel;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import org.hibernate.annotations.BatchSize;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.Collections;
 
 // idx_product_name_fulltext: FULLTEXT(name, description) — DB 마이그레이션으로 별도 관리
 @Entity
@@ -73,6 +94,8 @@ public class Product extends BaseEntity {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    // 목록 조회 시 옵션 묶음 로딩 (상품마다 따로 부르면 쿼리 많아짐)
+    @BatchSize(size = 100)
     @OneToMany(mappedBy = "product", cascade = CascadeType.ALL, orphanRemoval = true)
     private Set<ProductItem> productItems = new HashSet<>();
 
@@ -158,6 +181,13 @@ public class Product extends BaseEntity {
     // 수정 가능 상태 여부
     public boolean isEditable() {
         return this.status.isEditable();
+    }
+
+    // 구매자 노출 가능 여부 (상품 승인 + 판매자 승인 + 판매중 옵션 존재)
+    public boolean isVisibleOnSale() {
+        if (!isApproved()) return false;
+        if (this.seller.getStatus() != SellerStatus.APPROVED) return false;
+        return this.productItems.stream().anyMatch(ProductItem::isOnSale);
     }
 
     // 옵션 자식 엔티티 추가
