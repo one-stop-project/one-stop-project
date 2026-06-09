@@ -4,6 +4,7 @@ import com.sparta.one_stop.dummy.naver.dto.NaverShopItem;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -19,7 +20,7 @@ public class ProductDescriptionGenerator {
     private final ChatClient chatClient;
     private final DummyPromptProperties prompts;
 
-    public ProductDescriptionGenerator(ChatClient chatClient, DummyPromptProperties prompts) {
+    public ProductDescriptionGenerator(@Qualifier("dummyChatClient") ChatClient chatClient, DummyPromptProperties prompts) {
         this.chatClient = chatClient;
         this.prompts = prompts;
     }

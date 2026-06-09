@@ -38,6 +38,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.dao.PessimisticLockingFailureException;
 
 import java.util.List;
 import java.util.Optional;
@@ -123,8 +124,12 @@ class OrderCommandServiceTest {
 
         when(userRepository.findById(userId))
             .thenReturn(Optional.of(user));
-        when(productItemRepository.findById(itemId))
-            .thenReturn(Optional.of(productItem));
+
+        mockProductItemsWithLock(
+            List.of(itemId),
+            List.of(productItem)
+        );
+
         when(orderRepository.save(any(Order.class)))
             .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -184,8 +189,13 @@ class OrderCommandServiceTest {
         CreateOrderRequest request = directOrderRequest(itemId, 2);
 
         // Mock 설정
-        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
-        when(productItemRepository.findById(itemId)).thenReturn(Optional.of(productItem));
+        when(userRepository.findById(userId))
+            .thenReturn(Optional.of(user));
+
+        mockProductItemsWithLock(
+            List.of(itemId),
+            List.of(productItem)
+        );
 
         // 쿠폰 할인은 0원 (순수 구독 할인만 테스트하기 위함)
         given(couponQueryService.validateAndCalculateDiscount(anyLong(), any(), anyLong()))
@@ -246,6 +256,12 @@ class OrderCommandServiceTest {
             .thenReturn(Optional.of(user));
         when(cartItemRepository.findAllById(List.of(cartItemId)))
             .thenReturn(List.of(cartItem));
+
+        mockProductItemsWithLock(
+            List.of(itemId),
+            List.of(productItem)
+        );
+
         when(orderRepository.save(any(Order.class)))
             .thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -374,8 +390,10 @@ class OrderCommandServiceTest {
 
         when(userRepository.findById(userId))
             .thenReturn(Optional.of(user));
-        when(productItemRepository.findById(itemId))
-            .thenReturn(Optional.empty());
+        mockProductItemsWithLock(
+            List.of(itemId),
+            List.of()
+        );
 
         // when & then
         assertThatThrownBy(() -> orderCommandService.createOrder(
@@ -393,7 +411,10 @@ class OrderCommandServiceTest {
         Long userId = 1L;
         Long itemId = 101L;
         User user = mock(User.class);
-        ProductItem productItem = productItemOnlyOnSale(false);
+        ProductItem productItem = productItemOnlyOnSale(
+            itemId,
+            false
+        );
 
         CreateOrderRequest request = directOrderRequest(
             itemId,
@@ -402,8 +423,10 @@ class OrderCommandServiceTest {
 
         when(userRepository.findById(userId))
             .thenReturn(Optional.of(user));
-        when(productItemRepository.findById(itemId))
-            .thenReturn(Optional.of(productItem));
+        mockProductItemsWithLock(
+            List.of(itemId),
+            List.of(productItem)
+        );
 
         // when & then
         assertThatThrownBy(() -> orderCommandService.createOrder(
@@ -423,6 +446,7 @@ class OrderCommandServiceTest {
         Long itemId = 101L;
         User user = mock(User.class);
         ProductItem productItem = productItemForStockValidation(
+            itemId,
             true,
             1L
         );
@@ -434,8 +458,11 @@ class OrderCommandServiceTest {
 
         when(userRepository.findById(userId))
             .thenReturn(Optional.of(user));
-        when(productItemRepository.findById(itemId))
-            .thenReturn(Optional.of(productItem));
+
+        mockProductItemsWithLock(
+            List.of(itemId),
+            List.of(productItem)
+        );
 
         // when & then
         assertThatThrownBy(() -> orderCommandService.createOrder(
@@ -545,8 +572,8 @@ class OrderCommandServiceTest {
 
         CancelOrderRequest request = new CancelOrderRequest("단순 변심");
 
-        when(orderRepository.findById(orderId))
-            .thenReturn(Optional.of(order));
+        mockOrderWithLock(orderId, order);
+
         when(orderItemRepository.findAllByOrderIdWithProductItem(orderId))
             .thenReturn(List.of(orderItem));
         when(deliveryRepository.findAllByOrderItemIdIn(List.of(101L)))
@@ -615,8 +642,8 @@ class OrderCommandServiceTest {
 
         CancelOrderRequest request = new CancelOrderRequest("단순 변심");
 
-        when(orderRepository.findById(orderId))
-            .thenReturn(Optional.of(order));
+        mockOrderWithLock(orderId, order);
+
         when(orderItemRepository.findAllByOrderIdWithProductItem(orderId))
             .thenReturn(List.of(orderItem));
         when(deliveryRepository.findAllByOrderItemIdIn(List.of(101L)))
@@ -657,7 +684,8 @@ class OrderCommandServiceTest {
 
         OrderItem orderItem = orderItemOnlyId(101L);
 
-        when(orderRepository.findById(orderId)).thenReturn(Optional.of(order));
+        mockOrderWithLock(orderId, order);
+
         when(orderItemRepository.findAllByOrderIdWithProductItem(orderId))
             .thenReturn(List.of(orderItem));
 
@@ -677,8 +705,7 @@ class OrderCommandServiceTest {
         Long orderId = 10L;
         CancelOrderRequest request = new CancelOrderRequest("단순 변심");
 
-        when(orderRepository.findById(orderId))
-            .thenReturn(Optional.empty());
+        mockOrderNotFoundWithLock(orderId);
 
         // when & then
         assertThatThrownBy(() -> orderCommandService.cancelOrder(
@@ -701,8 +728,7 @@ class OrderCommandServiceTest {
         Order order = orderForOwnerValidation(orderOwnerId);
         CancelOrderRequest request = new CancelOrderRequest("단순 변심");
 
-        when(orderRepository.findById(orderId))
-            .thenReturn(Optional.of(order));
+        mockOrderWithLock(orderId, order);
 
         // when & then
         assertThatThrownBy(() -> orderCommandService.cancelOrder(
@@ -728,8 +754,7 @@ class OrderCommandServiceTest {
         );
         CancelOrderRequest request = new CancelOrderRequest("단순 변심");
 
-        when(orderRepository.findById(orderId))
-            .thenReturn(Optional.of(order));
+        mockOrderWithLock(orderId, order);
 
         // when & then
         assertThatThrownBy(() -> orderCommandService.cancelOrder(
@@ -757,8 +782,8 @@ class OrderCommandServiceTest {
         OrderItem orderItem = orderItemOnlyId(101L);
         CancelOrderRequest request = new CancelOrderRequest("단순 변심");
 
-        when(orderRepository.findById(orderId))
-            .thenReturn(Optional.of(order));
+        mockOrderWithLock(orderId, order);
+
         when(orderItemRepository.findAllByOrderIdWithProductItem(orderId))
             .thenReturn(List.of(orderItem));
         when(deliveryRepository.findAllByOrderItemIdIn(List.of(101L)))
@@ -790,8 +815,8 @@ class OrderCommandServiceTest {
         Delivery delivery = mock(Delivery.class);
         CancelOrderRequest request = new CancelOrderRequest("단순 변심");
 
-        when(orderRepository.findById(orderId))
-            .thenReturn(Optional.of(order));
+        mockOrderWithLock(orderId, order);
+
         when(orderItemRepository.findAllByOrderIdWithProductItem(orderId))
             .thenReturn(List.of(orderItem));
         when(deliveryRepository.findAllByOrderItemIdIn(List.of(101L)))
@@ -805,6 +830,27 @@ class OrderCommandServiceTest {
             orderId,
             request
         )).isInstanceOf(CustomException.class);
+
+        verify(orderCancelHistoryRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("cancelOrder 실패 - 주문 락 획득 실패 시 예외 발생")
+    void cancelOrder_fail_whenOrderLockTimeout() {
+        // given
+        Long userId = 1L;
+        Long orderId = 10L;
+        CancelOrderRequest request = new CancelOrderRequest("단순 변심");
+
+        when(orderRepository.findByIdWithLock(orderId))
+            .thenThrow(new PessimisticLockingFailureException("lock timeout"));
+
+        // when & then
+        assertThatThrownBy(() -> orderCommandService.cancelOrder(
+            userId,
+            orderId,
+            request
+        )).isInstanceOf(PessimisticLockingFailureException.class);
 
         verify(orderCancelHistoryRepository, never()).save(any());
     }
@@ -867,20 +913,26 @@ class OrderCommandServiceTest {
         return productItem;
     }
 
-    private ProductItem productItemOnlyOnSale(boolean onSale) {
+    private ProductItem productItemOnlyOnSale(
+        Long itemId,
+        boolean onSale
+    ) {
         ProductItem productItem = mock(ProductItem.class);
 
+        when(productItem.getId()).thenReturn(itemId);
         when(productItem.isOnSale()).thenReturn(onSale);
 
         return productItem;
     }
 
     private ProductItem productItemForStockValidation(
+        Long itemId,
         boolean onSale,
         Long stock
     ) {
         ProductItem productItem = mock(ProductItem.class);
 
+        when(productItem.getId()).thenReturn(itemId);
         when(productItem.isOnSale()).thenReturn(onSale);
         when(productItem.getStock()).thenReturn(stock);
 
@@ -998,6 +1050,27 @@ class OrderCommandServiceTest {
         when(user.getId()).thenReturn(userId);
 
         return cartItem;
+    }
+
+    private void mockProductItemsWithLock(
+        List<Long> itemIds,
+        List<ProductItem> productItems
+    ) {
+        when(productItemRepository.findAllByIdInForUpdate(itemIds))
+            .thenReturn(productItems);
+    }
+
+    private void mockOrderWithLock(
+        Long orderId,
+        Order order
+    ) {
+        when(orderRepository.findByIdWithLock(orderId))
+            .thenReturn(Optional.of(order));
+    }
+
+    private void mockOrderNotFoundWithLock(Long orderId) {
+        when(orderRepository.findByIdWithLock(orderId))
+            .thenReturn(Optional.empty());
     }
 
 }

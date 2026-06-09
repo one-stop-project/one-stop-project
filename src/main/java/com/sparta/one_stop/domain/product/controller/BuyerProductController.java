@@ -55,7 +55,7 @@ public class BuyerProductController {
         @RequestParam(required = false) Long categoryId,
         @RequestParam(required = false) Long minPrice,
         @RequestParam(required = false) Long maxPrice,
-        @RequestParam(defaultValue = "LATEST") SortType sort,
+        @RequestParam(name = "sortType", defaultValue = "LATEST") SortType sort,
         @PageableDefault(size = 20) Pageable pageable,
         @AuthenticationPrincipal AuthUser authUser
     ) {

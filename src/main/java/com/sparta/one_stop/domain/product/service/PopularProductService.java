@@ -2,7 +2,6 @@ package com.sparta.one_stop.domain.product.service;
 
 import com.sparta.one_stop.domain.product.dto.response.PopularProductResponse;
 import com.sparta.one_stop.domain.product.entity.Product;
-import com.sparta.one_stop.domain.product.entity.ProductItem;
 import com.sparta.one_stop.domain.product.repository.ProductRepository;
 import com.sparta.one_stop.domain.product.repository.SalesWeightedRow;
 import com.sparta.one_stop.global.enums.order.OrderItemStatus;
@@ -215,17 +214,11 @@ public class PopularProductService {
         for (Long pid : productIds) {
             Product p = productMap.get(pid);
             if (p == null) continue;
-            if (!isVisibleAndOnSale(p)) continue;
+            if (!p.isVisibleOnSale()) continue;
             result.add(PopularProductResponse.from(rank.getAndIncrement(), p));
             if (result.size() >= limit) break;
         }
         return result;
-    }
-
-    private boolean isVisibleAndOnSale(Product p) {
-        if (!p.isApproved()) return false;
-        if (p.getSeller().getStatus() != SellerStatus.APPROVED) return false;
-        return p.getProductItems().stream().anyMatch(ProductItem::isOnSale);
     }
 
     private long nullSafe(Long v) {

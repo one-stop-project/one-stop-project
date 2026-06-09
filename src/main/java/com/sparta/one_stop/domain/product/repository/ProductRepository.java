@@ -43,8 +43,8 @@ public interface ProductRepository extends JpaRepository<Product, Long>, Product
     // 검색/목록(키워드 FULLTEXT + 카테고리 + 가격 + 정렬)은 QueryDSL 동적 쿼리로 이동
     // → ProductRepositoryCustom.search() / ProductRepositoryImpl
 
-    // 단건 상세 조회
-    @EntityGraph(attributePaths = {"seller", "productItems", "productImages", "categoryMappings", "categoryMappings.category", "tags"})
+    // 단건 상세 조회 (카테고리만 함께 — 자식 여럿 합치면 데이터 부풀어 느려짐)
+    @EntityGraph(attributePaths = {"seller", "categoryMappings", "categoryMappings.category"})
     @Query("SELECT p FROM Product p WHERE p.id = :id")
     Optional<Product> findWithCollectionsById(@Param("id") Long id);
 
@@ -99,8 +99,8 @@ public interface ProductRepository extends JpaRepository<Product, Long>, Product
            nativeQuery = true)
     List<Object[]> findTopTags(@Param("limit") int limit);
 
-    // 인기 상품 응답용 배치 fetch (productItems 같이 로드)
-    @Query("SELECT DISTINCT p FROM Product p LEFT JOIN FETCH p.productItems WHERE p.id IN :ids")
+    // 인기/검색 목록 배치 fetch (seller·옵션 같이 로드)
+    @Query("SELECT DISTINCT p FROM Product p LEFT JOIN FETCH p.seller LEFT JOIN FETCH p.productItems WHERE p.id IN :ids")
     List<Product> findAllByIdsWithItems(@Param("ids") List<Long> ids);
 
     // 인기 상품 판매수 시간 가중 집계 — 3일 윈도우, 1일 단위 3구간 (recent/middle/oldest)

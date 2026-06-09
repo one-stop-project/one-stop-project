@@ -3,12 +3,14 @@ package com.sparta.one_stop.domain.subscription.scheduler;
 import com.sparta.one_stop.domain.subscription.service.SubscriptionExpirationSchedulerService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Slf4j
 @Component
 @RequiredArgsConstructor
+@ConditionalOnProperty(name = "app.scheduler.enabled", havingValue = "true", matchIfMissing = false)
 public class SubscriptionExpirationScheduler {
     private final SubscriptionExpirationSchedulerService expirationSchedulerService;
 

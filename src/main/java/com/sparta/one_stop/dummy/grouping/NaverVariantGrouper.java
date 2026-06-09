@@ -4,10 +4,10 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sparta.one_stop.dummy.description.DummyPromptProperties;
 import com.sparta.one_stop.dummy.naver.dto.NaverShopItem;
-import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
@@ -27,7 +27,6 @@ import java.util.regex.Pattern;
 // 그룹 경계·식별키는 규칙(결정적)으로 정해 재실행 멱등을 보장하고,
 // 묶인 cluster 안에서 옵션축/옵션값/이름/설명만 LLM이 채운다(LLM 실패 시 단일 상품으로 분리 fallback).
 @Component
-@RequiredArgsConstructor
 public class NaverVariantGrouper {
 
     private static final Logger log = LoggerFactory.getLogger(NaverVariantGrouper.class);
@@ -50,6 +49,14 @@ public class NaverVariantGrouper {
     private final ChatClient chatClient;
     private final DummyPromptProperties prompts;
     private final ObjectMapper objectMapper;
+
+    public NaverVariantGrouper(@Qualifier("dummyChatClient") ChatClient chatClient,
+                               DummyPromptProperties prompts,
+                               ObjectMapper objectMapper) {
+        this.chatClient = chatClient;
+        this.prompts = prompts;
+        this.objectMapper = objectMapper;
+    }
 
     public List<GroupedProduct> group(List<NaverShopItem> items, List<Long> categoryIds, String categoryName) {
         if (items == null || items.isEmpty()) {

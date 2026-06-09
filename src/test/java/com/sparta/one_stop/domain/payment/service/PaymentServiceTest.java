@@ -1,14 +1,10 @@
 package com.sparta.one_stop.domain.payment.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sparta.one_stop.domain.coupon.service.CouponCommandService;
-import com.sparta.one_stop.domain.delivery.entity.Delivery;
-import com.sparta.one_stop.domain.delivery.entity.DeliveryHistory;
-import com.sparta.one_stop.domain.delivery.repository.DeliveryHistoryRepository;
-import com.sparta.one_stop.domain.delivery.repository.DeliveryRepository;
+import com.sparta.one_stop.domain.delivery.service.DeliveryService;
 import com.sparta.one_stop.domain.order.entity.Order;
-import com.sparta.one_stop.domain.order.entity.OrderItem;
-import com.sparta.one_stop.domain.order.repository.OrderItemRepository;
 import com.sparta.one_stop.domain.order.repository.OrderRepository;
 import com.sparta.one_stop.domain.payment.dto.request.ApprovePaymentRequest;
 import com.sparta.one_stop.domain.payment.dto.response.ApprovePaymentResponse;
@@ -21,6 +17,7 @@ import com.sparta.one_stop.global.enums.order.OrderStatus;
 import com.sparta.one_stop.global.enums.payment.PaymentMethod;
 import com.sparta.one_stop.global.enums.payment.PaymentStatus;
 import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import com.sparta.one_stop.global.outbox.service.OutboxEventService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -30,7 +27,6 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -41,6 +37,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.willDoNothing;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -52,22 +49,16 @@ class PaymentServiceTest {
     private OrderRepository orderRepository;
 
     @Mock
-    private OrderItemRepository orderItemRepository;
-
-    @Mock
     private PaymentRepository paymentRepository;
-
-    @Mock
-    private DeliveryRepository deliveryRepository;
-
-    @Mock
-    private DeliveryHistoryRepository deliveryHistoryRepository;
 
     @Mock
     private PointService pointService;
 
     @Mock
     private CouponCommandService couponCommandService;
+
+    @Mock
+    private DeliveryService deliveryService;
 
     @Mock
     private OutboxEventService outboxEventService;
@@ -79,7 +70,7 @@ class PaymentServiceTest {
     private PaymentService paymentService;
 
     @Test
-    @DisplayName("approvePayment 성공 - 결제 승인 후 Order, OrderItem, Delivery, DeliveryHistory를 처리한다")
+    @DisplayName("approvePayment 성공 - 결제 승인 후 배송 생성과 Outbox 이벤트 저장을 처리한다")
     void approvePayment_success() throws Exception {
         // given
         Long userId = 1L;
@@ -105,20 +96,11 @@ class PaymentServiceTest {
             orderStatus
         );
 
-        OrderItem orderItem1 = orderItem(101L);
-        OrderItem orderItem2 = orderItem(102L);
-
         when(orderRepository.findById(orderId))
             .thenReturn(Optional.of(order));
         when(paymentRepository.existsByOrderId(orderId))
             .thenReturn(false);
         when(paymentRepository.save(any(Payment.class)))
-            .thenAnswer(invocation -> invocation.getArgument(0));
-        when(orderItemRepository.findAllByOrderIdWithProductItem(orderId))
-            .thenReturn(List.of(orderItem1, orderItem2));
-        when(deliveryRepository.findAllByOrderItemIdIn(List.of(101L, 102L)))
-            .thenReturn(List.of());
-        when(deliveryRepository.saveAll(any()))
             .thenAnswer(invocation -> invocation.getArgument(0));
         when(objectMapper.writeValueAsString(any(PaymentApprovedEventPayload.class)))
             .thenReturn("{\"orderId\":1}");
@@ -137,12 +119,6 @@ class PaymentServiceTest {
 
         verify(paymentRepository).save(paymentCaptor.capture());
 
-        verify(outboxEventService).savePaymentApprovedEvent(
-            anyString(),
-            eq(orderId),
-            anyString()
-        );
-
         Payment savedPayment = paymentCaptor.getValue();
 
         assertThat(savedPayment.getOrder()).isSameAs(order);
@@ -154,26 +130,75 @@ class PaymentServiceTest {
         verify(order).completePayment();
         assertThat(orderStatus.get()).isEqualTo(OrderStatus.PAID);
 
-        verify(orderItem1).markOrdered();
-        verify(orderItem2).markOrdered();
+        verify(couponCommandService).useCouponByOrder(order);
+        verify(deliveryService).createDeliveriesForPayment(order);
 
-        ArgumentCaptor<List<Delivery>> deliveryCaptor =
-            ArgumentCaptor.forClass(List.class);
+        verify(outboxEventService).savePaymentApprovedEvent(
+            anyString(),
+            eq(orderId),
+            anyString()
+        );
+    }
 
-        verify(deliveryRepository).saveAll(deliveryCaptor.capture());
+    @Test
+    @DisplayName("approvePayment 성공 - Outbox payload 직렬화 실패해도 결제는 성공한다")
+    void approvePayment_success_whenOutboxPayloadSerializationFails() throws Exception {
+        // given
+        Long userId = 1L;
+        Long orderId = 10L;
+        Long amount = 30000L;
 
-        List<Delivery> savedDeliveries = deliveryCaptor.getValue();
+        ApprovePaymentRequest request = new ApprovePaymentRequest(
+            orderId,
+            amount
+        );
 
-        assertThat(savedDeliveries).hasSize(2);
+        willDoNothing()
+            .given(couponCommandService)
+            .useCouponByOrder(any(Order.class));
 
-        ArgumentCaptor<List<DeliveryHistory>> historyCaptor =
-            ArgumentCaptor.forClass(List.class);
+        AtomicReference<OrderStatus> orderStatus =
+            new AtomicReference<>(OrderStatus.PENDING_PAYMENT);
 
-        verify(deliveryHistoryRepository).saveAll(historyCaptor.capture());
+        Order order = payableOrder(
+            orderId,
+            userId,
+            amount,
+            orderStatus
+        );
 
-        List<DeliveryHistory> savedHistories = historyCaptor.getValue();
+        when(orderRepository.findById(orderId))
+            .thenReturn(Optional.of(order));
+        when(paymentRepository.existsByOrderId(orderId))
+            .thenReturn(false);
+        when(paymentRepository.save(any(Payment.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
 
-        assertThat(savedHistories).hasSize(2);
+        when(objectMapper.writeValueAsString(any(PaymentApprovedEventPayload.class)))
+            .thenThrow(new JsonProcessingException("serialize error") {});
+
+        // when
+        ApprovePaymentResponse result = paymentService.approvePayment(
+            userId,
+            request
+        );
+
+        // then
+        assertThat(result).isNotNull();
+        assertThat(result.orderId()).isEqualTo(orderId);
+        assertThat(result.finalPrice()).isEqualTo(amount);
+        assertThat(result.status()).isEqualTo(OrderStatus.PAID);
+
+        verify(paymentRepository).save(any(Payment.class));
+        verify(order).completePayment();
+        verify(couponCommandService).useCouponByOrder(order);
+        verify(deliveryService).createDeliveriesForPayment(order);
+
+        verify(outboxEventService, never()).savePaymentApprovedEvent(
+            anyString(),
+            any(),
+            anyString()
+        );
     }
 
     @Test
@@ -359,7 +384,7 @@ class PaymentServiceTest {
     }
 
     @Test
-    @DisplayName("approvePayment 실패 - 주문 상품이 없으면 예외 발생")
+    @DisplayName("approvePayment 실패 - 배송 생성 중 주문 상품이 없으면 예외 발생")
     void approvePayment_fail_whenOrderItemsEmpty() {
         // given
         Long userId = 1L;
@@ -391,8 +416,10 @@ class PaymentServiceTest {
             .thenReturn(false);
         when(paymentRepository.save(any(Payment.class)))
             .thenAnswer(invocation -> invocation.getArgument(0));
-        when(orderItemRepository.findAllByOrderIdWithProductItem(orderId))
-            .thenReturn(List.of());
+
+        doThrow(new CustomException(ErrorCode.ORDER_001))
+            .when(deliveryService)
+            .createDeliveriesForPayment(order);
 
         // when & then
         assertThatThrownBy(() -> paymentService.approvePayment(
@@ -403,12 +430,16 @@ class PaymentServiceTest {
 
         verify(paymentRepository).save(any(Payment.class));
         verify(order).completePayment();
-        verify(deliveryRepository, never()).saveAll(any());
-        verify(deliveryHistoryRepository, never()).saveAll(any());
+        verify(deliveryService).createDeliveriesForPayment(order);
+        verify(outboxEventService, never()).savePaymentApprovedEvent(
+            anyString(),
+            any(),
+            anyString()
+        );
     }
 
     @Test
-    @DisplayName("approvePayment 실패 - 이미 배송 데이터가 존재하면 예외 발생")
+    @DisplayName("approvePayment 실패 - 배송 생성 중 이미 배송 데이터가 존재하면 예외 발생")
     void approvePayment_fail_whenDeliveryAlreadyExists() {
         // given
         Long userId = 1L;
@@ -434,19 +465,16 @@ class PaymentServiceTest {
             orderStatus
         );
 
-        OrderItem orderItem = orderItem(101L);
-        Delivery existingDelivery = org.mockito.Mockito.mock(Delivery.class);
-
         when(orderRepository.findById(orderId))
             .thenReturn(Optional.of(order));
         when(paymentRepository.existsByOrderId(orderId))
             .thenReturn(false);
         when(paymentRepository.save(any(Payment.class)))
             .thenAnswer(invocation -> invocation.getArgument(0));
-        when(orderItemRepository.findAllByOrderIdWithProductItem(orderId))
-            .thenReturn(List.of(orderItem));
-        when(deliveryRepository.findAllByOrderItemIdIn(List.of(101L)))
-            .thenReturn(List.of(existingDelivery));
+
+        doThrow(new CustomException(ErrorCode.PAYMENT_003))
+            .when(deliveryService)
+            .createDeliveriesForPayment(order);
 
         // when & then
         assertThatThrownBy(() -> paymentService.approvePayment(
@@ -457,8 +485,12 @@ class PaymentServiceTest {
 
         verify(paymentRepository).save(any(Payment.class));
         verify(order).completePayment();
-        verify(deliveryRepository, never()).saveAll(any());
-        verify(deliveryHistoryRepository, never()).saveAll(any());
+        verify(deliveryService).createDeliveriesForPayment(order);
+        verify(outboxEventService, never()).savePaymentApprovedEvent(
+            anyString(),
+            eq(orderId),
+            anyString()
+        );
     }
 
     private Order payableOrder(
@@ -514,14 +546,6 @@ class PaymentServiceTest {
         when(user.getId()).thenReturn(userId);
 
         return order;
-    }
-
-    private OrderItem orderItem(Long orderItemId) {
-        OrderItem orderItem = org.mockito.Mockito.mock(OrderItem.class);
-
-        when(orderItem.getId()).thenReturn(orderItemId);
-
-        return orderItem;
     }
 
     private Order orderForOwnerValidation(Long userId) {
