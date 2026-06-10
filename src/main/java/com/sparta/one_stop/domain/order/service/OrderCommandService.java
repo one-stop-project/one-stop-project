@@ -75,9 +75,11 @@ public class OrderCommandService {
      * - DIRECT / CART 주문 분기
      * - 서버 기준 상품 가격 재계산
      * - 재고 검증 및 차감
+     * - 구독 할인 금액 계산
      * - userCouponId가 있으면 쿠폰 검증 및 할인 금액 계산
      * - userCouponId가 없으면 쿠폰 할인 없이 주문 생성
-     * - 쿠폰 할인 금액과 사용 포인트 합계가 상품 금액을 초과하지 않는지 검증
+     * - 쿠폰 할인 금액, 사용 포인트, 구독 할인 금액의 합이 상품 금액을 초과하지 않는지 검증
+     * - 최종 결제 금액이 음수가 되지 않도록 방어
      * - Order 상태는 PENDING_PAYMENT 로 생성
      * - OrderItem 상태도 PENDING_PAYMENT 로 생성
      */
@@ -120,11 +122,14 @@ public class OrderCommandService {
         validateDiscountAndPointLimit(
             totalPrice,
             discountPrice,
-            usedPoint
+            usedPoint,
+            subscriptionDiscount
         );
 
         Long deliveryFee = DEFAULT_DELIVERY_FEE;
         Long finalPrice = totalPrice - discountPrice - usedPoint - subscriptionDiscount + deliveryFee;
+
+        validateFinalPrice(finalPrice);
 
         Order order = new Order(
             user,
@@ -567,16 +572,31 @@ public class OrderCommandService {
     }
 
     /**
-     * 쿠폰 할인 금액 + 사용 포인트 한도 검증
-     * - 쿠폰 할인과 포인트 사용은 배송비를 제외한 상품 금액에만 적용
-     * - 할인 금액과 사용 포인트의 합은 총 상품 금액을 초과할 수 없음
+     * 쿠폰 할인 금액 + 사용 포인트 + 구독 할인 한도 검증
+     * - 쿠폰 할인, 포인트 사용, 구독 할인은 배송비를 제외한 상품 금액에만 적용한다.
+     * - 쿠폰 할인 금액, 사용 포인트, 구독 할인 금액의 합은 상품 금액을 초과할 수 없다.
      */
     private void validateDiscountAndPointLimit(
         Long totalPrice,
         Long discountPrice,
-        Integer usedPoint
+        Integer usedPoint,
+        Long subscriptionDiscount
     ) {
-        if (discountPrice + usedPoint.longValue() > totalPrice) {
+        long totalDiscountAmount = discountPrice
+            + usedPoint.longValue()
+            + subscriptionDiscount;
+
+        if (totalDiscountAmount > totalPrice) {
+            throw new CustomException(ErrorCode.ORDER_012);
+        }
+    }
+
+    /**
+     * 최종 결제 금액 음수 방어
+     * - 할인/포인트/구독 할인 계산 결과 최종 결제 금액이 음수가 되면 주문 생성 정책 위반으로 처리한다.
+     */
+    private void validateFinalPrice(Long finalPrice) {
+        if (finalPrice < 0) {
             throw new CustomException(ErrorCode.ORDER_012);
         }
     }

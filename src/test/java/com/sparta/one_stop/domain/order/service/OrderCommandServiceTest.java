@@ -191,7 +191,11 @@ class OrderCommandServiceTest {
         User user = mock(User.class);
 
         // 10,000원짜리 상품 2개 = 총 20,000원
-        ProductItem productItem = orderableProductItem(itemId, 10000L, 10L);
+        ProductItem productItem = orderableProductItem(
+            itemId,
+            10000L,
+            10L
+        );
         CreateOrderRequest request = directOrderRequest(itemId, 2);
 
         // Mock 설정
@@ -224,7 +228,11 @@ class OrderCommandServiceTest {
         // 엔티티에 구독 할인 금액이 잘 저장되었는지 확인
         ArgumentCaptor<Order> orderCaptor = ArgumentCaptor.forClass(Order.class);
         verify(orderRepository).save(orderCaptor.capture());
-        assertThat(orderCaptor.getValue().getSubscriptionDiscount()).isEqualTo(1000L);
+
+        Order savedOrder = orderCaptor.getValue();
+
+        assertThat(savedOrder.getSubscriptionDiscount()).isEqualTo(1000L);
+        assertThat(savedOrder.getFinalPrice()).isEqualTo(22000L);
     }
 
 
@@ -550,6 +558,70 @@ class OrderCommandServiceTest {
         ).isInstanceOf(CustomException.class);
 
         verify(orderRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("createOrder 실패 - 쿠폰할인, 포인트, 구독할인 합계가 상품 금액을 초과하면 예외 발생")
+    void createOrder_fail_whenDiscountPointAndSubscriptionDiscountExceedTotalPrice() {
+        // given
+        Long userId = 1L;
+        Long itemId = 101L;
+
+        User user = mock(User.class);
+
+        // 상품 금액: 10,000원
+        ProductItem productItem = productItemForDiscountLimitValidation(
+            itemId,
+            10000L,
+            10L
+        );
+
+        // 사용 포인트: 10,000원
+        CreateOrderRequest request = new CreateOrderRequest(
+            OrderType.DIRECT,
+            List.of(new CreateOrderItemRequest(
+                itemId,
+                1
+            )),
+            null,
+            "홍길동",
+            "010-1234-5678",
+            "서울시 강남구",
+            "문 앞",
+            null,
+            10000
+        );
+
+        when(userRepository.findById(userId))
+            .thenReturn(Optional.of(user));
+
+        mockProductItemsWithLock(
+            List.of(itemId),
+            List.of(productItem)
+        );
+
+        given(couponQueryService.validateAndCalculateDiscount(
+            anyLong(),
+            any(),
+            anyLong()
+        )).willReturn(CouponDiscountResult.none());
+
+        // 구독 할인: 4,000원
+        // 기존 로직이면 totalPrice 10,000 - usedPoint 10,000 - subscriptionDiscount 4,000 + deliveryFee 3,000 = -1,000
+        given(subscriptionBenefitService.calculateDiscount(userId, 10000L))
+            .willReturn(4000L);
+
+        // when & then
+        assertThatThrownBy(() -> orderCommandService.createOrder(
+            userId,
+            request
+        ))
+            .isInstanceOf(CustomException.class)
+            .extracting("errorCode")
+            .isEqualTo(ErrorCode.ORDER_012);
+
+        verify(orderRepository, never()).save(any(Order.class));
+        verify(orderItemRepository, never()).saveAll(any());
     }
 
     @Test
@@ -1126,6 +1198,28 @@ class OrderCommandServiceTest {
     private void mockOrderNotFoundWithLock(Long orderId) {
         when(orderRepository.findByIdWithLock(orderId))
             .thenReturn(Optional.empty());
+    }
+
+    private ProductItem productItemForDiscountLimitValidation(
+        Long itemId,
+        Long price,
+        Long stock
+    ) {
+        ProductItem productItem = mock(ProductItem.class);
+        Product product = mock(Product.class);
+        Seller seller = mock(Seller.class);
+
+        when(productItem.getId()).thenReturn(itemId);
+        when(productItem.isOnSale()).thenReturn(true);
+        when(productItem.getStock()).thenReturn(stock);
+        when(productItem.getProduct()).thenReturn(product);
+        when(productItem.getPrice()).thenReturn(price);
+
+        when(product.isApproved()).thenReturn(true);
+        when(product.getSeller()).thenReturn(seller);
+        when(seller.isApproved()).thenReturn(true);
+
+        return productItem;
     }
 
 }
