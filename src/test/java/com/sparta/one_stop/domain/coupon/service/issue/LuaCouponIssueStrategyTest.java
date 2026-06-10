@@ -9,6 +9,8 @@ import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.UserRepository;
 import com.sparta.one_stop.global.enums.coupon.UserCouponStatus;
 import com.sparta.one_stop.global.exception.CustomException;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -19,6 +21,8 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -56,6 +60,20 @@ class LuaCouponIssueStrategyTest {
 
     @InjectMocks
     private LuaCouponIssueStrategy luaCouponIssueStrategy;
+
+    @BeforeEach
+    void setUpTransactionSynchronization() {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.initSynchronization();
+        }
+    }
+
+    @AfterEach
+    void clearTransactionSynchronization() {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
 
     @Test
     @DisplayName("supports 성공 - strategyType이 lua이면 true를 반환한다")
@@ -738,6 +756,75 @@ class LuaCouponIssueStrategyTest {
             couponId
         )).isInstanceOf(RuntimeException.class);
 
+        verify(redisTemplate).execute(
+            any(DefaultRedisScript.class),
+            eq(List.of(stockKey, issuedUsersKey)),
+            eq(userIdValue)
+        );
+    }
+
+    @Test
+    @DisplayName("issue 보상 - 트랜잭션 롤백 콜백 실행 시 Redis 발급 보상 Script를 실행한다")
+    void issue_compensate_whenTransactionRollback() {
+        // given
+        Long userId = 1L;
+        Long couponId = 10L;
+        String stockKey = "coupon:stock:10";
+        String issuedUsersKey = "coupon:issued-users:10";
+        String userIdValue = String.valueOf(userId);
+
+        User user = mock(User.class);
+        Coupon coupon = couponForIssueResponse(couponId);
+        UserCoupon savedUserCoupon = issuedUserCoupon(
+            100L,
+            coupon
+        );
+
+        when(userRepository.findById(userId))
+            .thenReturn(Optional.of(user));
+        when(couponRepository.findById(couponId))
+            .thenReturn(Optional.of(coupon));
+
+        when(redisTemplate.opsForValue())
+            .thenReturn(valueOperations);
+        when(valueOperations.setIfAbsent(
+            eq(stockKey),
+            anyString(),
+            any(Duration.class)
+        )).thenReturn(true);
+
+        when(redisTemplate.execute(
+            any(DefaultRedisScript.class),
+            eq(List.of(stockKey, issuedUsersKey)),
+            eq(userIdValue),
+            anyString()
+        )).thenReturn(99L);
+
+        when(userCouponRepository.existsByUserIdAndCouponId(userId, couponId))
+            .thenReturn(false);
+        when(userCouponRepository.saveAndFlush(any(UserCoupon.class)))
+            .thenReturn(savedUserCoupon);
+        when(couponRepository.increaseIssuedQuantity(couponId))
+            .thenReturn(1);
+
+        when(redisTemplate.execute(
+            any(DefaultRedisScript.class),
+            eq(List.of(stockKey, issuedUsersKey)),
+            eq(userIdValue)
+        )).thenReturn(1L);
+
+        // when
+        luaCouponIssueStrategy.issue(
+            userId,
+            couponId
+        );
+
+        TransactionSynchronizationManager.getSynchronizations()
+            .forEach(synchronization ->
+                synchronization.afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK)
+            );
+
+        // then
         verify(redisTemplate).execute(
             any(DefaultRedisScript.class),
             eq(List.of(stockKey, issuedUsersKey)),
