@@ -9,9 +9,13 @@ const orderDuration    = new Trend('order_duration',    true);
 const suspendDuration  = new Trend('suspend_duration',  true);
 const errorRate        = new Rate('error_rate');
 
+// ── VU 수 상수 — options.vus, setup() 토큰 발급 수, seed-users.sql 계정 수와 동기화
+const BUYER_VU_COUNT  = 50;
+const ADMIN_VU_COUNT  = 5;
+
 // ── 테스트 옵션 ────────────────────────────────────────────────
 export const options = {
-  vus: 50,
+  vus: BUYER_VU_COUNT,
   duration: '5m',
   thresholds: {
     // 전체 95% 응답시간 500ms 이하
@@ -76,14 +80,14 @@ export function setup() {
   const buyerTokens = [];
   const adminTokens = [];
 
-  for (let i = 1; i <= 50; i++) {
+  for (let i = 1; i <= BUYER_VU_COUNT; i++) {
     const token = loginOnce(`testbuyer${i}@test.com`, USER_PW);
     if (!token) throw new Error(`testbuyer${i} 토큰 발급 실패 — setup 중단`);
     buyerTokens.push(token);
     sleep(3.5);
   }
 
-  for (let i = 1; i <= 5; i++) {
+  for (let i = 1; i <= ADMIN_VU_COUNT; i++) {
     const token = loginOnce(`testadmin${i}@test.com`, USER_PW);
     if (!token) throw new Error(`testadmin${i} 토큰 발급 실패 — setup 중단`);
     adminTokens.push(token);
@@ -160,7 +164,7 @@ function forceInactiveSeller(adminToken) {
 export default function (data) {
   // setup()에서 발급한 토큰 재사용 — 반복 로그인으로 인한 rate limit 차단 방지
   const token      = data.buyerTokens[__VU - 1];
-  const adminToken = data.adminTokens[(__VU - 1) % 5];
+  const adminToken = data.adminTokens[(__VU - 1) % ADMIN_VU_COUNT];
 
   group('1. 상품 목록 조회', () => {
     getProducts(token);
