@@ -41,6 +41,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -155,8 +156,10 @@ class DecrCouponIssueStrategyTest {
             anyString(),
             any(Duration.class)
         )).thenReturn(true);
-        when(valueOperations.decrement(stockKey))
-            .thenReturn(99L);
+        when(redisTemplate.execute(
+            any(DefaultRedisScript.class),
+            eq(List.of(stockKey))
+        )).thenReturn(99L);
 
         when(userCouponRepository.existsByUserIdAndCouponId(userId, couponId))
             .thenReturn(false);
@@ -188,7 +191,10 @@ class DecrCouponIssueStrategyTest {
         assertThat(result.couponName()).isEqualTo("테스트 쿠폰");
         assertThat(result.status()).isEqualTo(UserCouponStatus.AVAILABLE);
 
-        verify(valueOperations).decrement(stockKey);
+        verify(redisTemplate).execute(
+            any(DefaultRedisScript.class),
+            eq(List.of(stockKey))
+        );
         verify(userCouponRepository).saveAndFlush(any(UserCoupon.class));
         verify(couponRepository).increaseIssuedQuantity(
             couponId,
@@ -200,6 +206,208 @@ class DecrCouponIssueStrategyTest {
             eq(List.of(issuedUsersKey)),
             anyString()
         );
+        verify(valueOperations, never()).increment(stockKey);
+        verify(setOperations, never()).remove(anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("issue 성공 - Redis stock key가 TTL 만료로 사라지면 DB 기준 재초기화 후 1회 재시도한다")
+    void issue_success_whenStockKeyNotFound_thenReinitializeAndRetry() {
+        // given
+        Long userId = 1L;
+        Long couponId = 10L;
+        String stockKey = "coupon:stock:10";
+        String issuedUsersKey = "coupon:issued-users:10";
+        String userIdValue = String.valueOf(userId);
+
+        User user = mock(User.class);
+        Coupon coupon = couponForIssueResponse(couponId);
+        UserCoupon savedUserCoupon = issuedUserCoupon(100L, coupon);
+
+        when(userRepository.findById(userId))
+            .thenReturn(Optional.of(user));
+
+        // 첫 번째 조회: 최초 발급 가능 검증 및 초기화
+        // 두 번째 조회: stock key 재초기화 시 최신 Coupon 조회
+        when(couponRepository.findById(couponId))
+            .thenReturn(Optional.of(coupon))
+            .thenReturn(Optional.of(coupon));
+
+        when(redisTemplate.opsForSet())
+            .thenReturn(setOperations);
+        when(redisTemplate.opsForValue())
+            .thenReturn(valueOperations);
+
+        when(setOperations.isMember(issuedUsersKey, userIdValue))
+            .thenReturn(false);
+
+        when(valueOperations.setIfAbsent(
+            eq(stockKey),
+            anyString(),
+            any(Duration.class)
+        )).thenReturn(true);
+
+        // 첫 번째 안전 DECR 결과: -3(stock key 없음)
+        // 재초기화 후 두 번째 안전 DECR 결과: 99(정상 차감)
+        when(redisTemplate.execute(
+            any(DefaultRedisScript.class),
+            eq(List.of(stockKey))
+        )).thenReturn(-3L, 99L);
+
+        when(userCouponRepository.existsByUserIdAndCouponId(userId, couponId))
+            .thenReturn(false);
+        when(userCouponRepository.saveAndFlush(any(UserCoupon.class)))
+            .thenReturn(savedUserCoupon);
+        when(couponRepository.increaseIssuedQuantity(
+            couponId,
+            CouponStatus.ACTIVE
+        )).thenReturn(1);
+
+        when(setOperations.add(issuedUsersKey, userIdValue))
+            .thenReturn(1L);
+
+        when(redisTemplate.execute(
+            any(DefaultRedisScript.class),
+            eq(List.of(issuedUsersKey)),
+            anyString()
+        )).thenReturn(1L);
+
+        // when
+        IssueCouponResponse result = decrCouponIssueStrategy.issue(
+            userId,
+            couponId
+        );
+
+        // then
+        assertThat(result).isNotNull();
+        assertThat(result.userCouponId()).isEqualTo(100L);
+        assertThat(result.couponId()).isEqualTo(couponId);
+
+        // 최초 초기화 + 재초기화
+        verify(valueOperations, times(2)).setIfAbsent(
+            eq(stockKey),
+            anyString(),
+            any(Duration.class)
+        );
+
+        // 비정상 stock key 정리
+        verify(redisTemplate).delete(stockKey);
+
+        // 안전 DECR 2회: -3 감지 후 재시도
+        verify(redisTemplate, times(2)).execute(
+            any(DefaultRedisScript.class),
+            eq(List.of(stockKey))
+        );
+
+        verify(couponRepository, times(2)).findById(couponId);
+        verify(userCouponRepository).saveAndFlush(any(UserCoupon.class));
+        verify(couponRepository).increaseIssuedQuantity(
+            couponId,
+            CouponStatus.ACTIVE
+        );
+        verify(setOperations).add(issuedUsersKey, userIdValue);
+
+        verify(valueOperations, never()).increment(stockKey);
+        verify(setOperations, never()).remove(anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("issue 성공 - Redis stock key에 TTL이 없으면 삭제 후 DB 기준 재초기화하고 1회 재시도한다")
+    void issue_success_whenStockKeyHasNoTtl_thenDeleteReinitializeAndRetry() {
+        // given
+        Long userId = 1L;
+        Long couponId = 10L;
+        String stockKey = "coupon:stock:10";
+        String issuedUsersKey = "coupon:issued-users:10";
+        String userIdValue = String.valueOf(userId);
+
+        User user = mock(User.class);
+        Coupon coupon = couponForIssueResponse(couponId);
+        UserCoupon savedUserCoupon = issuedUserCoupon(100L, coupon);
+
+        when(userRepository.findById(userId))
+            .thenReturn(Optional.of(user));
+
+        // 첫 번째 조회: 최초 발급 가능 검증 및 초기화
+        // 두 번째 조회: TTL 없는 stock key 복구 시 최신 Coupon 조회
+        when(couponRepository.findById(couponId))
+            .thenReturn(Optional.of(coupon))
+            .thenReturn(Optional.of(coupon));
+
+        when(redisTemplate.opsForSet())
+            .thenReturn(setOperations);
+        when(redisTemplate.opsForValue())
+            .thenReturn(valueOperations);
+
+        when(setOperations.isMember(issuedUsersKey, userIdValue))
+            .thenReturn(false);
+
+        when(valueOperations.setIfAbsent(
+            eq(stockKey),
+            anyString(),
+            any(Duration.class)
+        )).thenReturn(true);
+
+        // 첫 번째 안전 DECR 결과: -4(TTL 없는 비정상 key)
+        // 재초기화 후 두 번째 안전 DECR 결과: 99(정상 차감)
+        when(redisTemplate.execute(
+            any(DefaultRedisScript.class),
+            eq(List.of(stockKey))
+        )).thenReturn(-4L, 99L);
+
+        when(userCouponRepository.existsByUserIdAndCouponId(userId, couponId))
+            .thenReturn(false);
+        when(userCouponRepository.saveAndFlush(any(UserCoupon.class)))
+            .thenReturn(savedUserCoupon);
+        when(couponRepository.increaseIssuedQuantity(
+            couponId,
+            CouponStatus.ACTIVE
+        )).thenReturn(1);
+
+        when(setOperations.add(issuedUsersKey, userIdValue))
+            .thenReturn(1L);
+
+        when(redisTemplate.execute(
+            any(DefaultRedisScript.class),
+            eq(List.of(issuedUsersKey)),
+            anyString()
+        )).thenReturn(1L);
+
+        // when
+        IssueCouponResponse result = decrCouponIssueStrategy.issue(
+            userId,
+            couponId
+        );
+
+        // then
+        assertThat(result).isNotNull();
+        assertThat(result.userCouponId()).isEqualTo(100L);
+        assertThat(result.couponId()).isEqualTo(couponId);
+
+        // 최초 초기화 + 재초기화
+        verify(valueOperations, times(2)).setIfAbsent(
+            eq(stockKey),
+            anyString(),
+            any(Duration.class)
+        );
+
+        // TTL 없는 0 또는 음수 key 제거
+        verify(redisTemplate).delete(stockKey);
+
+        // 안전 DECR 2회: -4 감지 후 재시도
+        verify(redisTemplate, times(2)).execute(
+            any(DefaultRedisScript.class),
+            eq(List.of(stockKey))
+        );
+
+        verify(couponRepository, times(2)).findById(couponId);
+        verify(userCouponRepository).saveAndFlush(any(UserCoupon.class));
+        verify(couponRepository).increaseIssuedQuantity(
+            couponId,
+            CouponStatus.ACTIVE
+        );
+        verify(setOperations).add(issuedUsersKey, userIdValue);
+
         verify(valueOperations, never()).increment(stockKey);
         verify(setOperations, never()).remove(anyString(), anyString());
     }
@@ -351,7 +559,10 @@ class DecrCouponIssueStrategyTest {
         )).isInstanceOf(CustomException.class);
 
         verify(redisTemplate, never()).opsForValue();
-        verify(valueOperations, never()).decrement(anyString());
+        verify(redisTemplate, never()).execute(
+            any(DefaultRedisScript.class),
+            anyList()
+        );
         verify(userCouponRepository, never()).saveAndFlush(any(UserCoupon.class));
     }
 
@@ -393,7 +604,10 @@ class DecrCouponIssueStrategyTest {
             anyString(),
             any(Duration.class)
         );
-        verify(valueOperations, never()).decrement(anyString());
+        verify(redisTemplate, never()).execute(
+            any(DefaultRedisScript.class),
+            anyList()
+        );
         verify(userCouponRepository, never()).saveAndFlush(any(UserCoupon.class));
     }
 
@@ -437,7 +651,10 @@ class DecrCouponIssueStrategyTest {
             anyString(),
             any(Duration.class)
         );
-        verify(valueOperations, never()).decrement(anyString());
+        verify(redisTemplate, never()).execute(
+            any(DefaultRedisScript.class),
+            anyList()
+        );
         verify(userCouponRepository, never()).saveAndFlush(any(UserCoupon.class));
     }
 
@@ -470,8 +687,10 @@ class DecrCouponIssueStrategyTest {
             anyString(),
             any(Duration.class)
         )).thenReturn(true);
-        when(valueOperations.decrement(stockKey))
-            .thenReturn(-1L);
+        when(redisTemplate.execute(
+            any(DefaultRedisScript.class),
+            eq(List.of(stockKey))
+        )).thenReturn(-1L);
 
         // when & then
         assertThatThrownBy(() -> decrCouponIssueStrategy.issue(
@@ -513,8 +732,10 @@ class DecrCouponIssueStrategyTest {
             anyString(),
             any(Duration.class)
         )).thenReturn(true);
-        when(valueOperations.decrement(stockKey))
-            .thenReturn(null);
+        when(redisTemplate.execute(
+            any(DefaultRedisScript.class),
+            eq(List.of(stockKey))
+        )).thenReturn(null);
 
         // when & then
         assertThatThrownBy(() -> decrCouponIssueStrategy.issue(
@@ -522,7 +743,10 @@ class DecrCouponIssueStrategyTest {
             couponId
         )).isInstanceOf(CustomException.class);
 
-        verify(valueOperations).decrement(stockKey);
+        verify(redisTemplate).execute(
+            any(DefaultRedisScript.class),
+            eq(List.of(stockKey))
+        );
         verify(valueOperations, never()).increment(stockKey);
         verify(userCouponRepository, never()).saveAndFlush(any(UserCoupon.class));
         verify(setOperations, never()).add(anyString(), anyString());
@@ -557,8 +781,10 @@ class DecrCouponIssueStrategyTest {
             anyString(),
             any(Duration.class)
         )).thenReturn(true);
-        when(valueOperations.decrement(stockKey))
-            .thenReturn(99L);
+        when(redisTemplate.execute(
+            any(DefaultRedisScript.class),
+            eq(List.of(stockKey))
+        )).thenReturn(99L);
 
         when(userCouponRepository.existsByUserIdAndCouponId(userId, couponId))
             .thenReturn(true);
@@ -602,8 +828,10 @@ class DecrCouponIssueStrategyTest {
             anyString(),
             any(Duration.class)
         )).thenReturn(true);
-        when(valueOperations.decrement(stockKey))
-            .thenReturn(99L);
+        when(redisTemplate.execute(
+            any(DefaultRedisScript.class),
+            eq(List.of(stockKey))
+        )).thenReturn(99L);
 
         when(userCouponRepository.existsByUserIdAndCouponId(userId, couponId))
             .thenReturn(false);
@@ -650,8 +878,10 @@ class DecrCouponIssueStrategyTest {
             anyString(),
             any(Duration.class)
         )).thenReturn(true);
-        when(valueOperations.decrement(stockKey))
-            .thenReturn(99L);
+        when(redisTemplate.execute(
+            any(DefaultRedisScript.class),
+            eq(List.of(stockKey))
+        )).thenReturn(99L);
 
         when(userCouponRepository.existsByUserIdAndCouponId(userId, couponId))
             .thenReturn(false);
@@ -714,8 +944,10 @@ class DecrCouponIssueStrategyTest {
             anyString(),
             any(Duration.class)
         )).thenReturn(true);
-        when(valueOperations.decrement(stockKey))
-            .thenReturn(99L);
+        when(redisTemplate.execute(
+            any(DefaultRedisScript.class),
+            eq(List.of(stockKey))
+        )).thenReturn(99L);
 
         when(userCouponRepository.existsByUserIdAndCouponId(userId, couponId))
             .thenReturn(false);
@@ -777,8 +1009,10 @@ class DecrCouponIssueStrategyTest {
             anyString(),
             any(Duration.class)
         )).thenReturn(true);
-        when(valueOperations.decrement(stockKey))
-            .thenReturn(99L);
+        when(redisTemplate.execute(
+            any(DefaultRedisScript.class),
+            eq(List.of(stockKey))
+        )).thenReturn(99L);
 
         when(userCouponRepository.existsByUserIdAndCouponId(userId, couponId))
             .thenReturn(false);
@@ -845,8 +1079,10 @@ class DecrCouponIssueStrategyTest {
             anyString(),
             any(Duration.class)
         )).thenReturn(true);
-        when(valueOperations.decrement(stockKey))
-            .thenReturn(99L);
+        when(redisTemplate.execute(
+            any(DefaultRedisScript.class),
+            eq(List.of(stockKey))
+        )).thenReturn(99L);
 
         when(userCouponRepository.existsByUserIdAndCouponId(userId, couponId))
             .thenReturn(false);
