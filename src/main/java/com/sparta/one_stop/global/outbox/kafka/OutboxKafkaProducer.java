@@ -1,5 +1,6 @@
 package com.sparta.one_stop.global.outbox.kafka;
 
+import com.sparta.one_stop.global.outbox.exception.KafkaPublishException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -27,7 +28,10 @@ public class OutboxKafkaProducer {
         } catch (Exception e) {
             log.warn("Kafka 발행 실패 - topic: {}, key: {}", topic, key, e);
 
-            throw new RuntimeException("Kafka 발행 실패: " + e.getMessage(), e);
+            throw new KafkaPublishException(
+                "Kafka 발행 실패 - topic: " + topic + ", key: " + key,
+                e
+            );
         }
     }
 

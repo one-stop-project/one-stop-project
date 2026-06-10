@@ -1,5 +1,6 @@
 package com.sparta.one_stop.global.outbox.kafka;
 
+import com.sparta.one_stop.global.outbox.exception.KafkaPublishException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.kafka.core.KafkaTemplate;
@@ -50,7 +51,7 @@ class OutboxKafkaProducerTest {
     }
 
     @Test
-    @DisplayName("send 실패 - 예외 발생 시 RuntimeException으로 전환한다")
+    @DisplayName("send 실패 - Kafka 발행 실패 시 KafkaPublishException으로 전환한다")
     void send_fail_whenKafkaSendFails() {
         // given
         String topic = "payment.approved";
@@ -71,8 +72,10 @@ class OutboxKafkaProducerTest {
             key,
             payload
         ))
-            .isInstanceOf(RuntimeException.class)
-            .hasMessageContaining("Kafka 발행 실패");
+            .isInstanceOf(KafkaPublishException.class)
+            .hasMessageContaining("Kafka 발행 실패")
+            .hasMessageContaining(topic)
+            .hasMessageContaining(key);
 
         verify(kafkaTemplate).send(
             topic,
