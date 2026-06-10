@@ -2,7 +2,9 @@ package com.sparta.one_stop.domain.subscription.repository;
 
 import com.sparta.one_stop.domain.subscription.entity.Subscription;
 import com.sparta.one_stop.global.enums.subscription.SubscriptionStatus;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.LocalDateTime;
@@ -45,4 +47,9 @@ public interface SubscriptionRepository
         LocalDateTime now,
         Pageable pageable
     );
+
+    long countByStatus(SubscriptionStatus status);
+
+    @EntityGraph(attributePaths = "user")
+    Page<Subscription> findAll(Pageable pageable);
 }
