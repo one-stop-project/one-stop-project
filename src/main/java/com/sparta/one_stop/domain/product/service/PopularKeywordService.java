@@ -17,13 +17,18 @@ import org.springframework.stereotype.Service;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
+
+import static com.sparta.one_stop.domain.product.support.PopularityWindow.HOUR_FMT;
+import static com.sparta.one_stop.domain.product.support.PopularityWindow.KST;
+import static com.sparta.one_stop.domain.product.support.PopularityWindow.WEIGHT_MIDDLE;
+import static com.sparta.one_stop.domain.product.support.PopularityWindow.WEIGHT_OLDEST;
+import static com.sparta.one_stop.domain.product.support.PopularityWindow.WEIGHT_RECENT;
 
 @Slf4j
 @Service
@@ -44,12 +49,7 @@ public class PopularKeywordService {
     private static final int MAX_KEYWORD_LENGTH = 100; // SearchHistory.keyword 컬럼 length=100 과 일치
     private static final int TOP_N              = 50;
 
-    private static final double WEIGHT_OLDEST = 0.1;
-    private static final double WEIGHT_MIDDLE = 0.3;
-    private static final double WEIGHT_RECENT = 0.6;
-
-    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
-    private static final DateTimeFormatter HOUR_FMT = DateTimeFormatter.ofPattern("yyyyMMddHH");
+    // 시간윈도우 가중치(WEIGHT_*)·KST·HOUR_FMT는 PopularityWindow 공통 상수 사용
     private static final DateTimeFormatter DAY_FMT  = DateTimeFormatter.ofPattern("yyyyMMdd");
     // 전각 공백 등 유니코드 공백까지 매칭 (UNICODE 플래그)
     private static final Pattern MULTI_WHITESPACE = Pattern.compile("\\s+", Pattern.UNICODE_CHARACTER_CLASS);
