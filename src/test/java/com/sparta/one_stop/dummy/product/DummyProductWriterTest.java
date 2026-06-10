@@ -1,6 +1,7 @@
 package com.sparta.one_stop.dummy.product;
 
 import com.sparta.one_stop.domain.product.entity.Product;
+import com.sparta.one_stop.domain.product.entity.ProductItem;
 import com.sparta.one_stop.domain.product.repository.CategoryRepository;
 import com.sparta.one_stop.domain.product.repository.ProductRepository;
 import com.sparta.one_stop.domain.user.entity.Seller;
@@ -19,6 +20,7 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import org.mockito.ArgumentCaptor;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -122,5 +124,46 @@ class DummyProductWriterTest {
         assertThat(result).isEqualTo(DummyWriteResult.SKIPPED);
         verify(sourceGroupRepository, never()).save(any());
         verify(productRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("옵션값이 100자를 초과하면 100자로 잘려 저장된다 (컬럼 길이 보호)")
+    void truncatesLongOptionValue() {
+        Seller seller = mock(Seller.class);
+        Product saved = captureCreatedProduct(seller, groupedWithOptionValue("가".repeat(150)));
+
+        assertThat(firstItem(saved).getOptionValue1()).hasSize(100);
+    }
+
+    @Test
+    @DisplayName("절단 경계가 서로게이트 페어 중간이면 한 칸 당겨 깨진 문자를 만들지 않는다")
+    void truncateDoesNotSplitSurrogatePair() {
+        Seller seller = mock(Seller.class);
+        // 99자 + 이모지(2 char) = 101 char → 100번째 char가 high surrogate → 한 칸 당겨 99자로
+        String value = "a".repeat(99) + "😀";
+        Product saved = captureCreatedProduct(seller, groupedWithOptionValue(value));
+
+        assertThat(firstItem(saved).getOptionValue1()).isEqualTo("a".repeat(99));
+    }
+
+    private GroupedProduct groupedWithOptionValue(String optionValue) {
+        return new GroupedProduct(
+            "NAVER|base1", "상품", "설명", List.of(1L), List.of("용량"), "img",
+            List.of(new ProductVariant("NAVER|pid:x", List.of(optionValue), 1000L)));
+    }
+
+    private Product captureCreatedProduct(Seller seller, GroupedProduct g) {
+        when(sourceGroupRepository.findBySourceAndBaseSourceKey(any(), any())).thenReturn(Optional.empty());
+        when(categoryRepository.findAllByIdIn(any())).thenReturn(List.of());
+        ArgumentCaptor<Product> captor = ArgumentCaptor.forClass(Product.class);
+        when(productRepository.save(captor.capture())).thenAnswer(inv -> inv.getArgument(0));
+
+        writer.write(seller, g);
+
+        return captor.getValue();
+    }
+
+    private ProductItem firstItem(Product product) {
+        return product.getProductItems().iterator().next();
     }
 }

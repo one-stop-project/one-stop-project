@@ -84,12 +84,11 @@ public class DummyProductOrchestrator {
                     try {
                         GroupedProduct toWrite = (thumbnail != null) ? withThumbnail(group, thumbnail) : group;
                         DummyWriteResult result = writer.write(seller, toWrite);
-                        if (result == DummyWriteResult.CREATED) {
-                            created++;
-                        } else if (result == DummyWriteResult.UPDATED) {
-                            updated++;
-                        } else {
-                            skipped++;
+                        switch (result) {
+                            case CREATED -> created++;
+                            case UPDATED -> updated++;
+                            case SKIPPED -> skipped++;
+                            default -> log.warn("[더미시드] 미처리 결과 상태: {}", result);
                         }
                     } catch (Exception e) {
                         failed++;
