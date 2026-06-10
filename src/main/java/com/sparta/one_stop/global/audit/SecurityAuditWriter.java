@@ -22,10 +22,10 @@ import org.springframework.transaction.annotation.Transactional;
  *          컨텍스트 캡처는 호출 측(요청 스레드, 동기)에서 끝낸다.
  *
  *
- * self-invocation 회피</b>: SecurityAuditService와 별도 Bean으로 분리해
+ * self-invocation 회피: SecurityAuditService와 별도 Bean으로 분리해
  * {@code @Async} 프록시가 정상 동작하도록 한다.
  *
- * Fail-Safe</b>: 저장 실패가 본 흐름(이미 커밋된 요청)에 영향 주지 않도록
+ * Fail-Safe: 저장 실패가 본 흐름(이미 커밋된 요청)에 영향 주지 않도록
  * 예외를 삼키고 로그만 남긴다. {@code @Async} 스레드의 예외는 AsyncConfig의
  * AsyncUncaughtExceptionHandler로도 수집된다.
  */

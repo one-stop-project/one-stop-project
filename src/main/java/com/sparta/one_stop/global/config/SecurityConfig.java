@@ -115,7 +115,7 @@ public class SecurityConfig {
                 ).permitAll()
 
                 // logout 별도 구성 / 인증 반드시 필요
-                .requestMatchers(HttpMethod.POST,"/api/auth/logout").permitAll()
+                .requestMatchers(HttpMethod.POST,"/api/auth/logout").authenticated()
 
                 // 인증 없이 접근 가능
                 // AUTH부분은 정책 변경 소요 대비 분리 작성
