@@ -96,7 +96,7 @@ class PaymentServiceTest {
             orderStatus
         );
 
-        when(orderRepository.findById(orderId))
+        when(orderRepository.findByIdWithLock(orderId))
             .thenReturn(Optional.of(order));
         when(paymentRepository.existsByOrderId(orderId))
             .thenReturn(false);
@@ -113,6 +113,8 @@ class PaymentServiceTest {
 
         // then
         assertThat(result).isNotNull();
+
+        verify(orderRepository).findByIdWithLock(orderId);
 
         ArgumentCaptor<Payment> paymentCaptor =
             ArgumentCaptor.forClass(Payment.class);
@@ -167,7 +169,7 @@ class PaymentServiceTest {
             orderStatus
         );
 
-        when(orderRepository.findById(orderId))
+        when(orderRepository.findByIdWithLock(orderId))
             .thenReturn(Optional.of(order));
         when(paymentRepository.existsByOrderId(orderId))
             .thenReturn(false);
@@ -213,7 +215,7 @@ class PaymentServiceTest {
             30000L
         );
 
-        when(orderRepository.findById(orderId))
+        when(orderRepository.findByIdWithLock(orderId))
             .thenReturn(Optional.empty());
 
         // when & then
@@ -241,7 +243,7 @@ class PaymentServiceTest {
 
         Order order = orderForOwnerValidation(orderOwnerId);
 
-        when(orderRepository.findById(orderId))
+        when(orderRepository.findByIdWithLock(orderId))
             .thenReturn(Optional.of(order));
 
         // when & then
@@ -271,7 +273,7 @@ class PaymentServiceTest {
             OrderStatus.PAID
         );
 
-        when(orderRepository.findById(orderId))
+        when(orderRepository.findByIdWithLock(orderId))
             .thenReturn(Optional.of(order));
 
         // when & then
@@ -302,7 +304,7 @@ class PaymentServiceTest {
             OrderStatus.CANCELLED
         );
 
-        when(orderRepository.findById(orderId))
+        when(orderRepository.findByIdWithLock(orderId))
             .thenReturn(Optional.of(order));
 
         // when & then
@@ -317,7 +319,7 @@ class PaymentServiceTest {
     }
 
     @Test
-    @DisplayName("approvePayment 실패 - 동일 주문에 대한 Payment가 이미 존재하면 예외 발생")
+    @DisplayName("approvePayment 실패 - 동일 주문에 대한 Payment가 이미 존재하면 포인트를 차감하지 않고 예외 발생")
     void approvePayment_fail_whenPaymentAlreadyExists() {
         // given
         Long userId = 1L;
@@ -334,7 +336,7 @@ class PaymentServiceTest {
             userId
         );
 
-        when(orderRepository.findById(orderId))
+        when(orderRepository.findByIdWithLock(orderId))
             .thenReturn(Optional.of(order));
         when(paymentRepository.existsByOrderId(orderId))
             .thenReturn(true);
@@ -346,6 +348,8 @@ class PaymentServiceTest {
         ))
             .isInstanceOf(CustomException.class);
 
+        verify(orderRepository).findByIdWithLock(orderId);
+        verify(pointService, never()).usePoint(any(), any(), any());
         verify(paymentRepository, never()).save(any(Payment.class));
     }
 
@@ -368,7 +372,7 @@ class PaymentServiceTest {
             OrderStatus.PENDING_PAYMENT
         );
 
-        when(orderRepository.findById(orderId))
+        when(orderRepository.findByIdWithLock(orderId))
             .thenReturn(Optional.of(order));
         when(paymentRepository.existsByOrderId(orderId))
             .thenReturn(false);
@@ -410,7 +414,7 @@ class PaymentServiceTest {
             orderStatus
         );
 
-        when(orderRepository.findById(orderId))
+        when(orderRepository.findByIdWithLock(orderId))
             .thenReturn(Optional.of(order));
         when(paymentRepository.existsByOrderId(orderId))
             .thenReturn(false);
@@ -465,7 +469,7 @@ class PaymentServiceTest {
             orderStatus
         );
 
-        when(orderRepository.findById(orderId))
+        when(orderRepository.findByIdWithLock(orderId))
             .thenReturn(Optional.of(order));
         when(paymentRepository.existsByOrderId(orderId))
             .thenReturn(false);

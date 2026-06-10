@@ -83,9 +83,9 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     List<Object[]> countItemsByOrderIds(@Param("orderIds") List<Long> orderIds);
 
     /**
-     * 주문 취소 동시성 제어용 주문 조회
-     * - 동일 주문에 대한 동시 취소 요청을 직렬화하기 위해 PESSIMISTIC_WRITE 락을 획득한다.
-     * - 트랜잭션 내에서 SELECT FOR UPDATE 계열 잠금을 적용하여 재고/포인트/쿠폰 중복 복구를 방지한다.
+     * 주문 상태 변경 동시성 제어용 주문 조회
+     * - 동일 주문에 대한 결제 승인, 주문 취소 등 핵심 상태 변경 요청을 직렬화하기 위해 PESSIMISTIC_WRITE 락을 획득한다.
+     * - 트랜잭션 내에서 SELECT FOR UPDATE 계열 잠금을 적용하여 중복 결제 승인, 중복 주문 취소, 포인트/쿠폰/재고 중복 처리 등을 방지한다.
      * - 락 경쟁 시 최대 3초까지만 대기하고, 초과 시 락 타임아웃 예외를 발생시킨다.
      */
     @Lock(LockModeType.PESSIMISTIC_WRITE)
