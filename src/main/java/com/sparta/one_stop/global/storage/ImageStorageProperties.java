@@ -8,6 +8,9 @@ public record ImageStorageProperties(
         String region
 ) {
     public ImageStorageProperties {
+        if (bucket == null || bucket.isBlank()) {
+            throw new IllegalArgumentException("app.image.bucket must not be blank");
+        }
         if (region == null || region.isBlank()) {
             region = "ap-northeast-2";
         }

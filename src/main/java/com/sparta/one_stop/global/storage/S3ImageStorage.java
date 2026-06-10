@@ -5,11 +5,14 @@ import com.sparta.one_stop.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
+import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
+import java.net.URI;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -34,15 +37,20 @@ public class S3ImageStorage implements ImageStorage {
         String extension = resolveExtension(contentType);
         String key = UUID.randomUUID() + "." + extension;
 
-        s3Client.putObject(
-                PutObjectRequest.builder()
-                        .bucket(properties.bucket())
-                        .key(key)
-                        .contentType(contentType)
-                        .contentLength((long) content.length)
-                        .build(),
-                RequestBody.fromBytes(content)
-        );
+        try {
+            s3Client.putObject(
+                    PutObjectRequest.builder()
+                            .bucket(properties.bucket())
+                            .key(key)
+                            .contentType(contentType)
+                            .contentLength((long) content.length)
+                            .build(),
+                    RequestBody.fromBytes(content)
+            );
+        } catch (SdkException e) {
+            log.error("S3 업로드 실패: key={}, contentType={}", key, contentType, e);
+            throw new CustomException(ErrorCode.COMMON_007);
+        }
 
         return "https://" + properties.bucket() + ".s3." + properties.region() + ".amazonaws.com/" + key;
     }
@@ -52,7 +60,7 @@ public class S3ImageStorage implements ImageStorage {
         if (url == null || url.isBlank()) {
             return;
         }
-        String key = url.substring(url.lastIndexOf('/') + 1);
+        String key = URI.create(url).getPath().replaceFirst("^/", "");
         try {
             s3Client.deleteObject(DeleteObjectRequest.builder()
                     .bucket(properties.bucket())
@@ -64,7 +72,8 @@ public class S3ImageStorage implements ImageStorage {
     }
 
     private String resolveExtension(String contentType) {
-        String key = contentType == null ? "" : contentType.toLowerCase();
+        String mimeType = contentType == null ? "" : contentType.split(";", 2)[0].trim();
+        String key = mimeType.toLowerCase(Locale.ROOT);
         String extension = EXTENSIONS.get(key);
         if (extension == null) {
             throw new CustomException(ErrorCode.COMMON_006);
