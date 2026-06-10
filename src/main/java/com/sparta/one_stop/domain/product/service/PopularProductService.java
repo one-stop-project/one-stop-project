@@ -21,8 +21,6 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +28,12 @@ import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import java.util.stream.Collectors;
+
+import static com.sparta.one_stop.domain.product.support.PopularityWindow.HOUR_FMT;
+import static com.sparta.one_stop.domain.product.support.PopularityWindow.KST;
+import static com.sparta.one_stop.domain.product.support.PopularityWindow.WEIGHT_MIDDLE;
+import static com.sparta.one_stop.domain.product.support.PopularityWindow.WEIGHT_OLDEST;
+import static com.sparta.one_stop.domain.product.support.PopularityWindow.WEIGHT_RECENT;
 
 @Slf4j
 @Service
@@ -51,13 +55,7 @@ public class PopularProductService {
     private static final double VIEW_WEIGHT = 0.7;
     private static final double SALES_WEIGHT = 0.3;
 
-    // 시간 구간 가중치 (오래된 → 최근). 최근일수록 큰 영향
-    private static final double WEIGHT_OLDEST = 0.1;
-    private static final double WEIGHT_MIDDLE = 0.3;
-    private static final double WEIGHT_RECENT = 0.6;
-
-    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
-    private static final DateTimeFormatter HOUR_FMT = DateTimeFormatter.ofPattern("yyyyMMddHH");
+    // 시간윈도우 가중치(WEIGHT_*)·KST·HOUR_FMT는 PopularityWindow 공통 상수 사용
 
     // 판매수 카운트 대상 상태 (결제완료 이상, 취소/거절 제외)
     private static final List<OrderItemStatus> SALES_COUNT_STATUSES = List.of(
