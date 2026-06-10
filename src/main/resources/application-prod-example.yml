@@ -47,7 +47,7 @@ spring:
       chat:
         completions-path: /chat/completions
         options:
-          model: gemini-2.5-flash-lite
+          model: gemini-3.1-flash-lite
 
   servlet:
     multipart:
@@ -86,8 +86,8 @@ app:
   cors:
     allowed-origins: ${ALLOWED_ORIGINS:http://localhost:8080}
   image:
-    local-dir: ${IMAGE_LOCAL_DIR:/app/uploads/images}
-    url-prefix: /images
+    bucket: ${S3_BUCKET_NAME}
+    region: ${AWS_REGION:ap-northeast-2}
   security:
     csp:
       policy: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data:; font-src 'self' data: https://cdn.jsdelivr.net;"
