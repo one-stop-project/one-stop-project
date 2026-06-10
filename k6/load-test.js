@@ -27,11 +27,10 @@ export const options = {
 };
 
 // ── 환경 설정 ──────────────────────────────────────────────────
-const BASE_URL    = __ENV.BASE_URL    || 'http://localhost:8080';
-const USER_EMAIL  = __ENV.USER_EMAIL  || 'testuser@example.com';
-const USER_PW     = __ENV.USER_PW     || 'Test1234!';
-const ADMIN_EMAIL = __ENV.ADMIN_EMAIL || 'admin@example.com';
-const ADMIN_PW    = __ENV.ADMIN_PW    || 'Admin1234!';
+const BASE_URL   = __ENV.BASE_URL || 'http://localhost:8080';
+const USER_PW    = __ENV.USER_PW  || 'Test1234!';
+// VU별 계정: testbuyer1~50@test.com, 관리자: testadmin1~5@test.com
+// 계정 사전 생성 필요: k6/seed-users.sql 참고
 const SELLER_RAW = __ENV.SELLER_ID;
 const ITEM_RAW   = __ENV.ITEM_ID;
 
@@ -48,8 +47,8 @@ if (isNaN(SELLER_ID) || isNaN(ITEM_ID)) {
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
-// ── 시나리오 1: POST /api/auth/login ──────────────────────────
-function login(email, password) {
+// ── 로그인 헬퍼 ───────────────────────────────────────────────
+function loginOnce(email, password) {
   const res = http.post(
     `${BASE_URL}/api/auth/login`,
     JSON.stringify({ email, password }),
@@ -59,8 +58,8 @@ function login(email, password) {
   loginDuration.add(res.timings.duration);
 
   const ok = check(res, {
-    'login: status 200':           (r) => r.status === 200,
-    'login: accessToken 존재':     (r) => {
+    'login: status 200':       (r) => r.status === 200,
+    'login: accessToken 존재': (r) => {
       try { return !!JSON.parse(r.body).data?.accessToken; } catch { return false; }
     },
   });
@@ -68,6 +67,27 @@ function login(email, password) {
 
   if (!ok) return null;
   return JSON.parse(res.body).data.accessToken;
+}
+
+// ── setup: 테스트 시작 전 VU별 토큰 1회 발급 ─────────────────
+// LOGIN_PER_IP rate limit(1분 20회) 우회 — 매 iteration 로그인 대신 토큰 재사용
+export function setup() {
+  const buyerTokens = [];
+  const adminTokens = [];
+
+  // BUYER 50개 토큰 발급 (rate limit 방어: 요청 간 200ms 간격)
+  for (let i = 1; i <= 50; i++) {
+    buyerTokens.push(loginOnce(`testbuyer${i}@test.com`, USER_PW));
+    sleep(0.2);
+  }
+
+  // ADMIN 5개 토큰 발급
+  for (let i = 1; i <= 5; i++) {
+    adminTokens.push(loginOnce(`testadmin${i}@test.com`, USER_PW));
+    sleep(0.2);
+  }
+
+  return { buyerTokens, adminTokens };
 }
 
 // ── 시나리오 2: GET /api/products ─────────────────────────────
@@ -134,25 +154,24 @@ function forceInactiveSeller(adminToken) {
 }
 
 // ── 메인 VU 루프 ───────────────────────────────────────────────
-export default function () {
-  group('1. 로그인', () => {
-    const token = login(USER_EMAIL, USER_PW);
+export default function (data) {
+  // setup()에서 발급한 토큰 재사용 — 반복 로그인으로 인한 rate limit 차단 방지
+  const token      = data.buyerTokens[__VU - 1];
+  const adminToken = data.adminTokens[(__VU - 1) % 5];
 
-    group('2. 상품 목록 조회', () => {
-      getProducts(token);
-      sleep(0.5);
-    });
+  group('1. 상품 목록 조회', () => {
+    getProducts(token);
+    sleep(0.5);
+  });
 
-    group('3. 주문 생성', () => {
-      createOrder(token);
-      sleep(1);
-    });
+  group('2. 주문 생성', () => {
+    createOrder(token);
+    sleep(1);
   });
 
   // 관리자 시나리오 (10% VU만 실행)
   if (Math.random() < 0.1) {
-    group('4. 관리자 - 판매자 강제 비활성화', () => {
-      const adminToken = login(ADMIN_EMAIL, ADMIN_PW);
+    group('3. 관리자 - 판매자 강제 비활성화', () => {
       forceInactiveSeller(adminToken);
       sleep(1);
     });
