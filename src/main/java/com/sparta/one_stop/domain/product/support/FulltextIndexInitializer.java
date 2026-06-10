@@ -34,12 +34,17 @@ public class FulltextIndexInitializer {
                     + " (name, description) WITH PARSER ngram");
             log.info("[Fulltext] {} 생성 완료", INDEX_NAME);
         } catch (Exception e) {
-            // 다중 인스턴스 동시 기동 시 다른 쪽이 먼저 생성하면 중복 오류가 날 수 있음 → 재확인 후 분류
-            if (indexExists()) {
-                log.info("[Fulltext] {} 이미 생성됨 (다른 인스턴스)", INDEX_NAME);
-            } else {
-                // 생성 실패해도 기동은 막지 않음(검색만 영향) — 로그로 알림
-                log.error("[Fulltext] 인덱스 확인/생성 실패 — 검색이 동작하지 않을 수 있음", e);
+            // 다중 인스턴스 동시 기동 시 다른 쪽이 먼저 생성하면 중복 오류가 날 수 있음 → 재확인 후 분류.
+            // 재확인(indexExists) 자체가 또 실패해도 기동을 막지 않도록 try-catch로 감싼다.
+            try {
+                if (indexExists()) {
+                    log.info("[Fulltext] {} 이미 생성됨 (다른 인스턴스)", INDEX_NAME);
+                } else {
+                    // 생성 실패해도 기동은 막지 않음(검색만 영향) — 로그로 알림
+                    log.error("[Fulltext] 인덱스 확인/생성 실패 — 검색이 동작하지 않을 수 있음", e);
+                }
+            } catch (Exception recheckEx) {
+                log.error("[Fulltext] 인덱스 재확인 실패 — 검색이 동작하지 않을 수 있음", recheckEx);
             }
         }
     }

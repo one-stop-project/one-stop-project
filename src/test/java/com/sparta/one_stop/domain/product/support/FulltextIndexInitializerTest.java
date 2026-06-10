@@ -53,4 +53,16 @@ class FulltextIndexInitializerTest {
         // 최초 확인 + catch 내 재확인 = queryForObject 2회
         verify(jdbcTemplate, times(2)).queryForObject(anyString(), eq(Integer.class), any());
     }
+
+    @Test
+    @DisplayName("생성 실패 후 재확인(indexExists)도 실패해도 예외를 전파하지 않는다")
+    void swallowsExceptionWhenRecheckAlsoFails() {
+        when(jdbcTemplate.queryForObject(anyString(), eq(Integer.class), any()))
+            .thenReturn(0)                              // 최초 확인: 없음
+            .thenThrow(new RuntimeException("DB 끊김")); // catch 내 재확인도 실패
+        doThrow(new RuntimeException("DB 오류")).when(jdbcTemplate).execute(anyString());
+
+        // 예외가 전파되지 않아야 함 (기동 비차단 의도 유지)
+        initializer.ensureFulltextIndex();
+    }
 }
