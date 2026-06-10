@@ -7,18 +7,23 @@ import com.sparta.one_stop.domain.coupon.repository.CouponRepository;
 import com.sparta.one_stop.domain.coupon.repository.UserCouponRepository;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.UserRepository;
+import com.sparta.one_stop.global.enums.coupon.CouponStatus;
 import com.sparta.one_stop.global.enums.coupon.UserCouponStatus;
 import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -31,7 +36,6 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -54,9 +58,23 @@ class LockCouponIssueStrategyTest {
 
     @Mock
     private RLock lock;
-
+    
     @InjectMocks
     private LockCouponIssueStrategy lockCouponIssueStrategy;
+
+    @BeforeEach
+    void setUpTransactionSynchronization() {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.initSynchronization();
+        }
+    }
+
+    @AfterEach
+    void clearTransactionSynchronization() {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
 
     @Test
     @DisplayName("supports 성공 - strategyType이 lock이면 true를 반환한다")
@@ -132,8 +150,10 @@ class LockCouponIssueStrategyTest {
             .thenReturn(false);
         when(userCouponRepository.saveAndFlush(any(UserCoupon.class)))
             .thenReturn(savedUserCoupon);
-        when(couponRepository.increaseIssuedQuantity(couponId))
-            .thenReturn(1);
+        when(couponRepository.increaseIssuedQuantity(
+            couponId,
+            CouponStatus.ACTIVE
+        )).thenReturn(1);
 
         // when
         IssueCouponResponse result = lockCouponIssueStrategy.issue(
@@ -148,22 +168,24 @@ class LockCouponIssueStrategyTest {
         assertThat(result.couponName()).isEqualTo("테스트 쿠폰");
         assertThat(result.status()).isEqualTo(UserCouponStatus.AVAILABLE);
 
-        InOrder inOrder = inOrder(
-            redissonClient,
-            lock,
-            userCouponRepository,
-            couponRepository
-        );
-
-        inOrder.verify(redissonClient).getLock(lockKey);
-        inOrder.verify(lock).tryLock(
+        verify(redissonClient).getLock(lockKey);
+        verify(lock).tryLock(
             anyLong(),
             anyLong(),
             eq(TimeUnit.SECONDS)
         );
-        inOrder.verify(userCouponRepository).saveAndFlush(any(UserCoupon.class));
-        inOrder.verify(couponRepository).increaseIssuedQuantity(couponId);
-        inOrder.verify(lock).unlock();
+        verify(userCouponRepository).saveAndFlush(any(UserCoupon.class));
+        verify(couponRepository).increaseIssuedQuantity(
+            couponId,
+            CouponStatus.ACTIVE
+        );
+
+        // 메서드 반환 직후에는 아직 트랜잭션 afterCompletion 전이므로 unlock 되면 안 된다.
+        verify(lock, never()).unlock();
+
+        completeTransaction(TransactionSynchronization.STATUS_COMMITTED);
+
+        verify(lock).unlock();
     }
 
     @Test
@@ -266,7 +288,7 @@ class LockCouponIssueStrategyTest {
     }
 
     @Test
-    @DisplayName("issue 실패 - 존재하지 않는 사용자면 예외가 발생하고 Lock을 해제한다")
+    @DisplayName("issue 실패 - 존재하지 않는 사용자면 예외가 발생하고 트랜잭션 종료 후 Lock을 해제한다")
     void issue_fail_whenUserNotFound() throws InterruptedException {
         // given
         Long userId = 1L;
@@ -286,11 +308,16 @@ class LockCouponIssueStrategyTest {
         verify(userRepository).findById(userId);
         verify(couponRepository, never()).findById(any());
         verify(userCouponRepository, never()).saveAndFlush(any(UserCoupon.class));
+
+        verify(lock, never()).unlock();
+
+        completeTransaction(TransactionSynchronization.STATUS_ROLLED_BACK);
+
         verify(lock).unlock();
     }
 
     @Test
-    @DisplayName("issue 실패 - 존재하지 않는 쿠폰이면 예외가 발생하고 Lock을 해제한다")
+    @DisplayName("issue 실패 - 존재하지 않는 쿠폰이면 예외가 발생하고 트랜잭션 종료 후 Lock을 해제한다")
     void issue_fail_whenCouponNotFound() throws InterruptedException {
         // given
         Long userId = 1L;
@@ -313,11 +340,15 @@ class LockCouponIssueStrategyTest {
         verify(userRepository).findById(userId);
         verify(couponRepository).findById(couponId);
         verify(userCouponRepository, never()).saveAndFlush(any(UserCoupon.class));
+        verify(lock, never()).unlock();
+
+        completeTransaction(TransactionSynchronization.STATUS_ROLLED_BACK);
+
         verify(lock).unlock();
     }
 
     @Test
-    @DisplayName("issue 실패 - 쿠폰이 비활성 또는 만료 상태이면 예외가 발생하고 Lock을 해제한다")
+    @DisplayName("issue 실패 - 쿠폰이 비활성 또는 만료 상태이면 예외가 발생하고 트랜잭션 종료 후 Lock을 해제한다")
     void issue_fail_whenCouponIsNotIssuable() throws InterruptedException {
         // given
         Long userId = 1L;
@@ -344,11 +375,15 @@ class LockCouponIssueStrategyTest {
         )).isInstanceOf(CustomException.class);
 
         verify(userCouponRepository, never()).saveAndFlush(any(UserCoupon.class));
+        verify(lock, never()).unlock();
+
+        completeTransaction(TransactionSynchronization.STATUS_ROLLED_BACK);
+
         verify(lock).unlock();
     }
 
     @Test
-    @DisplayName("issue 실패 - DB 중복 발급이면 중복 발급 예외가 발생하고 Lock을 해제한다")
+    @DisplayName("issue 실패 - DB 중복 발급이면 중복 발급 예외가 발생하고 트랜잭션 종료 후 Lock을 해제한다")
     void issue_fail_whenAlreadyIssuedInDb() throws InterruptedException {
         // given
         Long userId = 1L;
@@ -373,12 +408,19 @@ class LockCouponIssueStrategyTest {
         )).isInstanceOf(CustomException.class);
 
         verify(userCouponRepository, never()).saveAndFlush(any(UserCoupon.class));
-        verify(couponRepository, never()).increaseIssuedQuantity(anyLong());
+        verify(couponRepository, never()).increaseIssuedQuantity(
+            anyLong(),
+            any(CouponStatus.class)
+        );
+        verify(lock, never()).unlock();
+
+        completeTransaction(TransactionSynchronization.STATUS_ROLLED_BACK);
+
         verify(lock).unlock();
     }
 
     @Test
-    @DisplayName("issue 실패 - UserCoupon 저장 중 Unique 제약 위반이 발생하면 중복 발급 예외가 발생하고 Lock을 해제한다")
+    @DisplayName("issue 실패 - UserCoupon 저장 중 Unique 제약 위반이 발생하면 중복 발급 예외가 발생하고 트랜잭션 종료 후 Lock을 해제한다")
     void issue_fail_whenDataIntegrityViolationOccurs() throws InterruptedException {
         // given
         Long userId = 1L;
@@ -404,12 +446,19 @@ class LockCouponIssueStrategyTest {
             couponId
         )).isInstanceOf(CustomException.class);
 
-        verify(couponRepository, never()).increaseIssuedQuantity(anyLong());
+        verify(couponRepository, never()).increaseIssuedQuantity(
+            anyLong(),
+            any(CouponStatus.class)
+        );
+        verify(lock, never()).unlock();
+
+        completeTransaction(TransactionSynchronization.STATUS_ROLLED_BACK);
+
         verify(lock).unlock();
     }
 
     @Test
-    @DisplayName("issue 실패 - issuedQuantity 증가 실패 시 쿠폰 소진 예외가 발생하고 Lock을 해제한다")
+    @DisplayName("issue 실패 - issuedQuantity 증가 실패 시 쿠폰이 ACTIVE이면 쿠폰 소진 예외가 발생하고 트랜잭션 종료 후 Lock을 해제한다")
     void issue_fail_whenIncreaseIssuedQuantityFails() throws InterruptedException {
         // given
         Long userId = 1L;
@@ -429,21 +478,35 @@ class LockCouponIssueStrategyTest {
             .thenReturn(false);
         when(userCouponRepository.saveAndFlush(any(UserCoupon.class)))
             .thenReturn(savedUserCoupon);
-        when(couponRepository.increaseIssuedQuantity(couponId))
-            .thenReturn(0);
+        when(couponRepository.increaseIssuedQuantity(
+            couponId,
+            CouponStatus.ACTIVE
+        )).thenReturn(0);
+        when(coupon.getStatus())
+            .thenReturn(CouponStatus.ACTIVE);
 
         // when & then
         assertThatThrownBy(() -> lockCouponIssueStrategy.issue(
             userId,
             couponId
-        )).isInstanceOf(CustomException.class);
+        ))
+            .isInstanceOf(CustomException.class)
+            .extracting("errorCode")
+            .isEqualTo(ErrorCode.COUPON_001);
 
-        verify(couponRepository).increaseIssuedQuantity(couponId);
+        verify(couponRepository).increaseIssuedQuantity(
+            couponId,
+            CouponStatus.ACTIVE
+        );
+        verify(lock, never()).unlock();
+
+        completeTransaction(TransactionSynchronization.STATUS_ROLLED_BACK);
+
         verify(lock).unlock();
     }
 
     @Test
-    @DisplayName("issue 실패 - 예상치 못한 RuntimeException이 발생해도 Lock을 해제한다")
+    @DisplayName("issue 실패 - 예상치 못한 RuntimeException이 발생해도 트랜잭션 종료 후 Lock을 해제한다")
     void issue_fail_whenRuntimeExceptionOccurs_thenUnlock() throws InterruptedException {
         // given
         Long userId = 1L;
@@ -467,11 +530,15 @@ class LockCouponIssueStrategyTest {
             couponId
         )).isInstanceOf(RuntimeException.class);
 
+        verify(lock, never()).unlock();
+
+        completeTransaction(TransactionSynchronization.STATUS_ROLLED_BACK);
+
         verify(lock).unlock();
     }
 
     @Test
-    @DisplayName("issue 실패 - 현재 스레드가 Lock을 보유하지 않으면 unlock을 호출하지 않는다")
+    @DisplayName("issue 실패 - 현재 스레드가 Lock을 보유하지 않으면 트랜잭션 종료 후에도 unlock을 호출하지 않는다")
     void issue_fail_whenCurrentThreadDoesNotHoldLock_thenDoNotUnlock() throws InterruptedException {
         // given
         Long userId = 1L;
@@ -489,6 +556,61 @@ class LockCouponIssueStrategyTest {
         )).isInstanceOf(CustomException.class);
 
         verify(lock, never()).unlock();
+
+        completeTransaction(TransactionSynchronization.STATUS_ROLLED_BACK);
+
+        verify(lock, never()).unlock();
+    }
+
+    @Test
+    @DisplayName("issue 실패 - 발급 수량 증가 시점에 쿠폰이 비활성화되면 비활성 쿠폰 예외가 발생하고 트랜잭션 종료 후 Lock을 해제한다")
+    void issue_fail_whenCouponBecomesInactiveBeforeIncreaseIssuedQuantity() throws InterruptedException {
+        // given
+        Long userId = 1L;
+        Long couponId = 10L;
+
+        User user = mock(User.class);
+        Coupon issuableCoupon = couponForIssue();
+        Coupon inactiveCoupon = mock(Coupon.class);
+        UserCoupon savedUserCoupon = mock(UserCoupon.class);
+
+        prepareLockAcquired(couponId);
+
+        when(userRepository.findById(userId))
+            .thenReturn(Optional.of(user));
+
+        when(couponRepository.findById(couponId))
+            .thenReturn(Optional.of(issuableCoupon))
+            .thenReturn(Optional.of(inactiveCoupon));
+
+        when(userCouponRepository.existsByUserIdAndCouponId(userId, couponId))
+            .thenReturn(false);
+        when(userCouponRepository.saveAndFlush(any(UserCoupon.class)))
+            .thenReturn(savedUserCoupon);
+
+        when(couponRepository.increaseIssuedQuantity(
+            couponId,
+            CouponStatus.ACTIVE
+        )).thenReturn(0);
+
+        when(inactiveCoupon.getStatus())
+            .thenReturn(CouponStatus.INACTIVE);
+
+        // when & then
+        assertThatThrownBy(() -> lockCouponIssueStrategy.issue(userId, couponId))
+            .isInstanceOf(CustomException.class)
+            .extracting("errorCode")
+            .isEqualTo(ErrorCode.COUPON_010);
+
+        verify(couponRepository).increaseIssuedQuantity(
+            couponId,
+            CouponStatus.ACTIVE
+        );
+        verify(lock, never()).unlock();
+
+        completeTransaction(TransactionSynchronization.STATUS_ROLLED_BACK);
+
+        verify(lock).unlock();
     }
 
     private void prepareLockAcquired(Long couponId) throws InterruptedException {
@@ -551,6 +673,13 @@ class LockCouponIssueStrategyTest {
             .thenReturn(LocalDateTime.now());
 
         return userCoupon;
+    }
+
+    private void completeTransaction(int status) {
+        TransactionSynchronizationManager.getSynchronizations()
+            .forEach(synchronization ->
+                synchronization.afterCompletion(status)
+            );
     }
 
 }

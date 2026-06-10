@@ -242,6 +242,68 @@ class BuyerProductServiceTest {
             assertThat(result.content().get(1).getProductId()).isEqualTo(50L);
             then(productRepository).should(never()).findApproved(any(), any(), any());
         }
+
+        @Test
+        @DisplayName("인기순은 비활성 필터링 대비 pageSize의 2배를 조회한다(over-fetch)")
+        void overFetchesTwiceThePageSize() {
+            given(popularProductService.getPopularProductIds(40)).willReturn(List.of());
+            given(productRepository.findApproved(any(), any(), any())).willReturn(Page.empty(pageable));
+
+            buyerProductService.search(null, null, null, null, SortType.POPULAR, pageable);
+
+            then(popularProductService).should().getPopularProductIds(40); // pageSize(20) * 2
+        }
+
+        @Test
+        @DisplayName("over-fetch 결과에서 비활성은 걸러지고 노출은 pageSize개로 제한된다")
+        void filtersInvisibleAndLimitsToPageSize() {
+            Pageable size2 = PageRequest.of(0, 2);
+            given(popularProductService.getPopularProductIds(4)).willReturn(List.of(1L, 2L, 3L, 4L));
+            given(productRepository.findAllByIdsWithItems(List.of(1L, 2L, 3L, 4L)))
+                .willReturn(List.of(
+                    approvedProductWithOnSaleItem(1L),
+                    approvedProductNoOnSaleItem(2L),   // 비활성 — 걸러짐
+                    approvedProductWithOnSaleItem(3L),
+                    approvedProductWithOnSaleItem(4L)));
+
+            CacheableProductList result =
+                buyerProductService.search(null, null, null, null, SortType.POPULAR, size2);
+
+            // 비활성 2L 제외 + pageSize(2)로 제한 → 1L, 3L
+            assertThat(result.content()).hasSize(2);
+            assertThat(result.content().get(0).getProductId()).isEqualTo(1L);
+            assertThat(result.content().get(1).getProductId()).isEqualTo(3L);
+        }
+
+        @Test
+        @DisplayName("visible이 정확히 pageSize면 모두 노출된다(경계값)")
+        void exactlyLimitVisible() {
+            Pageable size2 = PageRequest.of(0, 2);
+            given(popularProductService.getPopularProductIds(4)).willReturn(List.of(1L, 2L));
+            given(productRepository.findAllByIdsWithItems(List.of(1L, 2L)))
+                .willReturn(List.of(approvedProductWithOnSaleItem(1L), approvedProductWithOnSaleItem(2L)));
+
+            CacheableProductList result =
+                buyerProductService.search(null, null, null, null, SortType.POPULAR, size2);
+
+            assertThat(result.content()).hasSize(2);
+        }
+
+        @Test
+        @DisplayName("ZSET ID는 있으나 전부 비활성이면 DB fallback 없이 빈 결과를 반환한다")
+        void allInvisibleReturnsEmptyWithoutFallback() {
+            Pageable size2 = PageRequest.of(0, 2);
+            given(popularProductService.getPopularProductIds(4)).willReturn(List.of(1L, 2L));
+            given(productRepository.findAllByIdsWithItems(List.of(1L, 2L)))
+                .willReturn(List.of(approvedProductNoOnSaleItem(1L), approvedProductNoOnSaleItem(2L)));
+
+            CacheableProductList result =
+                buyerProductService.search(null, null, null, null, SortType.POPULAR, size2);
+
+            // popularIds는 비어있지 않으므로 DB fallback 경로로 빠지지 않고 빈 결과
+            assertThat(result.content()).isEmpty();
+            then(productRepository).should(never()).findApproved(any(), any(), any());
+        }
     }
 
     private Product approvedProductWithOnSaleItem(Long id) {
@@ -253,6 +315,16 @@ class BuyerProductServiceTest {
         ProductItem item = ProductItem.builder().price(1000L).stock(10L).build();
         ReflectionTestUtils.setField(item, "status", ProductItemStatus.ON_SALE);
         product.getProductItems().add(item);
+        return product;
+    }
+
+    // ON_SALE 아이템이 없어 isVisibleOnSale=false인 상품 (over-fetch 필터링 대상)
+    private Product approvedProductNoOnSaleItem(Long id) {
+        Seller seller = Seller.builder().shopName("shop").businessNumber("1234567890").build();
+        seller.approve();
+        Product product = Product.builder().seller(seller).name("p" + id).thumbnailUrl("url").build();
+        product.approve();
+        ReflectionTestUtils.setField(product, "id", id);
         return product;
     }
 

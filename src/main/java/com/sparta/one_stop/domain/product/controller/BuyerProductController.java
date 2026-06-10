@@ -55,10 +55,11 @@ public class BuyerProductController {
         @RequestParam(required = false) Long categoryId,
         @RequestParam(required = false) Long minPrice,
         @RequestParam(required = false) Long maxPrice,
-        @RequestParam(name = "sortType", defaultValue = "LATEST") SortType sort,
+        @RequestParam(name = "sort", required = false) String sortParam,
         @PageableDefault(size = 20) Pageable pageable,
         @AuthenticationPrincipal AuthUser authUser
     ) {
+        SortType sort = parseSortType(sortParam);
         validatePageSize(pageable);
         validatePriceRange(minPrice, maxPrice);
         CacheableProductList list = buyerProductService.search(keyword, categoryId, minPrice, maxPrice, sort, pageable);
@@ -79,6 +80,19 @@ public class BuyerProductController {
         }
         if (minPrice != null && maxPrice != null && minPrice > maxPrice) {
             throw new CustomException(ErrorCode.PRODUCT_015, "minPrice가 maxPrice보다 클 수 없습니다");
+        }
+    }
+
+    // sort 파라미터를 SortType으로 안전 변환 — 누락/잘못된 값은 기본 정렬(LATEST)로 (검색이 깨지지 않게)
+    // toUpperCase는 Locale.ROOT 고정 (기본 Locale 의존 시 일부 환경에서 정상값도 폴백되는 것 방지)
+    static SortType parseSortType(String sort) {
+        if (sort == null || sort.isBlank()) {
+            return SortType.LATEST;
+        }
+        try {
+            return SortType.valueOf(sort.trim().toUpperCase(java.util.Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            return SortType.LATEST;
         }
     }
 
