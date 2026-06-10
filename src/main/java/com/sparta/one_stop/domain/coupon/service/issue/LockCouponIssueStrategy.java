@@ -11,16 +11,20 @@ import com.sparta.one_stop.global.enums.coupon.CouponStatus;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
 import java.util.concurrent.TimeUnit;
 
+@Slf4j
 @Component("lockCouponIssueStrategy")
 @ConditionalOnProperty(
     name = "coupon.issue.strategy",
@@ -49,6 +53,7 @@ public class LockCouponIssueStrategy implements CouponIssueStrategy {
      * - 쿠폰 단위 Lock을 획득하여 동일 쿠폰 발급 요청을 순차 처리
      * - Lock 내부에서 쿠폰 발급 가능 여부, 중복 발급 여부, 수량 증가를 처리
      * - 발급 수량 증가 시점에 쿠폰 ACTIVE 상태를 다시 검증하여 비활성 쿠폰 발급을 방지
+     * - Redis Lock은 DB 트랜잭션 commit/rollback 완료 후 afterCompletion 콜백에서 해제
      * - DB Unique 제약으로 중복 발급을 최종 방어
      */
     @Override
@@ -65,10 +70,8 @@ public class LockCouponIssueStrategy implements CouponIssueStrategy {
         String lockKey = getCouponIssueLockKey(couponId);
         RLock lock = redissonClient.getLock(lockKey);
 
-        boolean locked = false;
-
         try {
-            locked = lock.tryLock(
+            boolean locked = lock.tryLock(
                 LOCK_WAIT_TIME,
                 LOCK_LEASE_TIME,
                 TimeUnit.SECONDS
@@ -78,6 +81,8 @@ public class LockCouponIssueStrategy implements CouponIssueStrategy {
                 throw new CustomException(ErrorCode.COMMON_008);
             }
 
+            registerUnlockAfterTransactionCompletion(lock);
+
             return issueWithLock(
                 userId,
                 couponId
@@ -85,10 +90,6 @@ public class LockCouponIssueStrategy implements CouponIssueStrategy {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new CustomException(ErrorCode.COMMON_008);
-        } finally {
-            if (locked && lock.isHeldByCurrentThread()) {
-                lock.unlock();
-            }
         }
     }
 
@@ -165,6 +166,46 @@ public class LockCouponIssueStrategy implements CouponIssueStrategy {
         }
 
         throw new CustomException(ErrorCode.COUPON_001);
+    }
+
+    /**
+     * Redis Lock 해제를 트랜잭션 종료 이후로 지연한다.
+     * - @Transactional 메서드 내부 finally에서 unlock하면 DB commit보다 먼저 Lock이 해제될 수 있다.
+     * - afterCompletion은 commit 또는 rollback 완료 후 실행되므로 직접 unlock으로 인한 pre-commit 상태 조회 윈도우를 방지한다.
+     * - 트랜잭션 동기화 콜백 등록에 실패하면 Lock 누수를 막기 위해 즉시 unlock 후 예외를 발생시킨다.
+     */
+    private void registerUnlockAfterTransactionCompletion(RLock lock) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            log.error("트랜잭션 동기화가 활성화되어 있지 않아 Redis Lock 해제 콜백을 등록할 수 없습니다.");
+
+            unlockQuietly(lock);
+
+            throw new CustomException(ErrorCode.COUPON_012);
+        }
+
+        TransactionSynchronizationManager.registerSynchronization(
+            new TransactionSynchronization() {
+                @Override
+                public void afterCompletion(int status) {
+                    unlockQuietly(lock);
+                }
+            }
+        );
+    }
+
+    /**
+     * Redis Lock 해제 실패가 원래 비즈니스 예외를 덮지 않도록 방어적으로 처리한다.
+     * - 현재 스레드가 보유한 Lock인 경우에만 unlock을 시도한다.
+     * - unlock 실패는 예외를 전파하지 않고 로그로만 기록한다.
+     */
+    private void unlockQuietly(RLock lock) {
+        try {
+            if (lock.isHeldByCurrentThread()) {
+                lock.unlock();
+            }
+        } catch (Throwable e) {
+            log.error("Redis Lock 해제 실패", e);
+        }
     }
 
 }
