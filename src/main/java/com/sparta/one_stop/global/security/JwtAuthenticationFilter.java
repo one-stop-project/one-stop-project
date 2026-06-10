@@ -69,10 +69,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     }
 
     private void setAuthentication(Claims claims, Long userId, HttpServletRequest request) {
-        String email = jwtTokenProvider.getEmail(claims);
         UserRole role = jwtTokenProvider.getRole(claims);
 
-        AuthUser authUser = new AuthUser(userId, email, role);
+        AuthUser authUser = new AuthUser(userId, role);
 
         UsernamePasswordAuthenticationToken authentication =
             new UsernamePasswordAuthenticationToken(

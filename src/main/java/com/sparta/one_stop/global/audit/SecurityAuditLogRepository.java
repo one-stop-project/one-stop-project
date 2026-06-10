@@ -12,8 +12,8 @@ import java.util.List;
 /**
  * 보안 감사 로그 저장소
  *
- * <p><b>중요</b>: 이 Repository는 <b>읽기/생성만</b> 사용해야 함.
- * <br>{@code save()}는 신규 생성에만 사용, {@code update/delete}는 금지.
+ * 중요: 이 Repository는 읽기/생성만 사용해야 함.
+ * {@code save()}는 신규 생성에만 사용, {@code update/delete}는 금지.
  */
 public interface SecurityAuditLogRepository extends JpaRepository<SecurityAuditLog, Long> {
 

@@ -1,15 +1,13 @@
 package com.sparta.one_stop.global.audit;
 
 import com.sparta.one_stop.global.security.AuthUser;
+import com.sparta.one_stop.global.util.ClientIpExtractor;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.context.request.ServletRequestAttributes;
 
@@ -20,17 +18,12 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor
 public class SecurityAuditService {
 
-    private final SecurityAuditLogRepository repository;
+    private final SecurityAuditWriter writer;
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    //  기록 API — 다양한 형태로 호출 가능
+    //  기록 API — 동기 진입점 (요청 스레드에서 호출)
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    /**
-     * 기본 기록 — 성공 케이스
-     */
-    @Async
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void recordSuccess(SecurityAuditEventType eventType) {
         record(SecurityAuditEvent.builder()
             .eventType(eventType)
@@ -38,11 +31,6 @@ public class SecurityAuditService {
             .build());
     }
 
-    /**
-     * 대상 리소스가 있는 성공 케이스
-     */
-    @Async
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void recordSuccess(SecurityAuditEventType eventType, String targetResource, String targetId) {
         record(SecurityAuditEvent.builder()
             .eventType(eventType)
@@ -52,11 +40,6 @@ public class SecurityAuditService {
             .build());
     }
 
-    /**
-     * 실패 케이스
-     */
-    @Async
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void recordFailure(SecurityAuditEventType eventType, String errorCode, String errorMessage) {
         record(SecurityAuditEvent.builder()
             .eventType(eventType)
@@ -66,21 +49,18 @@ public class SecurityAuditService {
             .build());
     }
 
-    /**
-     * 모든 정보 포함 — 가장 상세한 기록
-     */
-    @Async
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void record(SecurityAuditEvent event) {
         try {
-            // HTTP 컨텍스트에서 자동 수집
+            // ── 1. 컨텍스트 캡처 (동기 — ThreadLocal 살아있는 시점) ──
             HttpContext ctx = captureHttpContext();
             ActorContext actor = captureActorContext();
 
-            SecurityAuditLog log = SecurityAuditLog.builder()
+            // ── 2. 엔티티 완성 (모든 값 채움) ──
+            SecurityAuditLog logEntry = SecurityAuditLog.builder()
                 .eventType(event.eventType())
                 .actorUserId(actor.userId() != null ? actor.userId() : event.actorUserId())
-                .actorEmail(actor.email() != null ? actor.email() : event.actorEmail())
+                // email은 자동 캡처 안 함(PII) — 발행자가 명시한 경우에만 기록
+                .actorEmail(event.actorEmail())
                 .actorRole(actor.role() != null ? actor.role() : event.actorRole())
                 .targetResource(event.targetResource())
                 .targetId(event.targetId())
@@ -97,70 +77,48 @@ public class SecurityAuditService {
                 .occurredAt(event.occurredAt() != null ? event.occurredAt() : LocalDateTime.now())
                 .build();
 
-            repository.save(log);
-
-            // CRITICAL 이벤트는 즉시 콘솔 로그도 남김 (Slack 연동 가능)
-            if (event.eventType().getSeverity() == SecurityAuditEventType.Severity.CRITICAL) {
-                SecurityAuditService.log.error("[SECURITY_CRITICAL] {} — user={}, ip={}, target={}/{}, msg={}",
-                    event.eventType().name(),
-                    actor.userId(), ctx.ip(),
-                    event.targetResource(), event.targetId(),
-                    event.errorMessage());
-                // TODO: SlackNotifier.sendUrgent(...) — 운영 알림
-            }
+            // ── 3. 비동기 저장 위임 (Writer는 ThreadLocal 안 읽음) ──
+            writer.persist(logEntry);
 
         } catch (Exception e) {
-            // 감사 로그 실패가 본 흐름을 막아서는 안 됨
-            SecurityAuditService.log.error("[SECURITY_AUDIT] 기록 실패 (event={}), 본 로직은 계속 진행",
+            // 캡처/위임 단계 실패가 본 흐름을 막아서는 안 됨 (Fail-Safe)
+            log.error("[SECURITY_AUDIT] 기록 준비 실패 (event={}), 본 로직은 계속 진행",
                 event.eventType(), e);
         }
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    //  컨텍스트 자동 캡처
+    //  컨텍스트 캡처 (동기 — 요청 스레드 ThreadLocal)
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     private HttpContext captureHttpContext() {
         var attrs = RequestContextHolder.getRequestAttributes();
         if (!(attrs instanceof ServletRequestAttributes sra)) {
-            // 스케줄러, 배치 등 비-HTTP 컨텍스트
+            // 스케줄러, 배치, 비동기 등 비-HTTP 컨텍스트
             return new HttpContext("SYSTEM", "SCHEDULER", null, null);
         }
         HttpServletRequest req = sra.getRequest();
         return new HttpContext(
-            extractIp(req),
+            ClientIpExtractor.extract(req),   // 공통 유틸 사용 (중복 제거)
             req.getHeader("User-Agent"),
             req.getRequestURI(),
-            req.getHeader("X-Trace-Id")  // 분산 추적 헤더 (선택)
+            req.getHeader("X-Trace-Id")
         );
-    }
-
-    private String extractIp(HttpServletRequest req) {
-        String xff = req.getHeader("X-Forwarded-For");
-        if (xff != null && !xff.isBlank()) {
-            return xff.split(",")[0].trim();
-        }
-        String realIp = req.getHeader("X-Real-IP");
-        if (realIp != null && !realIp.isBlank()) {
-            return realIp;
-        }
-        return req.getRemoteAddr();
     }
 
     private ActorContext captureActorContext() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
         if (auth == null || !auth.isAuthenticated() || "anonymousUser".equals(auth.getPrincipal())) {
-            return new ActorContext(null, null, null);
+            return new ActorContext(null, null);
         }
-
         if (auth.getPrincipal() instanceof AuthUser authUser) {
+            // PII 최소화: userId/role만 캡처 (email 미보유)
             return new ActorContext(
                 authUser.userId(),
-                authUser.email(),  // JWT email claim에서 추출 (감사 행위자 식별)
                 authUser.role() != null ? authUser.role().name() : null
             );
         }
-        return new ActorContext(null, null, null);
+        return new ActorContext(null, null);
     }
 
     private String safeTruncate(String s, int max) {
@@ -172,5 +130,5 @@ public class SecurityAuditService {
     //  내부 record
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     private record HttpContext(String ip, String userAgent, String requestUri, String traceId) {}
-    private record ActorContext(Long userId, String email, String role) {}
+    private record ActorContext(Long userId, String role) {}
 }

@@ -18,24 +18,6 @@ import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Method;
 
-/**
- * {@link Audited} 어노테이션 처리 AOP
- *
- * 동작
- *
- *   {@code @Audited}가 붙은 메서드를 가로챔
- *   {@code proceed()}로 실제 메서드 실행
- *   성공 → SUCCESS 기록
- *   예외 → FAILURE + 에러 정보 기록 후 예외 재던짐
- *
- *
- * 왜 @Around인가?
- * @AfterReturning만 쓰면 실패 케이스를 못 잡음.
- * @Around는 정상/예외 양쪽 흐름을 모두 캡처 가능.
- *
- * 예외 재던짐 보장
- * 감사 로깅이 실패한다고 본 예외를 삼키면 안 됨 → finally에서 throw.
- */
 @Slf4j
 @Aspect
 @Component
