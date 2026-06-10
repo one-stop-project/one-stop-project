@@ -31,16 +31,19 @@ public interface CouponRepository extends JpaRepository<Coupon, Long> {
     );
 
     // 쿠폰 발급 완료 수량 증가
-    // 선착순 발급 성공 후 DB 기준 실제 발급 완료 수량을 원자적으로 증가시킨다
+    // validateIssuable() 이후 쿠폰 상태가 변경될 수 있으므로
+    // UPDATE 시점에 ACTIVE 상태와 잔여 수량을 함께 검증한다
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
         update Coupon c
         set c.issuedQuantity = c.issuedQuantity + 1
         where c.id = :couponId
+          and c.status = :status
           and c.issuedQuantity < c.totalQuantity
     """)
     int increaseIssuedQuantity(
-        @Param("couponId") Long couponId
+        @Param("couponId") Long couponId,
+        @Param("status") CouponStatus status
     );
 
     // 관리자 전체 목록 조회 (최신순)
