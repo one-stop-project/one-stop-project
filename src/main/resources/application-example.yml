@@ -56,7 +56,7 @@ spring:
         # /v1/chat/completions 대신 /chat/completions로 덮어씀
         completions-path: /chat/completions
         options:
-          model: gemini-2.5-flash-lite
+          model: gemini-3.1-flash-lite
 
   # ── 파일 업로드(이미지) 한도 ──
   servlet:
@@ -104,10 +104,9 @@ app:
   cors:
     # 허용할 프론트엔드 Origin을 입력하세요 (로컬: http://localhost:8080, 배포: 실제 도메인)
     allowed-origins: "http://localhost:8080"
-  # ── 이미지 로컬 저장 (AWS 도입 전 1단계, 추후 S3로 대체) ──
   image:
-    local-dir: ${IMAGE_LOCAL_DIR:./uploads/images}
-    url-prefix: /images
+    bucket: ${S3_BUCKET_NAME}
+    region: ${AWS_REGION:ap-northeast-2}
   security:
     csp:
       # 로컬 개발 환경에서는 Swagger UI 렌더링을 위해 아래 정책을 그대로 사용하세요.
