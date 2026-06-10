@@ -60,6 +60,7 @@ public class DummyProductOrchestrator {
 
         int created = 0;
         int updated = 0;
+        int skipped = 0;
         int failed = 0;
         int categoriesDone = 0;
 
@@ -83,10 +84,11 @@ public class DummyProductOrchestrator {
                     try {
                         GroupedProduct toWrite = (thumbnail != null) ? withThumbnail(group, thumbnail) : group;
                         DummyWriteResult result = writer.write(seller, toWrite);
-                        if (result == DummyWriteResult.CREATED) {
-                            created++;
-                        } else {
-                            updated++;
+                        switch (result) {
+                            case CREATED -> created++;
+                            case UPDATED -> updated++;
+                            case SKIPPED -> skipped++;
+                            default -> log.warn("[더미시드] 미처리 결과 상태: {}", result);
                         }
                     } catch (Exception e) {
                         failed++;
@@ -105,8 +107,8 @@ public class DummyProductOrchestrator {
             }
         }
 
-        log.info("[더미시드] 완료 — 카테고리 {}/{}, 생성 {}, 갱신 {}, 실패 {}",
-                categoriesDone, leaves.size(), created, updated, failed);
+        log.info("[더미시드] 완료 — 카테고리 {}/{}, 생성 {}, 갱신 {}, 건너뜀 {}, 실패 {}",
+                categoriesDone, leaves.size(), created, updated, skipped, failed);
     }
 
     // 잎(소) 카테고리 = 다른 카테고리의 부모가 아닌 노드

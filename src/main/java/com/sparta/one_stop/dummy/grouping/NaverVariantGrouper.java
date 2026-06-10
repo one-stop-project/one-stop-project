@@ -1,13 +1,10 @@
 package com.sparta.one_stop.dummy.grouping;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.sparta.one_stop.dummy.description.DummyPromptProperties;
+import com.sparta.one_stop.dummy.grouping.VariantGroupingLlmClient.LlmGroup;
+import com.sparta.one_stop.dummy.grouping.VariantGroupingLlmClient.LlmVariant;
 import com.sparta.one_stop.dummy.naver.dto.NaverShopItem;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 import java.nio.charset.StandardCharsets;
@@ -46,16 +43,10 @@ public class NaverVariantGrouper {
             "black", "white", "red", "blue", "green", "pink", "gray", "grey", "silver", "gold", "navy",
             "beige", "brown", "purple", "yellow", "mint", "khaki", "ivory", "coral", "wine", "orange");
 
-    private final ChatClient chatClient;
-    private final DummyPromptProperties prompts;
-    private final ObjectMapper objectMapper;
+    private final VariantGroupingLlmClient llmClient;
 
-    public NaverVariantGrouper(@Qualifier("dummyChatClient") ChatClient chatClient,
-                               DummyPromptProperties prompts,
-                               ObjectMapper objectMapper) {
-        this.chatClient = chatClient;
-        this.prompts = prompts;
-        this.objectMapper = objectMapper;
+    public NaverVariantGrouper(VariantGroupingLlmClient llmClient) {
+        this.llmClient = llmClient;
     }
 
     public List<GroupedProduct> group(List<NaverShopItem> items, List<Long> categoryIds, String categoryName) {
@@ -73,7 +64,7 @@ public class NaverVariantGrouper {
         // 2. cluster 안의 옵션/이름/설명을 LLM 배치 1콜로 채움 (실패 시 빈 맵 → 전체 fallback)
         Map<String, LlmGroup> llm;
         try {
-            llm = callLlm(clusters);
+            llm = llmClient.request(buildInput(clusters));
         } catch (Exception e) {
             log.warn("변형 그룹핑 LLM 실패 → 단일 상품 fallback (clusters={})", clusters.size(), e);
             llm = Map.of();
@@ -100,32 +91,7 @@ public class NaverVariantGrouper {
         return new ArrayList<>(byBase.values());
     }
 
-    // ── 2) LLM 배치 호출 ──
-    private Map<String, LlmGroup> callLlm(List<Cluster> clusters) throws Exception {
-        if (prompts.variantGrouping() == null) {
-            throw new IllegalStateException("dummy.prompts.variant-grouping 설정이 누락되었습니다.");
-        }
-        String payload = objectMapper.writeValueAsString(buildInput(clusters));
-        String content = chatClient.prompt()
-                .system(prompts.variantGrouping())
-                .user(payload)
-                .call()
-                .content();
-        if (content == null || content.isBlank()) {
-            return Map.of();
-        }
-        LlmResponse resp = objectMapper.readValue(extractJson(content), LlmResponse.class);
-        Map<String, LlmGroup> byCluster = new HashMap<>();
-        if (resp != null && resp.groups() != null) {
-            for (LlmGroup g : resp.groups()) {
-                if (g.clusterId() != null) {
-                    byCluster.put(g.clusterId(), g);
-                }
-            }
-        }
-        return byCluster;
-    }
-
+    // ── 2) LLM 입력 빌드 (호출·파싱은 VariantGroupingLlmClient) ──
     private Map<String, Object> buildInput(List<Cluster> clusters) {
         List<Map<String, Object>> out = new ArrayList<>();
         for (Cluster c : clusters) {
@@ -312,29 +278,10 @@ public class NaverVariantGrouper {
         return s == null ? "" : s;
     }
 
-    private String extractJson(String content) {
-        int start = content.indexOf('{');
-        int end = content.lastIndexOf('}');
-        return (start >= 0 && end > start) ? content.substring(start, end + 1) : content;
-    }
-
     // ── 내부 타입 ──
     private record Cluster(String clusterId, String baseKey, List<Member> members) {
     }
 
     private record Member(String listingId, NaverShopItem item) {
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    record LlmResponse(List<LlmGroup> groups) {
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    record LlmGroup(String clusterId, String name, String description,
-                    List<String> optionAxes, List<LlmVariant> variants) {
-    }
-
-    @JsonIgnoreProperties(ignoreUnknown = true)
-    record LlmVariant(String listingId, List<String> optionValues) {
     }
 }
