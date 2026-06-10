@@ -71,20 +71,23 @@ function loginOnce(email, password) {
 
 // ── setup: 테스트 시작 전 VU별 토큰 1회 발급 ─────────────────
 // LOGIN_PER_IP rate limit(1분 20회) 우회 — 매 iteration 로그인 대신 토큰 재사용
+// sleep 3.5s: 20req/min 기준 최소 3s 간격 + 여유 0.5s (55회 × 3.5s ≈ 3.2분)
 export function setup() {
   const buyerTokens = [];
   const adminTokens = [];
 
-  // BUYER 50개 토큰 발급 (rate limit 방어: 요청 간 200ms 간격)
   for (let i = 1; i <= 50; i++) {
-    buyerTokens.push(loginOnce(`testbuyer${i}@test.com`, USER_PW));
-    sleep(0.2);
+    const token = loginOnce(`testbuyer${i}@test.com`, USER_PW);
+    if (!token) throw new Error(`testbuyer${i} 토큰 발급 실패 — setup 중단`);
+    buyerTokens.push(token);
+    sleep(3.5);
   }
 
-  // ADMIN 5개 토큰 발급
   for (let i = 1; i <= 5; i++) {
-    adminTokens.push(loginOnce(`testadmin${i}@test.com`, USER_PW));
-    sleep(0.2);
+    const token = loginOnce(`testadmin${i}@test.com`, USER_PW);
+    if (!token) throw new Error(`testadmin${i} 토큰 발급 실패 — setup 중단`);
+    adminTokens.push(token);
+    sleep(3.5);
   }
 
   return { buyerTokens, adminTokens };
