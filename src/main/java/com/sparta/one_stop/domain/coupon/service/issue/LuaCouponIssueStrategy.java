@@ -7,6 +7,7 @@ import com.sparta.one_stop.domain.coupon.repository.CouponRepository;
 import com.sparta.one_stop.domain.coupon.repository.UserCouponRepository;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.UserRepository;
+import com.sparta.one_stop.global.enums.coupon.CouponStatus;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -124,10 +125,13 @@ public class LuaCouponIssueStrategy implements CouponIssueStrategy {
 
             UserCoupon savedUserCoupon = userCouponRepository.saveAndFlush(userCoupon);
 
-            int updatedCount = couponRepository.increaseIssuedQuantity(couponId);
+            int updatedCount = couponRepository.increaseIssuedQuantity(
+                couponId,
+                CouponStatus.ACTIVE
+            );
 
             if (updatedCount == 0) {
-                throw new CustomException(ErrorCode.COUPON_001);
+                handleIncreaseIssuedQuantityFailure(couponId);
             }
 
             return IssueCouponResponse.of(savedUserCoupon);
@@ -378,6 +382,23 @@ public class LuaCouponIssueStrategy implements CouponIssueStrategy {
                 }
             }
         );
+    }
+
+    /**
+     * 발급 수량 증가 실패 원인 분기
+     * - UPDATE 조건에 ACTIVE 상태와 잔여 수량 조건이 포함되어 있으므로 updatedCount가 0이면
+     *   쿠폰 비활성화 또는 수량 소진 가능성이 있다.
+     * - 쿠폰을 재조회하여 비활성 상태와 수량 소진을 구분한다.
+     */
+    private void handleIncreaseIssuedQuantityFailure(Long couponId) {
+        Coupon coupon = couponRepository.findById(couponId)
+            .orElseThrow(() -> new CustomException(ErrorCode.COUPON_004));
+
+        if (coupon.getStatus() != CouponStatus.ACTIVE) {
+            throw new CustomException(ErrorCode.COUPON_010);
+        }
+
+        throw new CustomException(ErrorCode.COUPON_001);
     }
 
 }

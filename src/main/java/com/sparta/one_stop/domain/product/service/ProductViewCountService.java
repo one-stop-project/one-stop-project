@@ -7,9 +7,10 @@ import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.List;
 import java.util.Set;
+
+import static com.sparta.one_stop.domain.product.support.PopularityWindow.KST;
 
 // 상품 조회수 Redis 집계 — Lua 스크립트 호출 + 키 관리
 @Slf4j
@@ -21,7 +22,6 @@ public class ProductViewCountService {
     private static final String COUNTER_KEY_PREFIX = "viewcount:product:";
     private static final String DEDUP_KEY_PREFIX = "viewcount:dedup:";
     private static final String DIRTY_KEY = "viewcount:dirty";
-    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     // 중복 조회가 아닌 최초 1회만 조회수 +1, 동기화 대상 표시, 인기상품 점수 +1
     // 중복(이미 본 사용자)이면 0 반환
