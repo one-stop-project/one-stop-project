@@ -2,6 +2,7 @@ package com.sparta.one_stop.global.audit;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
@@ -51,7 +52,7 @@ public class SuspiciousActivityDetector {
             LocalDateTime since = LocalDateTime.now().minusMinutes(5);
 
             // 1) CRITICAL 이벤트 — 즉시 알림 대상
-            List<SecurityAuditLog> criticals = repository.findCriticalSince(since);
+            List<SecurityAuditLog> criticals = repository.findCriticalSince(since, PageRequest.of(0, 100)).getContent();
             if (!criticals.isEmpty()) {
                 log.warn("[DETECTOR] CRITICAL 이벤트 {}건 감지", criticals.size());
                 for (SecurityAuditLog c : criticals) {

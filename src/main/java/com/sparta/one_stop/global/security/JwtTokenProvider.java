@@ -64,18 +64,24 @@ public class JwtTokenProvider {
      * Payload: userId + role (email 등 PII 제거)
      * JTI(고유 ID)포함
      */
-    public String createAccessToken(Long userId, UserRole role) {
+    public String createAccessToken(Long userId, String email, UserRole role) {
         Date now = new Date();
         Date expire = new Date(now.getTime() + accessTokenExpiry.toMillis());
 
         return Jwts.builder()
             .id(UUID.randomUUID().toString())            // JTI
             .subject(String.valueOf(userId))             // userId
+            .claim("email", email)                       // email (감사 로그 행위자 식별용)
             .claim("role", role.name())            // role
             .issuedAt(now)
             .expiration(expire)
             .signWith(secretKey, Jwts.SIG.HS256)         //  알고리즘 명시
             .compact();
+    }
+
+    /** 토큰에서 email 추출 */
+    public String getEmail(Claims claims) {
+        return claims.get("email", String.class);
     }
 
     /**
@@ -101,12 +107,12 @@ public class JwtTokenProvider {
      * Filter에서 catch 후 AUTH 008 / AUTH 009 분리
      */
     public Claims parseClaims(String token) {
-            return Jwts.parser()
-                .verifyWith(secretKey)
-                .build()
-                .parseSignedClaims(token)
-                .getPayload();
-        }
+        return Jwts.parser()
+            .verifyWith(secretKey)
+            .build()
+            .parseSignedClaims(token)
+            .getPayload();
+    }
 
     /**
      * 토큰에서 userId 추출

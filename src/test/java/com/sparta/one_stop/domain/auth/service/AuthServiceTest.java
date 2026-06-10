@@ -160,7 +160,7 @@ class AuthServiceTest {
             // given
             LoginRequest request = new LoginRequest(EMAIL, PASSWORD);
             given(authQueryService.authenticate(request, DUMMY_HASH)).willReturn(testUser);
-            given(jwtTokenProvider.createAccessToken(USER_ID, UserRole.BUYER)).willReturn(ACCESS_TOKEN);
+            given(jwtTokenProvider.createAccessToken(USER_ID, EMAIL, UserRole.BUYER)).willReturn(ACCESS_TOKEN);
             given(jwtTokenProvider.createRefreshToken(USER_ID, DEVICE_ID)).willReturn(REFRESH_TOKEN);
             given(deviceLimitService.registerDevice(USER_ID, DEVICE_ID)).willReturn(normalRegistration());
             given(jwtTokenProvider.getRefreshTokenExpirySeconds()).willReturn(604_800L); // 7d
@@ -175,7 +175,7 @@ class AuthServiceTest {
             verify(rateLimitService).tryConsume(RateLimitPolicy.LOGIN_PER_ACCOUNT, EMAIL);
 
             // 토큰 발급 + 저장
-            verify(jwtTokenProvider).createAccessToken(USER_ID, UserRole.BUYER);
+            verify(jwtTokenProvider).createAccessToken(USER_ID, EMAIL, UserRole.BUYER);
             verify(jwtTokenProvider).createRefreshToken(USER_ID, DEVICE_ID);
             verify(deviceLimitService).registerDevice(USER_ID, DEVICE_ID);
             verify(redisTokenService).saveRefreshToken(USER_ID, DEVICE_ID, REFRESH_TOKEN, 604_800L);
@@ -203,7 +203,7 @@ class AuthServiceTest {
 
             // 핵심: BCrypt 검증이나 토큰 발급이 호출되지 않아야 함
             verify(authQueryService, never()).authenticate(any(), anyString());
-            verify(jwtTokenProvider, never()).createAccessToken(anyLong(), any());
+            verify(jwtTokenProvider, never()).createAccessToken(anyLong(), anyString(), any());
         }
 
         @Test
@@ -212,7 +212,7 @@ class AuthServiceTest {
             // given
             LoginRequest request = new LoginRequest(EMAIL, PASSWORD);
             given(authQueryService.authenticate(request, DUMMY_HASH)).willReturn(testUser);
-            given(jwtTokenProvider.createAccessToken(USER_ID, UserRole.BUYER)).willReturn(ACCESS_TOKEN);
+            given(jwtTokenProvider.createAccessToken(USER_ID, EMAIL, UserRole.BUYER)).willReturn(ACCESS_TOKEN);
             given(jwtTokenProvider.createRefreshToken(USER_ID, DEVICE_ID)).willReturn(REFRESH_TOKEN);
             // 5대 한도 초과 → 가장 오래된 기기 "old-device" 추방
             given(deviceLimitService.registerDevice(USER_ID, DEVICE_ID))
@@ -251,7 +251,7 @@ class AuthServiceTest {
             given(jwtTokenProvider.getUserId(claims)).willReturn(USER_ID);
             given(deviceLimitService.isNewDevice(USER_ID, DEVICE_ID)).willReturn(false);
             given(authQueryService.findActiveUser(USER_ID)).willReturn(testUser);
-            given(jwtTokenProvider.createAccessToken(USER_ID, UserRole.BUYER)).willReturn(ACCESS_TOKEN);
+            given(jwtTokenProvider.createAccessToken(USER_ID, EMAIL, UserRole.BUYER)).willReturn(ACCESS_TOKEN);
             given(jwtTokenProvider.createRefreshToken(USER_ID, DEVICE_ID)).willReturn(NEW_REFRESH_TOKEN);
             given(jwtTokenProvider.getRefreshTokenExpirySeconds()).willReturn(604_800L);
             given(jwtTokenProvider.getAccessTokenExpirySeconds()).willReturn(900L);
@@ -330,7 +330,7 @@ class AuthServiceTest {
             given(jwtTokenProvider.getUserId(claims)).willReturn(USER_ID);
             given(deviceLimitService.isNewDevice(USER_ID, DEVICE_ID)).willReturn(false);
             given(authQueryService.findActiveUser(USER_ID)).willReturn(testUser);
-            given(jwtTokenProvider.createAccessToken(USER_ID, UserRole.BUYER)).willReturn(ACCESS_TOKEN);
+            given(jwtTokenProvider.createAccessToken(USER_ID, EMAIL, UserRole.BUYER)).willReturn(ACCESS_TOKEN);
             given(jwtTokenProvider.createRefreshToken(USER_ID, DEVICE_ID)).willReturn(NEW_REFRESH_TOKEN);
             given(jwtTokenProvider.getRefreshTokenExpirySeconds()).willReturn(604_800L);
             // CAS 실패 (저장된 RT와 불일치 — 동시성 충돌 or 탈취)

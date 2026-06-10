@@ -26,7 +26,7 @@ public interface SecurityAuditLogRepository extends JpaRepository<SecurityAuditL
 
     /** 이벤트 유형으로 필터 */
     Page<SecurityAuditLog> findByEventTypeOrderByOccurredAtDesc(
-            SecurityAuditEventType eventType, Pageable pageable);
+        SecurityAuditEventType eventType, Pageable pageable);
 
     /** 위협도 이상 이벤트만 — CRITICAL/HIGH 알림용 */
     @Query("""
@@ -36,9 +36,9 @@ public interface SecurityAuditLogRepository extends JpaRepository<SecurityAuditL
              ORDER BY sal.occurredAt DESC
             """)
     Page<SecurityAuditLog> findHighRiskEvents(
-            @Param("severities") List<SecurityAuditEventType.Severity> severities,
-            @Param("from") LocalDateTime from,
-            Pageable pageable);
+        @Param("severities") List<SecurityAuditEventType.Severity> severities,
+        @Param("from") LocalDateTime from,
+        Pageable pageable);
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     //  의심 행위 탐지용 쿼리
@@ -78,6 +78,52 @@ public interface SecurityAuditLogRepository extends JpaRepository<SecurityAuditL
     long countRecentAuthzViolationsByUser(@Param("userId") Long userId, @Param("since") LocalDateTime since);
 
     /**
+     * 특정 사용자의 짧은 시간 내 새 기기 로그인 횟수 — 다중 기기 폭주 탐지용
+     *
+     * <p>메모리 필터링 대신 DB에서 직접 집계하여 트래픽 많아도 누락 없음.
+     * metadata에 "newDevice":true가 포함된 LOGIN_SUCCESS만 카운트.
+     */
+    @Query("""
+            SELECT COUNT(sal) FROM SecurityAuditLog sal
+             WHERE sal.actorUserId = :userId
+               AND sal.eventType = com.sparta.one_stop.global.audit.SecurityAuditEventType.LOGIN_SUCCESS
+               AND sal.occurredAt >= :since
+               AND sal.metadata LIKE %:marker%
+            """)
+    long countRecentNewDeviceLoginsByUser(
+        @Param("userId") Long userId,
+        @Param("since") LocalDateTime since,
+        @Param("marker") String marker);
+
+    /**
+     * 특정 IP에서 짧은 시간 내 새 기기 로그인한 '서로 다른 계정 수' — 분산 봇 탐지용
+     *
+     * <p>COUNT(DISTINCT actorUserId)로 DB에서 직접 집계.
+     */
+    @Query("""
+            SELECT COUNT(DISTINCT sal.actorUserId) FROM SecurityAuditLog sal
+             WHERE sal.clientIp = :ip
+               AND sal.eventType = com.sparta.one_stop.global.audit.SecurityAuditEventType.LOGIN_SUCCESS
+               AND sal.occurredAt >= :since
+               AND sal.actorUserId IS NOT NULL
+               AND sal.metadata LIKE %:marker%
+            """)
+    long countDistinctNewDeviceAccountsByIp(
+        @Param("ip") String ip,
+        @Param("since") LocalDateTime since,
+        @Param("marker") String marker);
+
+    /**
+     * 짧은 시간 내 LRU 추방(DEVICE_LIMIT_EXCEEDED) 발생 횟수 — 시스템 전반 이상 탐지용
+     */
+    @Query("""
+            SELECT COUNT(sal) FROM SecurityAuditLog sal
+             WHERE sal.eventType = com.sparta.one_stop.global.audit.SecurityAuditEventType.DEVICE_LIMIT_EXCEEDED
+               AND sal.occurredAt >= :since
+            """)
+    long countRecentEvictions(@Param("since") LocalDateTime since);
+
+    /**
      * CRITICAL 이벤트 — 알림 대기열 확인
      */
     @Query("""
@@ -86,7 +132,7 @@ public interface SecurityAuditLogRepository extends JpaRepository<SecurityAuditL
                AND sal.occurredAt >= :since
              ORDER BY sal.occurredAt DESC
             """)
-    List<SecurityAuditLog> findCriticalSince(@Param("since") LocalDateTime since);
+    Page<SecurityAuditLog> findCriticalSince(@Param("since") LocalDateTime since, Pageable pageable);
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     //  통계 — 대시보드용
@@ -100,6 +146,6 @@ public interface SecurityAuditLogRepository extends JpaRepository<SecurityAuditL
              GROUP BY sal.category
             """)
     List<Object[]> countByCategoryBetween(
-            @Param("from") LocalDateTime from,
-            @Param("to") LocalDateTime to);
+        @Param("from") LocalDateTime from,
+        @Param("to") LocalDateTime to);
 }

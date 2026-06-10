@@ -2,7 +2,6 @@ package com.sparta.one_stop.global.audit;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -10,6 +9,13 @@ import java.time.LocalDateTime;
 
 /**
  * deviceId 영역 의심 행위 탐지기
+ *
+ * <p><b>탐지 방식</b>: 상위 N건 조회 후 메모리 필터링이 아니라,
+ * DB에서 직접 COUNT 집계한다. 트래픽이 많아도 컷오프 밖으로 밀려
+ * 거짓 음성(false negative)이 생기지 않는다.
+ *
+ * <p>새 기기 판정은 metadata에 {@code "newDevice":true} 마커 포함 여부로,
+ * Repository의 LIKE 조건으로 DB에서 직접 필터링한다.
  */
 @Slf4j
 @Component
@@ -19,6 +25,11 @@ public class DeviceAbuseDetector {
     // 임계값 — 운영하며 조정
     private static final int NEW_DEVICE_THRESHOLD_PER_ACCOUNT = 5;   // 5분 5회
     private static final int NEW_DEVICE_THRESHOLD_PER_IP = 10;       // 10분 10계정
+    private static final int EVICTION_ALERT_THRESHOLD = 50;          // 30분 50회
+
+    /** metadata 내 새 기기 마커 — DeviceAbuse 기록 시 동일 포맷 사용 */
+    private static final String NEW_DEVICE_MARKER = "\"newDevice\":true";
+
     private final SecurityAuditLogRepository auditRepository;
     private final SecurityAuditService auditService;
 
@@ -35,14 +46,8 @@ public class DeviceAbuseDetector {
         if (userId == null) return false;
 
         LocalDateTime since = LocalDateTime.now().minusMinutes(5);
-
-        long count = auditRepository.findByActorUserIdOrderByOccurredAtDesc(
-                userId, PageRequest.of(0, 50))
-            .stream()
-            .filter(log -> log.getOccurredAt().isAfter(since))
-            .filter(log -> log.getEventType() == SecurityAuditEventType.LOGIN_SUCCESS)
-            .filter(log -> log.getMetadata() != null && log.getMetadata().contains("\"newDevice\":true"))
-            .count();
+        // DB 직접 집계 (메모리 필터링 X → 누락 없음)
+        long count = auditRepository.countRecentNewDeviceLoginsByUser(userId, since, NEW_DEVICE_MARKER);
 
         if (count >= NEW_DEVICE_THRESHOLD_PER_ACCOUNT) {
             log.warn("[DEVICE_ABUSE] 다중 기기 폭주 감지! userId={}, count={}/5분", userId, count);
@@ -69,17 +74,9 @@ public class DeviceAbuseDetector {
         if (clientIp == null || clientIp.isBlank()) return false;
 
         LocalDateTime since = LocalDateTime.now().minusMinutes(10);
-
-        long distinctAccounts = auditRepository.findByEventTypeOrderByOccurredAtDesc(
-                SecurityAuditEventType.LOGIN_SUCCESS, PageRequest.of(0, 200))
-            .stream()
-            .filter(log -> log.getOccurredAt().isAfter(since))
-            .filter(log -> clientIp.equals(log.getClientIp()))
-            .filter(log -> log.getMetadata() != null && log.getMetadata().contains("\"newDevice\":true"))
-            .map(log -> log.getActorUserId())
-            .filter(java.util.Objects::nonNull)
-            .distinct()
-            .count();
+        // COUNT(DISTINCT actorUserId)를 DB에서 직접 집계
+        long distinctAccounts =
+            auditRepository.countDistinctNewDeviceAccountsByIp(clientIp, since, NEW_DEVICE_MARKER);
 
         if (distinctAccounts >= NEW_DEVICE_THRESHOLD_PER_IP) {
             log.warn("[DEVICE_ABUSE] 분산 봇 공격 의심! ip={}, distinct accounts={}/10분",
@@ -113,14 +110,9 @@ public class DeviceAbuseDetector {
     public void runPeriodicAnalysis() {
         try {
             LocalDateTime since = LocalDateTime.now().minusMinutes(30);
+            long evictionCount = auditRepository.countRecentEvictions(since);
 
-            long evictionCount = auditRepository.findByEventTypeOrderByOccurredAtDesc(
-                    SecurityAuditEventType.DEVICE_LIMIT_EXCEEDED, PageRequest.of(0, 200))
-                .stream()
-                .filter(log -> log.getOccurredAt().isAfter(since))
-                .count();
-
-            if (evictionCount > 50) {
+            if (evictionCount > EVICTION_ALERT_THRESHOLD) {
                 log.warn("[DEVICE_ABUSE_PERIODIC] 비정상 추방 빈도! count={}/30분", evictionCount);
                 // 시스템 전반 LRU 추방 폭주 → 공격 또는 버그 가능성
             }

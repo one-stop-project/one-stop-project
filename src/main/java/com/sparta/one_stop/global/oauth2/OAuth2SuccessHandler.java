@@ -33,7 +33,7 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
         var user = principal.getUser();
 
         String deviceId = UUID.randomUUID().toString();
-        String accessToken = jwtTokenProvider.createAccessToken(user.getId(), user.getRole());
+        String accessToken = jwtTokenProvider.createAccessToken(user.getId(), user.getEmail(), user.getRole());
         String refreshToken = jwtTokenProvider.createRefreshToken(user.getId(), deviceId);
 
         // 🔴 소셜 로그인 유저도 완벽하게 기기 제한 인프라 편입 (보안 구멍 해소)

@@ -29,12 +29,18 @@ public final class ClientIpExtractor {
             String ip = request.getHeader(header);
             if (isValid(ip)) {
                 // X-Forwarded-For는 "client, proxy1, proxy2" 형태 → 첫 번째가 실제 클라이언트
-                return ip.contains(",") ? ip.split(",")[0].trim() : ip.trim();
+                String candidate = ip.contains(",")
+                    ? ip.substring(0, ip.indexOf(',')).trim()
+                    : ip.trim();
+                // 첫 토큰이 "unknown" 같은 무효값일 수 있으므로 재검증 후 채택
+                if (isValid(candidate)) {
+                    return candidate;
+                }
             }
         }
 
         String remoteAddr = request.getRemoteAddr();
-        return (remoteAddr != null && !remoteAddr.isBlank()) ? remoteAddr : "unknown";
+        return isValid(remoteAddr) ? remoteAddr.trim() : "unknown";
     }
 
     private static boolean isValid(String ip) {

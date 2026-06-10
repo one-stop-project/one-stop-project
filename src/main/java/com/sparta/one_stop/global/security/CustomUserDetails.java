@@ -23,7 +23,7 @@ public class CustomUserDetails implements UserDetails {
     private final AuthUser authUser;
 
     public CustomUserDetails(User user) {
-        this.authUser = new AuthUser(user.getId(), user.getRole());
+        this.authUser = new AuthUser(user.getId(), user.getEmail(), user.getRole());
         this.userId = user.getId();
         this.email = user.getEmail();
         this.password = user.getPassword();

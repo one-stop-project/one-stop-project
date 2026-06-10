@@ -1,11 +1,14 @@
 package com.sparta.one_stop.global.audit;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -20,6 +23,7 @@ import java.util.stream.Collectors;
 @RestController
 @RequestMapping("/api/admin/security-audit")
 @RequiredArgsConstructor
+@Validated
 @PreAuthorize("hasAnyRole('ADMIN', 'SUPER_ADMIN')")
 public class SecurityAuditController {
 
@@ -30,9 +34,9 @@ public class SecurityAuditController {
      */
     @GetMapping("/users/{userId}")
     public ResponseEntity<Page<SecurityAuditLog>> findByUser(
-            @PathVariable Long userId,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "30") int size) {
+        @PathVariable Long userId,
+        @RequestParam(defaultValue = "0") @Min(0) int page,
+        @RequestParam(defaultValue = "30") @Min(1) @Max(100) int size) {
 
         var pageable = PageRequest.of(page, size, Sort.by("occurredAt").descending());
         return ResponseEntity.ok(repository.findByActorUserIdOrderByOccurredAtDesc(userId, pageable));
@@ -43,9 +47,9 @@ public class SecurityAuditController {
      */
     @GetMapping("/events")
     public ResponseEntity<Page<SecurityAuditLog>> findByEventType(
-            @RequestParam SecurityAuditEventType eventType,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "30") int size) {
+        @RequestParam SecurityAuditEventType eventType,
+        @RequestParam(defaultValue = "0") @Min(0) int page,
+        @RequestParam(defaultValue = "30") @Min(1) @Max(100) int size) {
 
         var pageable = PageRequest.of(page, size, Sort.by("occurredAt").descending());
         return ResponseEntity.ok(repository.findByEventTypeOrderByOccurredAtDesc(eventType, pageable));
@@ -58,17 +62,17 @@ public class SecurityAuditController {
     @GetMapping("/high-risk")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
     public ResponseEntity<Page<SecurityAuditLog>> findHighRisk(
-            @RequestParam(defaultValue = "7") int days,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "50") int size) {
+        @RequestParam(defaultValue = "7") @Min(1) @Max(365) int days,
+        @RequestParam(defaultValue = "0") @Min(0) int page,
+        @RequestParam(defaultValue = "50") @Min(1) @Max(100) int size) {
 
         LocalDateTime from = LocalDateTime.now().minusDays(days);
         var pageable = PageRequest.of(page, size);
 
         return ResponseEntity.ok(repository.findHighRiskEvents(
-                List.of(SecurityAuditEventType.Severity.CRITICAL,
-                        SecurityAuditEventType.Severity.HIGH),
-                from, pageable));
+            List.of(SecurityAuditEventType.Severity.CRITICAL,
+                SecurityAuditEventType.Severity.HIGH),
+            from, pageable));
     }
 
     /**
@@ -76,11 +80,14 @@ public class SecurityAuditController {
      */
     @GetMapping("/critical")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
-    public ResponseEntity<List<SecurityAuditLog>> findCritical(
-            @RequestParam(defaultValue = "24") int hours) {
+    public ResponseEntity<Page<SecurityAuditLog>> findCritical(
+        @RequestParam(defaultValue = "24") @Min(1) @Max(720) int hours,
+        @RequestParam(defaultValue = "0") @Min(0) int page,
+        @RequestParam(defaultValue = "50") @Min(1) @Max(100) int size) {
 
         LocalDateTime since = LocalDateTime.now().minusHours(hours);
-        return ResponseEntity.ok(repository.findCriticalSince(since));
+        var pageable = PageRequest.of(page, size);
+        return ResponseEntity.ok(repository.findCriticalSince(since, pageable));
     }
 
     /**
@@ -88,15 +95,15 @@ public class SecurityAuditController {
      */
     @GetMapping("/stats/by-category")
     public ResponseEntity<Map<String, Long>> statsByCategory(
-            @RequestParam(defaultValue = "7") int days) {
+        @RequestParam(defaultValue = "7") @Min(1) @Max(365) int days) {
 
         LocalDateTime from = LocalDateTime.now().minusDays(days);
         LocalDateTime to = LocalDateTime.now();
 
         Map<String, Long> stats = repository.countByCategoryBetween(from, to).stream()
-                .collect(Collectors.toMap(
-                        row -> row[0].toString(),
-                        row -> (Long) row[1]));
+            .collect(Collectors.toMap(
+                row -> row[0].toString(),
+                row -> (Long) row[1]));
 
         return ResponseEntity.ok(stats);
     }
