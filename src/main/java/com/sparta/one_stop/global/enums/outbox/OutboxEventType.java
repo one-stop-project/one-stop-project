@@ -7,8 +7,8 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum OutboxEventType {
 
-    PAYMENT_APPROVED("결제 승인 완료 이벤트");
+    PAYMENT_APPROVED("결제 승인 완료 이벤트"),
+    DELIVERY_COMPLETED("배송 완료 이벤트");
 
     private final String description;
-
 }
