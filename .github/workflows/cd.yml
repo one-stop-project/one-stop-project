@@ -60,7 +60,7 @@ jobs:
           source: "app.jar"
           target: "/app/"
 
-      - name: EC2 1 앱 재시작
+      - name: EC2 1 앱 재시작 및 헬스체크
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.EC2_MAIN_HOST }}
@@ -68,11 +68,20 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             sudo systemctl restart one-stop-main
-            sleep 5
-            sudo systemctl status one-stop-main --no-pager
+            echo "헬스체크 대기 중..."
+            for i in $(seq 1 24); do
+              if curl --max-time 5 -sf http://localhost:8080/actuator/health | grep -q '"status":"UP"'; then
+                echo "EC2 1 정상 기동 완료"
+                exit 0
+              fi
+              echo "대기 중... ($i/24)"
+              sleep 5
+            done
+            echo "EC2 1 헬스체크 실패"
+            exit 1
 
   deploy-dummy:
-    needs: build
+    needs: deploy-main
     runs-on: ubuntu-latest
     steps:
       - name: JAR 다운로드
@@ -90,7 +99,7 @@ jobs:
           source: "app.jar"
           target: "/app/"
 
-      - name: EC2 2 앱 재시작
+      - name: EC2 2 앱 재시작 및 헬스체크
         uses: appleboy/ssh-action@v1
         with:
           host: ${{ secrets.EC2_DUMMY_HOST }}
@@ -98,5 +107,14 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             sudo systemctl restart one-stop-dummy
-            sleep 5
-            sudo systemctl status one-stop-dummy --no-pager
+            echo "헬스체크 대기 중..."
+            for i in $(seq 1 24); do
+              if curl --max-time 5 -sf http://localhost:8080/actuator/health | grep -q '"status":"UP"'; then
+                echo "EC2 2 정상 기동 완료"
+                exit 0
+              fi
+              echo "대기 중... ($i/24)"
+              sleep 5
+            done
+            echo "EC2 2 헬스체크 실패"
+            exit 1

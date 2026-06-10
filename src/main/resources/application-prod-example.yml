@@ -53,6 +53,11 @@ spring:
     multipart:
       max-file-size: 10MB
       max-request-size: 100MB
+  lifecycle:
+    timeout-per-shutdown-phase: 60s
+
+server:
+  shutdown: graceful
 
 jwt:
   secret:
