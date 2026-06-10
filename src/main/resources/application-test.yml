@@ -44,6 +44,9 @@ jwt:
 app:
   cors:
     allowed-origins: "*"
+  image:
+    bucket: test-bucket
+    region: ap-northeast-2
 
 resilience4j:
   circuitbreaker:
