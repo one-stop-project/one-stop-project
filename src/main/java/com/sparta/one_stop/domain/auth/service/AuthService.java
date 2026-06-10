@@ -139,7 +139,7 @@ public class AuthService {
         boolean isNewDevice = deviceLimitService.isNewDevice(user.getId(), deviceId);
 
         // 3. 토큰 발급 (트랜잭션 외부 — DB 부담 없음)
-        String accessToken = jwtTokenProvider.createAccessToken(user.getId(), user.getEmail(), user.getRole());
+        String accessToken = jwtTokenProvider.createAccessToken(user.getId(), user.getRole());
         String refreshToken = jwtTokenProvider.createRefreshToken(user.getId(), deviceId);
 
         // 4. 기기 등록 (Lua Script 원자 실행) — 결과 객체 활용
@@ -263,7 +263,7 @@ public class AuthService {
         User user = authQueryService.findActiveUser(userId);
 
         // 5. 새 토큰 발급
-        String newAccessToken = jwtTokenProvider.createAccessToken(user.getId(), user.getEmail(), user.getRole());
+        String newAccessToken = jwtTokenProvider.createAccessToken(user.getId(), user.getRole());
         String newRefreshToken = jwtTokenProvider.createRefreshToken(user.getId(), deviceId);
 
         // 6. Lua Script CAS — 원자적 RTR 갱신
@@ -377,3 +377,4 @@ public class AuthService {
         }
     }
 }
+

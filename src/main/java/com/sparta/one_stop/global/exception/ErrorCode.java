@@ -217,8 +217,8 @@ public enum ErrorCode {
     ADMIN_012(HttpStatus.BAD_REQUEST, "ADMIN_012", "이미 관리자 권한이 있는 계정입니다"),
     ADMIN_013(HttpStatus.FORBIDDEN, "ADMIN_013", "SUPER_ADMIN 계정의 권한은 회수할 수 없습니다"),
     ADMIN_014(HttpStatus.FORBIDDEN, "ADMIN_014", "본인 계정의 권한은 회수할 수 없습니다"),
-    ADMIN_015(HttpStatus.BAD_REQUEST, "ADMIN_015", "관리자 권한이 없는 계정입니다");
-
+    ADMIN_015(HttpStatus.BAD_REQUEST, "ADMIN_015", "관리자 권한이 없는 계정입니다"),
+    ADMIN_016(HttpStatus.BAD_REQUEST, "ADMIN_016", "비활성(정지/탈퇴) 상태의 회원은 관리자로 승격할 수 없습니다.");
     private final HttpStatus status;
     private final String code;
     private final String message;
