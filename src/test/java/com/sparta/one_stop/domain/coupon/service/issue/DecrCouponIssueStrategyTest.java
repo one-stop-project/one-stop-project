@@ -7,8 +7,10 @@ import com.sparta.one_stop.domain.coupon.repository.CouponRepository;
 import com.sparta.one_stop.domain.coupon.repository.UserCouponRepository;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.UserRepository;
+import com.sparta.one_stop.global.enums.coupon.CouponStatus;
 import com.sparta.one_stop.global.enums.coupon.UserCouponStatus;
 import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -160,8 +162,10 @@ class DecrCouponIssueStrategyTest {
             .thenReturn(false);
         when(userCouponRepository.saveAndFlush(any(UserCoupon.class)))
             .thenReturn(savedUserCoupon);
-        when(couponRepository.increaseIssuedQuantity(couponId))
-            .thenReturn(1);
+        when(couponRepository.increaseIssuedQuantity(
+            couponId,
+            CouponStatus.ACTIVE
+        )).thenReturn(1);
 
         when(setOperations.add(issuedUsersKey, String.valueOf(userId)))
             .thenReturn(1L);
@@ -186,7 +190,10 @@ class DecrCouponIssueStrategyTest {
 
         verify(valueOperations).decrement(stockKey);
         verify(userCouponRepository).saveAndFlush(any(UserCoupon.class));
-        verify(couponRepository).increaseIssuedQuantity(couponId);
+        verify(couponRepository).increaseIssuedQuantity(
+            couponId,
+            CouponStatus.ACTIVE
+        );
         verify(setOperations).add(issuedUsersKey, String.valueOf(userId));
         verify(redisTemplate).execute(
             any(DefaultRedisScript.class),
@@ -613,8 +620,8 @@ class DecrCouponIssueStrategyTest {
     }
 
     @Test
-    @DisplayName("issue 실패 - issuedQuantity 증가 실패 시 Redis 수량을 보상 증가한다")
-    void issue_fail_whenIncreaseIssuedQuantityFails() {
+    @DisplayName("issue 실패 - 발급 수량 증가 실패 시 쿠폰이 ACTIVE이면 수량 소진 예외가 발생하고 Redis 수량을 보상 증가한다")
+    void issue_fail_whenIncreaseIssuedQuantityReturnsZeroAndCouponIsActive() {
         // given
         Long userId = 1L;
         Long couponId = 10L;
@@ -627,6 +634,7 @@ class DecrCouponIssueStrategyTest {
 
         when(userRepository.findById(userId))
             .thenReturn(Optional.of(user));
+
         when(couponRepository.findById(couponId))
             .thenReturn(Optional.of(coupon));
 
@@ -649,16 +657,30 @@ class DecrCouponIssueStrategyTest {
             .thenReturn(false);
         when(userCouponRepository.saveAndFlush(any(UserCoupon.class)))
             .thenReturn(savedUserCoupon);
-        when(couponRepository.increaseIssuedQuantity(couponId))
-            .thenReturn(0);
+
+        when(couponRepository.increaseIssuedQuantity(
+            couponId,
+            CouponStatus.ACTIVE
+        )).thenReturn(0);
+
+        when(coupon.getStatus())
+            .thenReturn(CouponStatus.ACTIVE);
 
         // when & then
         assertThatThrownBy(() -> decrCouponIssueStrategy.issue(
             userId,
             couponId
-        )).isInstanceOf(CustomException.class);
+        ))
+            .isInstanceOf(CustomException.class)
+            .extracting("errorCode")
+            .isEqualTo(ErrorCode.COUPON_001);
 
+        verify(couponRepository).increaseIssuedQuantity(
+            couponId,
+            CouponStatus.ACTIVE
+        );
         verify(valueOperations).increment(stockKey);
+        verify(setOperations, never()).remove(anyString(), anyString());
     }
 
     @Test
@@ -699,8 +721,10 @@ class DecrCouponIssueStrategyTest {
             .thenReturn(false);
         when(userCouponRepository.saveAndFlush(any(UserCoupon.class)))
             .thenReturn(savedUserCoupon);
-        when(couponRepository.increaseIssuedQuantity(couponId))
-            .thenReturn(1);
+        when(couponRepository.increaseIssuedQuantity(
+            couponId,
+            CouponStatus.ACTIVE
+        )).thenReturn(1);
 
         when(setOperations.add(issuedUsersKey, userIdValue))
             .thenThrow(new RuntimeException("Redis Set add failed"));
@@ -716,6 +740,78 @@ class DecrCouponIssueStrategyTest {
             issuedUsersKey,
             userIdValue
         );
+    }
+
+    @Test
+    @DisplayName("issue 실패 - 발급 수량 증가 시점에 쿠폰이 비활성화되면 비활성 쿠폰 예외가 발생하고 Redis 수량을 보상 증가한다")
+    void issue_fail_whenCouponBecomesInactiveBeforeIncreaseIssuedQuantity() {
+        // given
+        Long userId = 1L;
+        Long couponId = 10L;
+        String stockKey = "coupon:stock:10";
+        String issuedUsersKey = "coupon:issued-users:10";
+
+        User user = mock(User.class);
+        Coupon issuableCoupon = couponForIssue();
+        Coupon inactiveCoupon = mock(Coupon.class);
+        UserCoupon savedUserCoupon = mock(UserCoupon.class);
+
+        when(userRepository.findById(userId))
+            .thenReturn(Optional.of(user));
+
+        // 첫 번째 조회: validateIssuable() 통과용
+        // 두 번째 조회: updatedCount == 0 이후 실패 원인 분기용
+        when(couponRepository.findById(couponId))
+            .thenReturn(Optional.of(issuableCoupon))
+            .thenReturn(Optional.of(inactiveCoupon));
+
+        when(redisTemplate.opsForSet())
+            .thenReturn(setOperations);
+        when(redisTemplate.opsForValue())
+            .thenReturn(valueOperations);
+
+        when(setOperations.isMember(issuedUsersKey, String.valueOf(userId)))
+            .thenReturn(false);
+        when(valueOperations.setIfAbsent(
+            eq(stockKey),
+            anyString(),
+            any(Duration.class)
+        )).thenReturn(true);
+        when(valueOperations.decrement(stockKey))
+            .thenReturn(99L);
+
+        when(userCouponRepository.existsByUserIdAndCouponId(userId, couponId))
+            .thenReturn(false);
+        when(userCouponRepository.saveAndFlush(any(UserCoupon.class)))
+            .thenReturn(savedUserCoupon);
+
+        when(couponRepository.increaseIssuedQuantity(
+            couponId,
+            CouponStatus.ACTIVE
+        )).thenReturn(0);
+
+        when(inactiveCoupon.getStatus())
+            .thenReturn(CouponStatus.INACTIVE);
+
+        // when & then
+        assertThatThrownBy(() -> decrCouponIssueStrategy.issue(
+            userId,
+            couponId
+        ))
+            .isInstanceOf(CustomException.class)
+            .extracting("errorCode")
+            .isEqualTo(ErrorCode.COUPON_010);
+
+        verify(couponRepository).increaseIssuedQuantity(
+            couponId,
+            CouponStatus.ACTIVE
+        );
+
+        // Redis DECR 성공 이후 DB 처리 실패이므로 수량 보상 필요
+        verify(valueOperations).increment(stockKey);
+
+        // issued-users Set add 전에 실패했으므로 제거 보상은 수행되지 않아야 함
+        verify(setOperations, never()).remove(anyString(), anyString());
     }
 
     @Test
@@ -756,8 +852,10 @@ class DecrCouponIssueStrategyTest {
             .thenReturn(false);
         when(userCouponRepository.saveAndFlush(any(UserCoupon.class)))
             .thenReturn(savedUserCoupon);
-        when(couponRepository.increaseIssuedQuantity(couponId))
-            .thenReturn(1);
+        when(couponRepository.increaseIssuedQuantity(
+            couponId,
+            CouponStatus.ACTIVE
+        )).thenReturn(1);
 
         when(setOperations.add(issuedUsersKey, userIdValue))
             .thenReturn(1L);

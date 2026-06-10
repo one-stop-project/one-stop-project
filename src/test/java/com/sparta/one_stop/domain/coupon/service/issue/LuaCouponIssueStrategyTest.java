@@ -7,8 +7,10 @@ import com.sparta.one_stop.domain.coupon.repository.CouponRepository;
 import com.sparta.one_stop.domain.coupon.repository.UserCouponRepository;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.UserRepository;
+import com.sparta.one_stop.global.enums.coupon.CouponStatus;
 import com.sparta.one_stop.global.enums.coupon.UserCouponStatus;
 import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -156,8 +158,10 @@ class LuaCouponIssueStrategyTest {
             .thenReturn(false);
         when(userCouponRepository.saveAndFlush(any(UserCoupon.class)))
             .thenReturn(savedUserCoupon);
-        when(couponRepository.increaseIssuedQuantity(couponId))
-            .thenReturn(1);
+        when(couponRepository.increaseIssuedQuantity(
+            couponId,
+            CouponStatus.ACTIVE
+        )).thenReturn(1);
 
         // when
         IssueCouponResponse result = luaCouponIssueStrategy.issue(
@@ -179,7 +183,10 @@ class LuaCouponIssueStrategyTest {
             anyString()
         );
         verify(userCouponRepository).saveAndFlush(any(UserCoupon.class));
-        verify(couponRepository).increaseIssuedQuantity(couponId);
+        verify(couponRepository).increaseIssuedQuantity(
+            couponId,
+            CouponStatus.ACTIVE
+        );
     }
 
     @Test
@@ -684,8 +691,13 @@ class LuaCouponIssueStrategyTest {
             .thenReturn(false);
         when(userCouponRepository.saveAndFlush(any(UserCoupon.class)))
             .thenReturn(savedUserCoupon);
-        when(couponRepository.increaseIssuedQuantity(couponId))
-            .thenReturn(0);
+        when(couponRepository.increaseIssuedQuantity(
+            couponId,
+            CouponStatus.ACTIVE
+        )).thenReturn(0);
+
+        when(coupon.getStatus())
+            .thenReturn(CouponStatus.ACTIVE);
 
         when(redisTemplate.execute(
             any(DefaultRedisScript.class),
@@ -697,7 +709,10 @@ class LuaCouponIssueStrategyTest {
         assertThatThrownBy(() -> luaCouponIssueStrategy.issue(
             userId,
             couponId
-        )).isInstanceOf(CustomException.class);
+        ))
+            .isInstanceOf(CustomException.class)
+            .extracting("errorCode")
+            .isEqualTo(ErrorCode.COUPON_001);
 
         verify(redisTemplate).execute(
             any(DefaultRedisScript.class),
@@ -764,6 +779,82 @@ class LuaCouponIssueStrategyTest {
     }
 
     @Test
+    @DisplayName("issue 실패 - 발급 수량 증가 시점에 쿠폰이 비활성화되면 비활성 쿠폰 예외가 발생하고 Redis 발급 보상 Script를 실행한다")
+    void issue_fail_whenCouponBecomesInactiveBeforeIncreaseIssuedQuantity_thenCompensateRedisIssue() {
+        // given
+        Long userId = 1L;
+        Long couponId = 10L;
+        String stockKey = "coupon:stock:10";
+        String issuedUsersKey = "coupon:issued-users:10";
+        String userIdValue = String.valueOf(userId);
+
+        User user = mock(User.class);
+        Coupon issuableCoupon = couponForIssue();
+        Coupon inactiveCoupon = mock(Coupon.class);
+        UserCoupon savedUserCoupon = mock(UserCoupon.class);
+
+        when(userRepository.findById(userId))
+            .thenReturn(Optional.of(user));
+
+        when(couponRepository.findById(couponId))
+            .thenReturn(Optional.of(issuableCoupon))
+            .thenReturn(Optional.of(inactiveCoupon));
+
+        when(redisTemplate.opsForValue())
+            .thenReturn(valueOperations);
+        when(valueOperations.setIfAbsent(
+            eq(stockKey),
+            anyString(),
+            any(Duration.class)
+        )).thenReturn(true);
+
+        // 발급 Lua Script 성공
+        when(redisTemplate.execute(
+            any(DefaultRedisScript.class),
+            eq(List.of(stockKey, issuedUsersKey)),
+            eq(userIdValue),
+            anyString()
+        )).thenReturn(99L);
+
+        when(userCouponRepository.existsByUserIdAndCouponId(userId, couponId))
+            .thenReturn(false);
+        when(userCouponRepository.saveAndFlush(any(UserCoupon.class)))
+            .thenReturn(savedUserCoupon);
+
+        when(couponRepository.increaseIssuedQuantity(
+            couponId,
+            CouponStatus.ACTIVE
+        )).thenReturn(0);
+
+        when(inactiveCoupon.getStatus())
+            .thenReturn(CouponStatus.INACTIVE);
+
+        // 보상 Lua Script 성공
+        when(redisTemplate.execute(
+            any(DefaultRedisScript.class),
+            eq(List.of(stockKey, issuedUsersKey)),
+            eq(userIdValue)
+        )).thenReturn(1L);
+
+        // when & then
+        assertThatThrownBy(() -> luaCouponIssueStrategy.issue(userId, couponId))
+            .isInstanceOf(CustomException.class)
+            .extracting("errorCode")
+            .isEqualTo(ErrorCode.COUPON_010);
+
+        verify(couponRepository).increaseIssuedQuantity(
+            couponId,
+            CouponStatus.ACTIVE
+        );
+
+        verify(redisTemplate).execute(
+            any(DefaultRedisScript.class),
+            eq(List.of(stockKey, issuedUsersKey)),
+            eq(userIdValue)
+        );
+    }
+
+    @Test
     @DisplayName("issue 보상 - 트랜잭션 롤백 콜백 실행 시 Redis 발급 보상 Script를 실행한다")
     void issue_compensate_whenTransactionRollback() {
         // given
@@ -804,8 +895,10 @@ class LuaCouponIssueStrategyTest {
             .thenReturn(false);
         when(userCouponRepository.saveAndFlush(any(UserCoupon.class)))
             .thenReturn(savedUserCoupon);
-        when(couponRepository.increaseIssuedQuantity(couponId))
-            .thenReturn(1);
+        when(couponRepository.increaseIssuedQuantity(
+            couponId,
+            CouponStatus.ACTIVE
+        )).thenReturn(1);
 
         when(redisTemplate.execute(
             any(DefaultRedisScript.class),

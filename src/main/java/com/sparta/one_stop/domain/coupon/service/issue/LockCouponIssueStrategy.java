@@ -7,6 +7,7 @@ import com.sparta.one_stop.domain.coupon.repository.CouponRepository;
 import com.sparta.one_stop.domain.coupon.repository.UserCouponRepository;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.UserRepository;
+import com.sparta.one_stop.global.enums.coupon.CouponStatus;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -47,6 +48,7 @@ public class LockCouponIssueStrategy implements CouponIssueStrategy {
      * Redis Lock 기반 선착순 쿠폰 발급
      * - 쿠폰 단위 Lock을 획득하여 동일 쿠폰 발급 요청을 순차 처리
      * - Lock 내부에서 쿠폰 발급 가능 여부, 중복 발급 여부, 수량 증가를 처리
+     * - 발급 수량 증가 시점에 쿠폰 ACTIVE 상태를 다시 검증하여 비활성 쿠폰 발급을 방지
      * - DB Unique 제약으로 중복 발급을 최종 방어
      */
     @Override
@@ -116,10 +118,13 @@ public class LockCouponIssueStrategy implements CouponIssueStrategy {
 
             UserCoupon savedUserCoupon = userCouponRepository.saveAndFlush(userCoupon);
 
-            int updatedCount = couponRepository.increaseIssuedQuantity(couponId);
+            int updatedCount = couponRepository.increaseIssuedQuantity(
+                couponId,
+                CouponStatus.ACTIVE
+            );
 
             if (updatedCount == 0) {
-                throw new CustomException(ErrorCode.COUPON_001);
+                handleIncreaseIssuedQuantityFailure(couponId);
             }
 
             return IssueCouponResponse.of(savedUserCoupon);
@@ -143,6 +148,23 @@ public class LockCouponIssueStrategy implements CouponIssueStrategy {
         if (couponId == null) {
             throw new CustomException(ErrorCode.COUPON_004);
         }
+    }
+
+    /**
+     * 발급 수량 증가 실패 원인 분기
+     * - UPDATE 조건에 ACTIVE 상태와 잔여 수량 조건이 포함되어 있으므로 updatedCount가 0이면
+     *   쿠폰 비활성화 또는 수량 소진 가능성이 있다.
+     * - 쿠폰을 재조회하여 비활성 상태와 수량 소진을 구분한다.
+     */
+    private void handleIncreaseIssuedQuantityFailure(Long couponId) {
+        Coupon coupon = couponRepository.findById(couponId)
+            .orElseThrow(() -> new CustomException(ErrorCode.COUPON_004));
+
+        if (coupon.getStatus() != CouponStatus.ACTIVE) {
+            throw new CustomException(ErrorCode.COUPON_010);
+        }
+
+        throw new CustomException(ErrorCode.COUPON_001);
     }
 
 }

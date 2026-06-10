@@ -7,8 +7,10 @@ import com.sparta.one_stop.domain.coupon.repository.CouponRepository;
 import com.sparta.one_stop.domain.coupon.repository.UserCouponRepository;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.UserRepository;
+import com.sparta.one_stop.global.enums.coupon.CouponStatus;
 import com.sparta.one_stop.global.enums.coupon.UserCouponStatus;
 import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -132,8 +134,10 @@ class LockCouponIssueStrategyTest {
             .thenReturn(false);
         when(userCouponRepository.saveAndFlush(any(UserCoupon.class)))
             .thenReturn(savedUserCoupon);
-        when(couponRepository.increaseIssuedQuantity(couponId))
-            .thenReturn(1);
+        when(couponRepository.increaseIssuedQuantity(
+            couponId,
+            CouponStatus.ACTIVE
+        )).thenReturn(1);
 
         // when
         IssueCouponResponse result = lockCouponIssueStrategy.issue(
@@ -162,7 +166,10 @@ class LockCouponIssueStrategyTest {
             eq(TimeUnit.SECONDS)
         );
         inOrder.verify(userCouponRepository).saveAndFlush(any(UserCoupon.class));
-        inOrder.verify(couponRepository).increaseIssuedQuantity(couponId);
+        inOrder.verify(couponRepository).increaseIssuedQuantity(
+            couponId,
+            CouponStatus.ACTIVE
+        );
         inOrder.verify(lock).unlock();
     }
 
@@ -373,7 +380,10 @@ class LockCouponIssueStrategyTest {
         )).isInstanceOf(CustomException.class);
 
         verify(userCouponRepository, never()).saveAndFlush(any(UserCoupon.class));
-        verify(couponRepository, never()).increaseIssuedQuantity(anyLong());
+        verify(couponRepository, never()).increaseIssuedQuantity(
+            anyLong(),
+            any(CouponStatus.class)
+        );
         verify(lock).unlock();
     }
 
@@ -404,12 +414,15 @@ class LockCouponIssueStrategyTest {
             couponId
         )).isInstanceOf(CustomException.class);
 
-        verify(couponRepository, never()).increaseIssuedQuantity(anyLong());
+        verify(couponRepository, never()).increaseIssuedQuantity(
+            anyLong(),
+            any(CouponStatus.class)
+        );
         verify(lock).unlock();
     }
 
     @Test
-    @DisplayName("issue 실패 - issuedQuantity 증가 실패 시 쿠폰 소진 예외가 발생하고 Lock을 해제한다")
+    @DisplayName("issue 실패 - issuedQuantity 증가 실패 시 쿠폰이 ACTIVE이면 쿠폰 소진 예외가 발생하고 Lock을 해제한다")
     void issue_fail_whenIncreaseIssuedQuantityFails() throws InterruptedException {
         // given
         Long userId = 1L;
@@ -429,16 +442,26 @@ class LockCouponIssueStrategyTest {
             .thenReturn(false);
         when(userCouponRepository.saveAndFlush(any(UserCoupon.class)))
             .thenReturn(savedUserCoupon);
-        when(couponRepository.increaseIssuedQuantity(couponId))
-            .thenReturn(0);
+        when(couponRepository.increaseIssuedQuantity(
+            couponId,
+            CouponStatus.ACTIVE
+        )).thenReturn(0);
+        when(coupon.getStatus())
+            .thenReturn(CouponStatus.ACTIVE);
 
         // when & then
         assertThatThrownBy(() -> lockCouponIssueStrategy.issue(
             userId,
             couponId
-        )).isInstanceOf(CustomException.class);
+        ))
+            .isInstanceOf(CustomException.class)
+            .extracting("errorCode")
+            .isEqualTo(ErrorCode.COUPON_001);
 
-        verify(couponRepository).increaseIssuedQuantity(couponId);
+        verify(couponRepository).increaseIssuedQuantity(
+            couponId,
+            CouponStatus.ACTIVE
+        );
         verify(lock).unlock();
     }
 
@@ -489,6 +512,53 @@ class LockCouponIssueStrategyTest {
         )).isInstanceOf(CustomException.class);
 
         verify(lock, never()).unlock();
+    }
+
+    @Test
+    @DisplayName("issue 실패 - 발급 수량 증가 시점에 쿠폰이 비활성화되면 비활성 쿠폰 예외가 발생하고 Lock을 해제한다")
+    void issue_fail_whenCouponBecomesInactiveBeforeIncreaseIssuedQuantity() throws InterruptedException {
+        // given
+        Long userId = 1L;
+        Long couponId = 10L;
+
+        User user = mock(User.class);
+        Coupon issuableCoupon = couponForIssue();
+        Coupon inactiveCoupon = mock(Coupon.class);
+        UserCoupon savedUserCoupon = mock(UserCoupon.class);
+
+        prepareLockAcquired(couponId);
+
+        when(userRepository.findById(userId))
+            .thenReturn(Optional.of(user));
+
+        when(couponRepository.findById(couponId))
+            .thenReturn(Optional.of(issuableCoupon))
+            .thenReturn(Optional.of(inactiveCoupon));
+
+        when(userCouponRepository.existsByUserIdAndCouponId(userId, couponId))
+            .thenReturn(false);
+        when(userCouponRepository.saveAndFlush(any(UserCoupon.class)))
+            .thenReturn(savedUserCoupon);
+
+        when(couponRepository.increaseIssuedQuantity(
+            couponId,
+            CouponStatus.ACTIVE
+        )).thenReturn(0);
+
+        when(inactiveCoupon.getStatus())
+            .thenReturn(CouponStatus.INACTIVE);
+
+        // when & then
+        assertThatThrownBy(() -> lockCouponIssueStrategy.issue(userId, couponId))
+            .isInstanceOf(CustomException.class)
+            .extracting("errorCode")
+            .isEqualTo(ErrorCode.COUPON_010);
+
+        verify(couponRepository).increaseIssuedQuantity(
+            couponId,
+            CouponStatus.ACTIVE
+        );
+        verify(lock).unlock();
     }
 
     private void prepareLockAcquired(Long couponId) throws InterruptedException {
