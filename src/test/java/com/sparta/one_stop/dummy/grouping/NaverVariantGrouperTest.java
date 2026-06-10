@@ -64,7 +64,8 @@ class NaverVariantGrouperTest {
     void fallsBackToSingles() {
         ChatClient chatClient = mock(ChatClient.class);
         when(chatClient.prompt()).thenThrow(new RuntimeException("LLM 다운"));
-        NaverVariantGrouper grouper = new NaverVariantGrouper(chatClient, prompts, objectMapper);
+        NaverVariantGrouper grouper = new NaverVariantGrouper(
+            new VariantGroupingLlmClient(chatClient, prompts, objectMapper));
 
         List<GroupedProduct> result = grouper.group(
             List.of(galaxy256, galaxy128, iphone), List.of(1L), "스마트폰");
@@ -86,7 +87,7 @@ class NaverVariantGrouperTest {
     private NaverVariantGrouper grouperReturning(String json) {
         ChatClient chatClient = mock(ChatClient.class, RETURNS_DEEP_STUBS);
         when(chatClient.prompt().system(anyString()).user(anyString()).call().content()).thenReturn(json);
-        return new NaverVariantGrouper(chatClient, prompts, objectMapper);
+        return new NaverVariantGrouper(new VariantGroupingLlmClient(chatClient, prompts, objectMapper));
     }
 
     private NaverShopItem item(String title, String brand, String lprice, String productId, String image) {

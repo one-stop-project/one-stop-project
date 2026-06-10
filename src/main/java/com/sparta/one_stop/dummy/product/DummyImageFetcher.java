@@ -11,6 +11,8 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 
+import java.io.IOException;
+import java.net.HttpURLConnection;
 import java.net.URI;
 import java.time.Duration;
 import java.util.List;
@@ -61,7 +63,10 @@ public class DummyImageFetcher {
             if (!"https".equalsIgnoreCase(uri.getScheme()) || host == null) {
                 return null;
             }
-            boolean trusted = TRUSTED_HOST_SUFFIXES.stream().anyMatch(host::endsWith);
+            // 점(.) 경계로 매칭 — attacker-naver.com처럼 신뢰 도메인 흉내 낸 가짜 호스트 차단
+            String h = host.toLowerCase(java.util.Locale.ROOT);
+            boolean trusted = TRUSTED_HOST_SUFFIXES.stream()
+                    .anyMatch(suffix -> h.equals(suffix) || h.endsWith("." + suffix));
             if (!trusted) {
                 log.warn("비신뢰 이미지 호스트 차단: {}", host);
                 return null;
@@ -87,9 +92,17 @@ public class DummyImageFetcher {
         return mediaType.getType() + "/" + mediaType.getSubtype();
     }
 
-    // 응답 지연으로 스케줄러 스레드가 무한 블록되지 않게 타임아웃 설정
+    // 응답 지연 블록 방지 타임아웃 + redirect 차단.
+    // redirect를 따라가면 신뢰호스트(최초 URL)만 검증한 게 무력화돼 내부망·공격자 URL로 끌려갈 수 있음(SSRF).
+    // 검증된 호스트가 3xx를 주면 body가 비어 호출자가 기본 이미지로 폴백한다.
     private static RestClient buildClient() {
-        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory() {
+            @Override
+            protected void prepareConnection(HttpURLConnection connection, String httpMethod) throws IOException {
+                super.prepareConnection(connection, httpMethod);
+                connection.setInstanceFollowRedirects(false);
+            }
+        };
         factory.setConnectTimeout(Duration.ofSeconds(3));
         factory.setReadTimeout(Duration.ofSeconds(5));
         return RestClient.builder().requestFactory(factory).build();
