@@ -59,8 +59,7 @@ export interface CreateReviewRequest {
 export interface UpdateReviewRequest {
   rating: number;            // 1~5
   content: string;           // 10~1000자
-  retainedImageUrls?: string[];  // 유지할 기존 이미지
-  newImageUrls?: string[];       // 새로 추가할 이미지
+  imageUrls?: string[];     // 이미지
 }
 
 // AI 리뷰 요약

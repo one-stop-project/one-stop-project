@@ -20,8 +20,5 @@ public class UpdateReviewRequest {
     private String content;
 
     @Size(max = 5)
-    private List<String> retainedImageUrls;
-
-    @Size(max = 5)
-    private List<String> newImageUrls;
+    private List<String> imageUrls;
 }

@@ -7,6 +7,7 @@ import com.sparta.one_stop.domain.review.dto.response.ReviewableOrderItemRespons
 import com.sparta.one_stop.domain.review.service.ReviewService;
 import com.sparta.one_stop.global.response.ApiResponse;
 import com.sparta.one_stop.global.security.AuthUser;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -25,7 +26,7 @@ public class ReviewController {
     @PostMapping
     public ApiResponse<ReviewResponse> create(
         @AuthenticationPrincipal AuthUser authUser,
-        @RequestBody CreateReviewRequest request
+        @Valid @RequestBody CreateReviewRequest request
     ) {
         return ApiResponse.success(reviewService.createReview(authUser, request));
     }
@@ -34,7 +35,7 @@ public class ReviewController {
     public ApiResponse<ReviewResponse> update(
         @AuthenticationPrincipal AuthUser authUser,
         @PathVariable Long reviewId,
-        @RequestBody UpdateReviewRequest request
+        @Valid @RequestBody UpdateReviewRequest request
     ) {
         return ApiResponse.success(reviewService.updateReview(authUser, reviewId, request));
     }

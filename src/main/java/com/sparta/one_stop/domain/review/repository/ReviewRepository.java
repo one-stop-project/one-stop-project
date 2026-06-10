@@ -18,6 +18,17 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
 
     Page<Review> findAllByUser_Id(Long userId, Pageable pageable);
 
+    // 리뷰 작성 가능 목록 조회 시 사용
+    // existsByOrderItem_Id() 반복 호출에 따른 N+1 문제 방지
+    @Query("""
+    select r.orderItem.id
+    from Review r
+    where r.orderItem.id in :orderItemIds
+    """)
+    List<Long> findReviewedOrderItemIds(
+        @Param("orderItemIds") List<Long> orderItemIds
+    );
+
     // ── AI 요약 전용 ─────────────────────────────────────────────
 
     // 최신순 최대 N건 — 전체 요약(최초/강제 갱신) 시 사용

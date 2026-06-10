@@ -26,6 +26,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -62,15 +64,6 @@ public class ReviewService {
 
         if (reviewRepository.existsByOrderItem_Id(orderItem.getId())) {
             throw new CustomException(ErrorCode.REVIEW_002);
-        }
-
-        if (request.getRating() < 1 || request.getRating() > 5) {
-            throw new CustomException(ErrorCode.REVIEW_003);
-        }
-
-        if (request.getContent() != null &&
-            (request.getContent().length() < 10 || request.getContent().length() > 1000)) {
-            throw new CustomException(ErrorCode.REVIEW_004);
         }
 
         Review review = Review.builder()
@@ -122,23 +115,14 @@ public class ReviewService {
             throw new CustomException(ErrorCode.REVIEW_007);
         }
 
-        if (request.getRating() < 1 || request.getRating() > 5) {
-            throw new CustomException(ErrorCode.REVIEW_003);
-        }
-
-        if (request.getContent() != null &&
-            (request.getContent().length() < 10 || request.getContent().length() > 1000)) {
-            throw new CustomException(ErrorCode.REVIEW_004);
-        }
-
         Long productId = review.getProduct().getId();
         review.update(request.getRating(), request.getContent());
 
         reviewImageRepository.deleteAll(review.getImages());
 
-        if (request.getNewImageUrls() != null) {
+        if (request.getImageUrls() != null) {
             int idx = 0;
-            for (String url : request.getNewImageUrls()) {
+            for (String url : request.getImageUrls()) {
                 reviewImageRepository.save(
                     ReviewImage.builder()
                         .review(review)
@@ -197,10 +181,19 @@ public class ReviewService {
         List<OrderItem> items =
             orderItemRepository.findAllReviewableByUserId(authUser.userId());
 
+        Set<Long> reviewedOrderItemIds =
+            reviewRepository.findReviewedOrderItemIds(
+                    items.stream()
+                        .map(OrderItem::getId)
+                        .toList()
+                )
+                .stream()
+                .collect(Collectors.toSet());
+
         return items.stream()
             .filter(i ->
                 i.getStatus() == OrderItemStatus.DELIVERED
-                    && !reviewRepository.existsByOrderItem_Id(i.getId())
+                    && !reviewedOrderItemIds.contains(i.getId())
             )
             .map(i -> new ReviewableOrderItemResponse(
                 i.getId(),
