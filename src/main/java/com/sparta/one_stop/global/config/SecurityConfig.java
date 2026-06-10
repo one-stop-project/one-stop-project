@@ -17,12 +17,9 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-import org.springframework.boot.autoconfigure.security.servlet.PathRequest;
 
 // 필터 체인 순서
 // 1. CORS -> Preflight OPTIONS 먼저 통과시켜야 함
@@ -58,12 +55,6 @@ public class SecurityConfig {
         FilterRegistrationBean<JwtExceptionFilter> bean = new FilterRegistrationBean<>(filter);
         bean.setEnabled(false);
         return bean;
-    }
-
-    @Bean
-    public PasswordEncoder passwordEncoder() {
-        // BCrypt: 단방향 해시, 자동 솔트 생성으로 레인보우 테이블 공격 방지
-        return new BCryptPasswordEncoder();
     }
 
     @Bean
@@ -128,7 +119,7 @@ public class SecurityConfig {
                 ).permitAll()
 
                 // logout 별도 구성 / 인증 반드시 필요
-                .requestMatchers(HttpMethod.POST,"/api/auth/logout").authenticated()
+                .requestMatchers(HttpMethod.POST,"/api/auth/logout").permitAll()
 
                 // 인증 없이 접근 가능
                 // AUTH부분은 정책 변경 소요 대비 분리 작성

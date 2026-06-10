@@ -112,7 +112,7 @@ public class User extends BaseEntity {
     // 회원 탈퇴(Soft Delete)
     public void withdraw() {
         if (this.status == UserStatus.WITHDRAWN) {
-            throw new CustomException(ErrorCode.MEMBER_004);
+            throw new CustomException(ErrorCode.MEMBER_010);
         }
         this.status = UserStatus.WITHDRAWN;
     }
@@ -120,7 +120,7 @@ public class User extends BaseEntity {
     // 판매자 강제 비활성화 시 사용
     public void suspend() {
         if (this.status == UserStatus.WITHDRAWN) {
-            throw new CustomException(ErrorCode.MEMBER_004);  // 탈퇴자는 정지 못 함
+            throw new CustomException(ErrorCode.MEMBER_011);  // 탈퇴자는 정지 못 함
         }
         this.status = UserStatus.SUSPENDED;
     }
@@ -128,7 +128,7 @@ public class User extends BaseEntity {
     // 정지 해제
     public void reactivate() {
         if (this.status != UserStatus.SUSPENDED) {
-            throw new CustomException(ErrorCode.MEMBER_005);
+            throw new CustomException(ErrorCode.MEMBER_012);
         }
         this.status = UserStatus.ACTIVE;
     }

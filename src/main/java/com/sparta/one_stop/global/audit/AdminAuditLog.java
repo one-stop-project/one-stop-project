@@ -1,6 +1,12 @@
 package com.sparta.one_stop.global.audit;
 
-import jakarta.persistence.*;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Index;
+import jakarta.persistence.Table;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -9,26 +15,6 @@ import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 
-/**
- * 관리자/시스템 작업 감사 로그
- *
- * <p><b>범용 자산</b> — 포인트뿐 아니라 회원 정지, 환불, 권한 변경 등 모든 민감 작업에 재사용
- *
- * <p><b>특징</b>
- * <ul>
- *   <li>한 번 기록되면 절대 수정/삭제 불가 (DB 트리거로 보호)</li>
- *   <li>비동기 기록으로 본 트랜잭션 성능 영향 없음</li>
- *   <li>월 단위 파티셔닝 권장 (대용량 운영 시)</li>
- * </ul>
- *
- * <p><b>시스템 이벤트 처리</b>
- * <p>스케줄러·배치 같은 비-인증 컨텍스트에서도 감사 로그가 필요한 경우:
- * <ul>
- *   <li>{@code adminId} = {@link #SYSTEM_ACTOR_ID} (0L)</li>
- *   <li>{@code adminUsername} = {@link #SYSTEM_ACTOR_USERNAME} ("SYSTEM")</li>
- * </ul>
- * <br>이렇게 하면 NOT NULL 제약 위반 없이도 시스템 이벤트를 명시 기록 가능.
- */
 @Entity
 @Table(name = "admin_audit_log",
     indexes = {

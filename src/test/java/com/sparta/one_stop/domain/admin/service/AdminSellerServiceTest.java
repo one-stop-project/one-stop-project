@@ -7,6 +7,7 @@ import com.sparta.one_stop.domain.product.repository.ProductRepository;
 import com.sparta.one_stop.domain.user.entity.Seller;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.SellerRepository;
+import com.sparta.one_stop.domain.user.service.UserStatusCacheService;
 import com.sparta.one_stop.global.enums.user.SellerStatus;
 import com.sparta.one_stop.global.enums.user.UserRole;
 import com.sparta.one_stop.global.exception.CustomException;
@@ -19,7 +20,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.util.List;
 import java.util.Optional;
@@ -34,18 +35,17 @@ import static org.mockito.Mockito.verify;
 @DisplayName("AdminSellerService 테스트")
 class AdminSellerServiceTest {
 
+    private static final Long ACTOR_ID = 1L;
+    private static final Long SELLER_ID = 10L;
     @Mock private SellerRepository sellerRepository;
     @Mock private ProductRepository productRepository;
     @Mock private AdminActionHistoryRepository adminActionHistoryRepository;
     @Mock private OrderItemRepository orderItemRepository;
     @Mock private OrderCancelHistoryRepository orderCancelHistoryRepository;
-
+    @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private UserStatusCacheService userStatusCacheService;
     @InjectMocks
     private AdminSellerService adminSellerService;
-
-    private static final Long ACTOR_ID = 1L;
-    private static final Long SELLER_ID = 10L;
-
     private User user;
     private Seller seller;
 

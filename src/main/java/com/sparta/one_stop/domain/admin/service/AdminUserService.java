@@ -42,6 +42,10 @@ public class AdminUserService {
         if (target.getRole() == UserRole.ADMIN || target.getRole() == UserRole.SUPER_ADMIN) {
             throw new CustomException(ErrorCode.ADMIN_012);
         }
+        // 활성 회원만 승격 가능 (정지/탈퇴 회원 승격 차단)
+        if (target.getStatus() != com.sparta.one_stop.global.enums.user.UserStatus.ACTIVE) {
+            throw new CustomException(ErrorCode.ADMIN_014);
+        }
 
         target.updateRole(UserRole.ADMIN);
 

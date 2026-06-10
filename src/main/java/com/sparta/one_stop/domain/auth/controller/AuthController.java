@@ -14,8 +14,8 @@ import com.sparta.one_stop.domain.cart.support.GuestCartCookieProvider;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import com.sparta.one_stop.global.response.ApiResponse;
-import com.sparta.one_stop.global.security.AuthUser;
 import com.sparta.one_stop.global.security.JwtTokenProvider;
+import com.sparta.one_stop.global.util.ClientIpExtractor;
 import com.sparta.one_stop.global.util.CookieUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -28,7 +28,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -55,7 +54,7 @@ public class AuthController {
     @PostMapping("/signup")
     public ResponseEntity<ApiResponse<SignUpResponse>> signup(
         @Valid @RequestBody SignUpRequest request, HttpServletRequest servletRequest) {
-        String clientIp = getClientIp(servletRequest);
+        String clientIp = ClientIpExtractor.extract(servletRequest);
         return ResponseEntity.status(HttpStatus.CREATED)
             .body(ApiResponse.success(authService.signup(request, clientIp)));
     }
@@ -73,13 +72,14 @@ public class AuthController {
         @Parameter(in = ParameterIn.COOKIE, name = GuestCartCookieProvider.GUEST_CART_COOKIE_NAME, description = "비로그인 장바구니 식별자")
         @CookieValue(value = GuestCartCookieProvider.GUEST_CART_COOKIE_NAME, required = false) String guestCartId
     ) {
-        String clientIp = getClientIp(servletRequest);
+        String clientIp = ClientIpExtractor.extract(servletRequest);
+        String userAgent = servletRequest.getHeader("User-Agent");
 
         // 1. 서버 기반 Device ID 발급 (최초 로그인 시)
         String deviceId = (existingDeviceId != null) ? existingDeviceId : UUID.randomUUID().toString();
 
         // 2. 비즈니스 로직 처리
-        LoginResult result = authService.login(request, deviceId, clientIp);
+        LoginResult result = authService.login(request, deviceId, userAgent, clientIp);
 
         boolean guestCartMerged = false;
 
@@ -145,7 +145,8 @@ public class AuthController {
         @Parameter(in = ParameterIn.COOKIE, name = "refresh_token", description = "인증을 위한 리프레시 토큰")
         @CookieValue(value = "refresh_token", required = false) String refreshToken,
         @Parameter(in = ParameterIn.COOKIE, name = "device_id", description = "다중 기기 검증을 위한 기기 식별자")
-        @CookieValue(value = "device_id", required = false) String deviceId) {
+        @CookieValue(value = "device_id", required = false) String deviceId,
+        HttpServletRequest servletRequest) {
 
         // ★ 쿠키 누락 시 500이 아니라 401(인증 필요)로 응답
         //   비로그인 사용자가 앱 진입 시 호출하는 정상 케이스이므로 ERROR 로그도 안 남김
@@ -155,7 +156,9 @@ public class AuthController {
         }
 
         TokenRefreshRequest request = new TokenRefreshRequest(refreshToken);
-        RefreshResult result = authService.refresh(request, deviceId);
+        String userAgent = servletRequest.getHeader("User-Agent");
+        String clientIp = ClientIpExtractor.extract(servletRequest);
+        RefreshResult result = authService.refresh(request, deviceId, userAgent, clientIp);
 
         String newRtCookie = cookieUtil.createHttpOnlyCookie(
             "refresh_token",
@@ -175,7 +178,6 @@ public class AuthController {
     )
     @PostMapping("/logout")
     public ResponseEntity<ApiResponse<Void>> logout(
-        @Parameter(hidden = true) @AuthenticationPrincipal AuthUser authUser,
         @Parameter(in = ParameterIn.COOKIE, name = "device_id", description = "로그아웃할 기기의 식별자")
         @CookieValue(value = "device_id", required = false) String deviceId,
         @Parameter(in = ParameterIn.HEADER, name = "Authorization", description = "Bearer {Access_Token} 형태의 인증 헤더")
@@ -184,8 +186,15 @@ public class AuthController {
         // 1. 토큰 추출 위임 (캡슐화)
         String accessToken = jwtTokenProvider.resolveToken(authHeader);
 
-        // 2. 서비스 로그아웃 처리
-        authService.logout(authUser.userId(), deviceId, accessToken);
+        // 2. 서비스 로그아웃 처리(id 추출)
+        Long userId = jwtTokenProvider.getUserIdAllowExpired(accessToken);
+
+        // userId가 있으면 서버측 정리, 없어도 쿠키는 만료시킴 (best-effort)
+        if (userId != null) {
+            authService.logout(userId, deviceId, accessToken);
+        } else {
+            log.debug("logout — 유효한 토큰 없음, 쿠키만 만료 처리");
+        }
 
         // 3. 브라우저 쿠키 강제 만료
         String clearRtCookie = cookieUtil.createExpiredCookie("refresh_token", "/api/auth");
@@ -194,30 +203,5 @@ public class AuthController {
             .header(HttpHeaders.SET_COOKIE, clearRtCookie)
             .header(HttpHeaders.SET_COOKIE, clearDeviceCookie)
             .body(ApiResponse.success());
-    }
-
-    /**
-     * 💡 [헬퍼 메서드] 리버스 프록시나 로드밸런서를 거쳐온 요청의 진짜 IP 추출
-     */
-    private String getClientIp(HttpServletRequest request) {
-        // Nginx, AWS ALB 등을 거치면 원래 IP는 X-Forwarded-For 헤더에 담깁니다.
-        String ip = request.getHeader("X-Forwarded-For");
-
-        if (ip == null || ip.length() == 0 || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getHeader("Proxy-Client-IP");
-        }
-        if (ip == null || ip.length() == 0 || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getHeader("WL-Proxy-Client-IP");
-        }
-        if (ip == null || ip.length() == 0 || "unknown".equalsIgnoreCase(ip)) {
-            ip = request.getRemoteAddr(); // 프록시가 없는 로컬 개발 환경 등에서 동작
-        }
-
-        // X-Forwarded-For 헤더에 여러 IP가 콤마(,)로 묶여 올 수 있으므로 첫 번째(Client) IP만 추출
-        if (ip != null && ip.contains(",")) {
-            ip = ip.split(",")[0].trim();
-        }
-
-        return ip;
     }
 }

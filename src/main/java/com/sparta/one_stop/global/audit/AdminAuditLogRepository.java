@@ -1,6 +1,5 @@
 package com.sparta.one_stop.global.audit;
 
-import com.sparta.one_stop.global.audit.AdminAuditLog;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -10,31 +9,6 @@ import org.springframework.data.repository.query.Param;
 import java.time.LocalDateTime;
 import java.util.List;
 
-/**
- * 관리자/시스템 작업 감사 로그 저장소
- *
- * <p><b>⚠️ 마이그레이션 노트 (10년차 개발자 관점)</b>
- * <p>이 Repository는 {@link AdminAuditLog} 전용으로, 주로 <b>도메인 작업 감사</b>(예: 포인트 사용,
- * 환불, 회원 정지 등)에 사용됩니다.
- *
- * <p>장기적으로는 {@code SecurityAuditLogRepository}로 통합 권장:
- * <ul>
- *   <li>두 시스템 병존 시 — "이거 어디 기록해야 하지?" 결정 비용 발생</li>
- *   <li>사고 분석 시 두 테이블 JOIN 필요</li>
- *   <li>동일 이벤트 중복 기록 가능성</li>
- * </ul>
- *
- * <p><b>현재 운영 가이드</b> — 둘 중 어디에 기록할지 명확히
- * <table border="1">
- *   <tr><th>이벤트 종류</th><th>저장소</th></tr>
- *   <tr><td>포인트 도메인 작업 (PointService 메서드)</td><td>AdminAuditLog (현재)</td></tr>
- *   <tr><td>인증/권한 실패, IDOR, 보안 위협</td><td>SecurityAuditLog (신규)</td></tr>
- *   <tr><td>새로 추가되는 도메인 감사</td><td>SecurityAuditLog (신규)</td></tr>
- * </table>
- *
- * <p><b>⚠️ 중요</b>: 이 Repository는 <b>읽기/생성만</b> 사용. {@code update/delete}는 금지
- * (DB 트리거로 강제됨).
- */
 public interface AdminAuditLogRepository extends JpaRepository<AdminAuditLog, Long> {
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

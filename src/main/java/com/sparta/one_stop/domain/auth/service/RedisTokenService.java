@@ -16,14 +16,12 @@ import java.util.concurrent.TimeUnit;
 
 import static com.sparta.one_stop.global.common.RedisKeyConstants.BLACKLIST_PREFIX;
 import static com.sparta.one_stop.global.common.RedisKeyConstants.REFRESH_TOKEN_PREFIX;
+import static com.sparta.one_stop.global.common.RedisKeyConstants.USER_TOKEN_CUTOFF_PREFIX;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class RedisTokenService {
-
-    private final RedisTemplate<String, String> redisTemplate;
-    private final DeviceLimitService deviceLimitService;
 
     /** Lua Script — CAS 기반 RTR 원자적 갱신 */
     private static final String ROTATE_RT_SCRIPT =
@@ -33,9 +31,10 @@ public class RedisTokenService {
             "else " +
             "   return 0 " +
             "end";
-
     private static final RedisScript<Long> ROTATE_RT =
         new DefaultRedisScript<>(ROTATE_RT_SCRIPT, Long.class);
+    private final RedisTemplate<String, String> redisTemplate;
+    private final DeviceLimitService deviceLimitService;
 
 
     // ═══════════════════════════════════════════════════════════
@@ -121,7 +120,6 @@ public class RedisTokenService {
     /**
      * 사용자의 모든 기기 RT 일괄 삭제
      *
-     * ⚠️ v8 대비 핵심 변경:
      *   - 기존: SCAN으로 RT:{userId}:* 패턴 검색
      *   - 신규: DeviceLimitService에 위임 (ZSET 인덱스 활용)
      *
@@ -159,5 +157,58 @@ public class RedisTokenService {
             log.error("Redis 장애로 블랙리스트 검증 실패 (Fail-Open 동작): jti={}", jti, e);
             return false;
         }
+    }
+
+    // ═══════════════════════════════════════════════════════════
+    //  User-level 토큰 무효화 (iat-cutoff)
+    //  비번변경/탈퇴/정지 시 호출 → 그 이전 발급된 모든 AT를 다음 요청에서 거부
+    // ═══════════════════════════════════════════════════════════
+
+    /**
+     * 사용자의 모든 기존 AT 무효화 — cutoff 시각을 현재로 기록
+     *
+     * <p>AT 수명(15분)만큼만 TTL 부여. 그보다 오래된 AT는 어차피 만료되므로
+     * cutoff도 만료시켜 Redis 용량을 자동 회수한다.
+     *
+     * @param accessTokenTtlSeconds AT 만료 시간(초) — JwtTokenProvider에서 전달
+     */
+    public void invalidateUserTokens(Long userId, long accessTokenTtlSeconds) {
+        try {
+            // 현재 epoch(초) 기록. 이 시각 이전 iat를 가진 AT는 모두 거부됨.
+            String now = String.valueOf(System.currentTimeMillis() / 1000);
+            redisTemplate.opsForValue().set(
+                cutoffKey(userId), now, accessTokenTtlSeconds, TimeUnit.SECONDS);
+            log.info("[토큰무효화] user-level cutoff 등록: userId={}, cutoff={}", userId, now);
+        } catch (RedisConnectionFailureException | RedisSystemException e) {
+            log.error("[토큰무효화] cutoff 등록 실패: userId={}", userId, e);
+        }
+    }
+
+    /**
+     * AT의 발급시각(iat)이 무효화 cutoff 이전인지 검사
+     *
+     * @param userId    토큰 소유자
+     * @param issuedAtEpochSeconds AT의 iat (epoch 초)
+     * @return true면 무효화된 토큰 (거부해야 함)
+     *
+     * <p>Fail-Open: Redis 장애 시 false(통과). 가용성 우선.
+     */
+    public boolean isTokenInvalidated(Long userId, long issuedAtEpochSeconds) {
+        try {
+            String cutoff = redisTemplate.opsForValue().get(cutoffKey(userId));
+            if (cutoff == null) {
+                return false; // 무효화 이력 없음
+            }
+            long cutoffEpoch = Long.parseLong(cutoff);
+            // iat가 cutoff 이전(<=)이면 무효화 대상
+            return issuedAtEpochSeconds <= cutoffEpoch;
+        } catch (Exception e) {
+            log.error("[토큰무효화] cutoff 검증 실패 (Fail-Open): userId={}", userId, e);
+            return false;
+        }
+    }
+
+    private String cutoffKey(Long userId) {
+        return USER_TOKEN_CUTOFF_PREFIX + userId;
     }
 }

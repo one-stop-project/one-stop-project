@@ -7,7 +7,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import java.util.Collection;
 import java.util.List;
 
-public record AuthUser(Long userId, UserRole role) {
+public record AuthUser(Long userId, String email, UserRole role) {
 
     /** Spring Security용 권한 정보 제공 */
     public Collection<? extends GrantedAuthority> authorities() {

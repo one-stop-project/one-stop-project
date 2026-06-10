@@ -58,6 +58,11 @@ public enum ErrorCode {
     MEMBER_005(HttpStatus.BAD_REQUEST, "MEMBER_005", "기본 배송지는 삭제할 수 없습니다"),
     MEMBER_006(HttpStatus.BAD_REQUEST, "MEMBER_006", "배송지는 최대 10개까지 등록할 수 있습니다"),
 
+    // ===== MEMBER - 상태 전이 =====
+    MEMBER_010(HttpStatus.BAD_REQUEST, "MEMBER_010", "이미 탈퇴한 회원입니다"),
+    MEMBER_011(HttpStatus.BAD_REQUEST, "MEMBER_011", "탈퇴한 회원은 처리할 수 없습니다"),
+    MEMBER_012(HttpStatus.BAD_REQUEST, "MEMBER_012", "정지 상태가 아닌 회원입니다"),
+
     // ===== PRODUCT - 상품 =====
     PRODUCT_001(HttpStatus.NOT_FOUND, "PRODUCT_001", "상품을 찾을 수 없습니다"),
     PRODUCT_002(HttpStatus.BAD_REQUEST, "PRODUCT_002", "현재 판매하지 않는 상품입니다"),
