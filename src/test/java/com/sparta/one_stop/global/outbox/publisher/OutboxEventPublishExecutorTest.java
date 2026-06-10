@@ -6,9 +6,13 @@ import com.sparta.one_stop.global.enums.outbox.OutboxEventType;
 import com.sparta.one_stop.global.outbox.entity.OutboxEvent;
 import com.sparta.one_stop.global.outbox.kafka.OutboxKafkaProducer;
 import com.sparta.one_stop.global.outbox.repository.OutboxEventRepository;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.lang.reflect.Field;
 import java.util.Optional;
@@ -31,13 +35,26 @@ class OutboxEventPublishExecutorTest {
 
     private final SlackAlertService slackAlertService =
         mock(SlackAlertService.class);
-
     private final OutboxEventPublishExecutor outboxEventPublishExecutor =
         new OutboxEventPublishExecutor(
             outboxEventRepository,
             outboxKafkaProducer,
             slackAlertService
         );
+
+    @BeforeEach
+    void setUpTransactionSynchronization() {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.initSynchronization();
+        }
+    }
+
+    @AfterEach
+    void clearTransactionSynchronization() {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
 
     @Test
     @DisplayName("execute 성공 - 선점 후 Kafka 발행에 성공하면 PUBLISHED 상태로 저장한다")
@@ -134,6 +151,7 @@ class OutboxEventPublishExecutorTest {
             ArgumentCaptor.forClass(OutboxEvent.class);
 
         verify(outboxEventRepository).save(captor.capture());
+        verify(slackAlertService, never()).sendOutboxDeadAlert(any(OutboxEvent.class));
 
         OutboxEvent savedEvent = captor.getValue();
 
@@ -176,7 +194,9 @@ class OutboxEventPublishExecutorTest {
             ArgumentCaptor.forClass(OutboxEvent.class);
 
         verify(outboxEventRepository).save(captor.capture());
-        verify(slackAlertService).sendOutboxDeadAlert(any(OutboxEvent.class));
+
+        // execute 직후에는 아직 Slack 알림이 전송되면 안 됨
+        verify(slackAlertService, never()).sendOutboxDeadAlert(any(OutboxEvent.class));
 
         OutboxEvent savedEvent = captor.getValue();
 
@@ -184,6 +204,12 @@ class OutboxEventPublishExecutorTest {
         assertThat(savedEvent.getRetryCount()).isEqualTo(4);
         assertThat(savedEvent.getLastErrorMessage()).contains("kafka error");
         assertThat(savedEvent.getProcessedAt()).isNotNull();
+
+        // 트랜잭션 커밋 이후 Slack 알림 실행
+        TransactionSynchronizationManager.getSynchronizations()
+            .forEach(TransactionSynchronization::afterCommit);
+
+        verify(slackAlertService).sendOutboxDeadAlert(savedEvent);
     }
 
     private OutboxEvent pendingOutboxEvent(Long id) {
