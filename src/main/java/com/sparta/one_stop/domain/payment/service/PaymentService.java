@@ -41,6 +41,7 @@ public class PaymentService {
     /**
      * 결제 승인
      * - Mock 결제 승인 처리
+     * - 동일 orderId 중복 결제 승인 방지를 위해 Order를 PESSIMISTIC_WRITE 락으로 조회
      * - 결제 금액과 주문 금액 일치 여부 검증
      * - 결제 승인 전 사용 포인트 실제 차감
      * - 결제 승인 성공 시 적용 쿠폰 사용 처리
@@ -96,10 +97,12 @@ public class PaymentService {
     }
 
     /**
-     * 주문 조회
+     * 결제 승인용 주문 조회
+     * - 동일 orderId에 대한 동시 결제 승인 요청을 직렬화하기 위해 PESSIMISTIC_WRITE 락을 획득한다.
+     * - 포인트 차감, 쿠폰 사용, Payment 생성 전에 Order 단위 락을 선점하여 중복 결제 승인으로 인한 포인트 이중 차감을 방지한다.
      */
     private Order findOrder(Long orderId) {
-        return orderRepository.findById(orderId)
+        return orderRepository.findByIdWithLock(orderId)
             .orElseThrow(() -> new CustomException(ErrorCode.ORDER_006));
     }
 

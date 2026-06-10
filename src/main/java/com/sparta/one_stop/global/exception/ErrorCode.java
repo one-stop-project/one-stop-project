@@ -164,6 +164,7 @@ public enum ErrorCode {
     COUPON_009(HttpStatus.INTERNAL_SERVER_ERROR, "COUPON_009", "지원하지 않는 쿠폰 발급 전략입니다."),
     COUPON_010(HttpStatus.BAD_REQUEST, "COUPON_010", "이미 비활성화된 쿠폰입니다"),
     COUPON_011(HttpStatus.NOT_FOUND, "COUPON_011", "사용자 쿠폰을 찾을 수 없습니다"),
+    COUPON_012(HttpStatus.SERVICE_UNAVAILABLE, "COUPON_012", "쿠폰 발급 처리 중 일시적인 오류가 발생했습니다. 잠시 후 다시 시도해주세요"),
 
     // ===== REVIEW - 리뷰 =====
     REVIEW_001(HttpStatus.BAD_REQUEST, "REVIEW_001", "배송 완료 후에만 리뷰를 작성할 수 있습니다"),

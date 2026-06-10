@@ -17,10 +17,13 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 @Component("decrCouponIssueStrategy")
@@ -50,7 +53,9 @@ public class DecrCouponIssueStrategy implements CouponIssueStrategy {
      * - Redis Set 기준 중복 발급 1차 검증
      * - Redis DECR 명령으로 쿠폰 잔여 수량 원자적 차감
      * - DB Unique 제약 기반 중복 발급 2차 검증
-     * - DB 처리 실패 시 Redis 수량 보상 증가
+     * - DB 처리 중 예외 발생 시 Redis 수량 및 발급 사용자 Set 보상
+     * - 트랜잭션 커밋 실패로 롤백되는 경우 afterCompletion 콜백에서 Redis 보상
+     * - AtomicBoolean으로 즉시 보상과 롤백 보상이 중복 실행되지 않도록 방지
      */
     @Override
     @Transactional
@@ -77,20 +82,33 @@ public class DecrCouponIssueStrategy implements CouponIssueStrategy {
         validateNotIssuedInRedis(issuedUsersKey, userIdValue);
         initializeCouponStockIfAbsent(coupon, stockKey, now);
 
-        Long remainingStock = decreaseRedisStock(stockKey);
+        AtomicBoolean stockCompensationRequired = new AtomicBoolean(false);
+        AtomicBoolean issuedUserCompensationRequired = new AtomicBoolean(false);
 
-        if (remainingStock == null) {
-            throw new CustomException(ErrorCode.COMMON_008);
-        }
-
-        if (remainingStock < 0) {
-            increaseRedisStock(stockKey);
-            throw new CustomException(ErrorCode.COUPON_001);
-        }
+        registerRollbackCompensation(() -> compensateRedisIssue(
+            stockKey,
+            issuedUsersKey,
+            userIdValue,
+            stockCompensationRequired,
+            issuedUserCompensationRequired
+        ));
 
         try {
-            if (userCouponRepository.existsByUserIdAndCouponId(userId, couponId)) {
+            Long remainingStock = decreaseRedisStock(stockKey);
+
+            if (remainingStock == null) {
+                throw new CustomException(ErrorCode.COUPON_012);
+            }
+
+            if (remainingStock < 0) {
                 increaseRedisStock(stockKey);
+                throw new CustomException(ErrorCode.COUPON_001);
+            }
+
+            // Redis DECR 성공 이후부터는 DB 처리 실패 또는 트랜잭션 롤백 시 재고 보상이 필요하다
+            stockCompensationRequired.set(true);
+
+            if (userCouponRepository.existsByUserIdAndCouponId(userId, couponId)) {
                 throw new CustomException(ErrorCode.COUPON_002);
             }
 
@@ -100,12 +118,16 @@ public class DecrCouponIssueStrategy implements CouponIssueStrategy {
             int updatedCount = couponRepository.increaseIssuedQuantity(couponId);
 
             if (updatedCount == 0) {
-                increaseRedisStock(stockKey);
                 throw new CustomException(ErrorCode.COUPON_001);
             }
 
-            redisTemplate.opsForSet()
+            Long addedCount = redisTemplate.opsForSet()
                 .add(issuedUsersKey, userIdValue);
+
+            // 이번 요청에서 issued-users Set에 실제로 추가된 경우에만 롤백 시 제거한다
+            if (addedCount != null && addedCount > 0) {
+                issuedUserCompensationRequired.set(true);
+            }
 
             applyExpireAtToRedisKey(
                 issuedUsersKey,
@@ -115,18 +137,33 @@ public class DecrCouponIssueStrategy implements CouponIssueStrategy {
 
             return IssueCouponResponse.of(savedUserCoupon);
         } catch (DataIntegrityViolationException e) {
-            increaseRedisStock(stockKey);
+            compensateRedisIssue(
+                stockKey,
+                issuedUsersKey,
+                userIdValue,
+                stockCompensationRequired,
+                issuedUserCompensationRequired
+            );
+
             throw new CustomException(ErrorCode.COUPON_002);
         } catch (CustomException e) {
+            compensateRedisIssue(
+                stockKey,
+                issuedUsersKey,
+                userIdValue,
+                stockCompensationRequired,
+                issuedUserCompensationRequired
+            );
+
             throw e;
         } catch (RuntimeException e) {
-            increaseRedisStock(stockKey);
-
-            redisTemplate.opsForSet()
-                .remove(
-                    issuedUsersKey,
-                    userIdValue
-                );
+            compensateRedisIssue(
+                stockKey,
+                issuedUsersKey,
+                userIdValue,
+                stockCompensationRequired,
+                issuedUserCompensationRequired
+            );
 
             throw e;
         }
@@ -239,6 +276,72 @@ public class DecrCouponIssueStrategy implements CouponIssueStrategy {
 
         if (couponId == null) {
             throw new CustomException(ErrorCode.COUPON_004);
+        }
+    }
+
+    private void registerRollbackCompensation(Runnable compensation) {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            log.error("트랜잭션 동기화가 활성화되어 있지 않아 Redis 롤백 보상 콜백을 등록할 수 없습니다.");
+            throw new CustomException(ErrorCode.COUPON_012);
+        }
+
+        TransactionSynchronizationManager.registerSynchronization(
+            new TransactionSynchronization() {
+                @Override
+                public void afterCompletion(int status) {
+                    if (status == TransactionSynchronization.STATUS_ROLLED_BACK) {
+                        compensation.run();
+                    }
+                }
+            }
+        );
+    }
+
+    private void compensateRedisIssue(
+        String stockKey,
+        String issuedUsersKey,
+        String userIdValue,
+        AtomicBoolean stockCompensationRequired,
+        AtomicBoolean issuedUserCompensationRequired
+    ) {
+        if (stockCompensationRequired.compareAndSet(true, false)) {
+            try {
+                increaseRedisStock(stockKey);
+
+                log.info(
+                    "Redis 쿠폰 재고 보상 완료 - stockKey: {}",
+                    stockKey
+                );
+            } catch (Throwable e) {
+                log.error(
+                    "Redis 쿠폰 재고 보상 실패 - stockKey: {}",
+                    stockKey,
+                    e
+                );
+            }
+        }
+
+        if (issuedUserCompensationRequired.compareAndSet(true, false)) {
+            try {
+                redisTemplate.opsForSet()
+                    .remove(
+                        issuedUsersKey,
+                        userIdValue
+                    );
+
+                log.info(
+                    "Redis 쿠폰 발급 사용자 보상 완료 - issuedUsersKey: {}, userId: {}",
+                    issuedUsersKey,
+                    userIdValue
+                );
+            } catch (Throwable e) {
+                log.error(
+                    "Redis 쿠폰 발급 사용자 보상 실패 - issuedUsersKey: {}, userId: {}",
+                    issuedUsersKey,
+                    userIdValue,
+                    e
+                );
+            }
         }
     }
 

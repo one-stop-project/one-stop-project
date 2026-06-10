@@ -9,6 +9,8 @@ import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.UserRepository;
 import com.sparta.one_stop.global.enums.coupon.UserCouponStatus;
 import com.sparta.one_stop.global.exception.CustomException;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -20,6 +22,8 @@ import org.springframework.data.redis.core.SetOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -61,6 +65,20 @@ class DecrCouponIssueStrategyTest {
 
     @InjectMocks
     private DecrCouponIssueStrategy decrCouponIssueStrategy;
+
+    @BeforeEach
+    void setUpTransactionSynchronization() {
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.initSynchronization();
+        }
+    }
+
+    @AfterEach
+    void clearTransactionSynchronization() {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.clearSynchronization();
+        }
+    }
 
     @Test
     @DisplayName("supports 성공 - strategyType이 decr이면 true를 반환한다")
@@ -644,8 +662,8 @@ class DecrCouponIssueStrategyTest {
     }
 
     @Test
-    @DisplayName("issue 실패 - 예상치 못한 RuntimeException 발생 시 Redis 수량과 발급 사용자 Set을 보상 처리한다")
-    void issue_fail_whenRuntimeExceptionOccurs_thenCompensateRedisStockAndIssuedUsersSet() {
+    @DisplayName("issue 실패 - Redis Set add 실패 시 Redis 수량만 보상하고 발급 사용자 Set은 제거하지 않는다")
+    void issue_fail_whenRedisSetAddFails_thenCompensateOnlyRedisStock() {
         // given
         Long userId = 1L;
         Long couponId = 10L;
@@ -694,10 +712,72 @@ class DecrCouponIssueStrategyTest {
         )).isInstanceOf(RuntimeException.class);
 
         verify(valueOperations).increment(stockKey);
-        verify(setOperations).remove(
+        verify(setOperations, never()).remove(
             issuedUsersKey,
             userIdValue
         );
+    }
+
+    @Test
+    @DisplayName("issue 보상 - 트랜잭션 롤백 콜백 실행 시 Redis 수량과 발급 사용자 Set을 보상한다")
+    void issue_fail_whenTransactionRollback_thenCompensateRedisStockAndIssuedUsersSet() {
+        // given
+        Long userId = 1L;
+        Long couponId = 10L;
+        String stockKey = "coupon:stock:10";
+        String issuedUsersKey = "coupon:issued-users:10";
+        String userIdValue = String.valueOf(userId);
+
+        User user = mock(User.class);
+        Coupon coupon = couponForIssueResponse(couponId);
+        UserCoupon savedUserCoupon = issuedUserCoupon(100L, coupon);
+
+        when(userRepository.findById(userId))
+            .thenReturn(Optional.of(user));
+        when(couponRepository.findById(couponId))
+            .thenReturn(Optional.of(coupon));
+
+        when(redisTemplate.opsForSet())
+            .thenReturn(setOperations);
+        when(redisTemplate.opsForValue())
+            .thenReturn(valueOperations);
+
+        when(setOperations.isMember(issuedUsersKey, userIdValue))
+            .thenReturn(false);
+        when(valueOperations.setIfAbsent(
+            eq(stockKey),
+            anyString(),
+            any(Duration.class)
+        )).thenReturn(true);
+        when(valueOperations.decrement(stockKey))
+            .thenReturn(99L);
+
+        when(userCouponRepository.existsByUserIdAndCouponId(userId, couponId))
+            .thenReturn(false);
+        when(userCouponRepository.saveAndFlush(any(UserCoupon.class)))
+            .thenReturn(savedUserCoupon);
+        when(couponRepository.increaseIssuedQuantity(couponId))
+            .thenReturn(1);
+
+        when(setOperations.add(issuedUsersKey, userIdValue))
+            .thenReturn(1L);
+        when(redisTemplate.execute(
+            any(DefaultRedisScript.class),
+            anyList(),
+            anyString()
+        )).thenReturn(1L);
+
+        // when
+        decrCouponIssueStrategy.issue(userId, couponId);
+
+        TransactionSynchronizationManager.getSynchronizations()
+            .forEach(synchronization ->
+                synchronization.afterCompletion(TransactionSynchronization.STATUS_ROLLED_BACK)
+            );
+
+        // then
+        verify(valueOperations).increment(stockKey);
+        verify(setOperations).remove(issuedUsersKey, userIdValue);
     }
 
     private Coupon couponForIssue() {
