@@ -1,5 +1,7 @@
 package com.sparta.one_stop.domain.delivery.service;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sparta.one_stop.domain.delivery.dto.request.RejectOrderRequest;
 import com.sparta.one_stop.domain.delivery.dto.request.ShipDeliveryRequest;
 import com.sparta.one_stop.domain.delivery.dto.request.UpdateDeliveryStatusRequest;
@@ -12,6 +14,7 @@ import com.sparta.one_stop.domain.delivery.dto.response.ShipDeliveryResponse;
 import com.sparta.one_stop.domain.delivery.dto.response.UpdateDeliveryStatusResponse;
 import com.sparta.one_stop.domain.delivery.entity.Delivery;
 import com.sparta.one_stop.domain.delivery.entity.DeliveryHistory;
+import com.sparta.one_stop.domain.delivery.event.DeliveryCompletedEventPayload;
 import com.sparta.one_stop.domain.delivery.repository.DeliveryHistoryRepository;
 import com.sparta.one_stop.domain.delivery.repository.DeliveryRepository;
 import com.sparta.one_stop.domain.order.entity.Order;
@@ -24,12 +27,14 @@ import com.sparta.one_stop.global.enums.delivery.DeliveryStatus;
 import com.sparta.one_stop.global.enums.order.OrderItemStatus;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
+import com.sparta.one_stop.global.outbox.service.OutboxEventService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -42,6 +47,8 @@ public class DeliveryService {
     private final OrderRepository orderRepository;
     private final OrderItemRepository orderItemRepository;
     private final SellerRepository sellerRepository;
+    private final OutboxEventService outboxEventService;
+    private final ObjectMapper objectMapper;
 
     // userId → Seller 조회 헬퍼
     private Seller findSellerByUserId(Long userId) {
@@ -108,6 +115,35 @@ public class DeliveryService {
 
             return SellerOrderResponse.from(orderItem, delivery);
         });
+    }
+
+    // 결제 완료 후 배송 생성
+    // - OrderItem 상태를 ORDERED로 변경
+    // - 주문 상품별 Delivery 생성
+    // - 최초 배송 상태 ACCEPT 이력 생성
+    @Transactional
+    public void createDeliveriesForPayment(Order order) {
+
+        List<OrderItem> orderItems =
+            orderItemRepository.findAllByOrderId(order.getId());
+
+        for (OrderItem orderItem : orderItems) {
+
+            orderItem.markOrdered();
+
+            Delivery delivery = Delivery.builder()
+                .orderItem(orderItem)
+                .build();
+
+            deliveryRepository.save(delivery);
+
+            deliveryHistoryRepository.save(
+                DeliveryHistory.builder()
+                    .delivery(delivery)
+                    .status(DeliveryStatus.ACCEPT)
+                    .build()
+            );
+        }
     }
 
     // 발주 확인 (ORDERED → CONFIRMED / ACCEPT → INSTRUCT)
@@ -229,63 +265,44 @@ public class DeliveryService {
             new DeliveryHistory(delivery, request.status())
         );
 
+        // FINAL_DELIVERY 전환 시 OrderItem 상태 변경 + Outbox 이벤트 저장
         if (request.status() == DeliveryStatus.FINAL_DELIVERY) {
             delivery.getOrderItem().completeDelivery();
+            saveDeliveryCompletedOutboxEvent(delivery);
         }
 
         return UpdateDeliveryStatusResponse.from(delivery);
     }
 
     /**
-     * 결제 승인 완료 후 주문 상품 접수 및 배송 생성
-     * - OrderItem 상태를 PENDING_PAYMENT → ORDERED 로 변경
-     * - 주문 상품 1개당 Delivery 1개 생성
-     * - 최초 배송 상태는 ACCEPT
-     * - 배송 이력에도 ACCEPT 기록
+     * 배송 완료 Outbox 이벤트 저장
+     * - 배송 완료 트랜잭션과 동일 트랜잭션 내에서 처리
+     * - 트랜잭션 롤백 시 Outbox 이벤트도 함께 롤백
+     * - Outbox Publisher가 Kafka로 발행 → Consumer가 포인트 적립 처리
      */
-    @Transactional
-    public void createDeliveriesForPayment(Order order) {
-        List<OrderItem> orderItems = orderItemRepository.findAllByOrderIdWithProductItem(
-            order.getId()
+    private void saveDeliveryCompletedOutboxEvent(Delivery delivery) {
+        OrderItem orderItem = delivery.getOrderItem();
+        Order order = orderItem.getOrder();
+
+        String eventId = "delivery-completed-" + delivery.getId();
+
+        DeliveryCompletedEventPayload payload = DeliveryCompletedEventPayload.of(
+            eventId,
+            order.getId(),
+            order.getUser().getId(),
+            delivery.getId(),
+            LocalDateTime.now()
         );
 
-        if (orderItems.isEmpty()) {
-            throw new CustomException(ErrorCode.ORDER_001);
+        try {
+            String payloadJson = objectMapper.writeValueAsString(payload);
+            outboxEventService.saveDeliveryCompletedEvent(
+                eventId,
+                order.getId(),
+                payloadJson
+            );
+        } catch (JsonProcessingException e) {
+            throw new CustomException(ErrorCode.COMMON_007);
         }
-
-        List<Long> orderItemIds = orderItems.stream()
-            .map(OrderItem::getId)
-            .toList();
-
-        // 동일 주문에 대한 배송 중복 생성 방지
-        List<Delivery> existingDeliveries = deliveryRepository.findAllByOrderItemIdIn(
-            orderItemIds
-        );
-
-        if (!existingDeliveries.isEmpty()) {
-            throw new CustomException(ErrorCode.PAYMENT_003);
-        }
-
-        List<Delivery> deliveries = orderItems.stream()
-            .map(orderItem -> {
-                orderItem.markOrdered();
-
-                return Delivery.builder()
-                    .orderItem(orderItem)
-                    .build();
-            })
-            .toList();
-
-        List<Delivery> savedDeliveries = deliveryRepository.saveAll(deliveries);
-
-        List<DeliveryHistory> histories = savedDeliveries.stream()
-            .map(delivery -> new DeliveryHistory(
-                delivery,
-                DeliveryStatus.ACCEPT
-            ))
-            .toList();
-
-        deliveryHistoryRepository.saveAll(histories);
     }
-
 }

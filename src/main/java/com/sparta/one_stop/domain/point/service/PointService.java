@@ -102,4 +102,26 @@ public class PointService {
 
         throw new CustomException(ErrorCode.POINT_005);
     }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    //  적립 — 배송 완료 시 (낙관적 락 충돌 가능)
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    @Retryable(
+        retryFor = ObjectOptimisticLockingFailureException.class,
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 50, multiplier = 2.0, maxDelay = 500)
+    )
+    public void earnPointByDelivery(Long orderId) {
+        pointTxService.earnPointByDelivery(orderId);
+    }
+
+    @Recover
+    public void recoverEarnPointByDelivery(
+        ObjectOptimisticLockingFailureException e,
+        Long orderId) {
+
+        log.error("[POINT_EARN] 낙관적 락 재시도 3회 모두 실패 — orderId={}", orderId, e);
+        throw new CustomException(ErrorCode.POINT_005);
+    }
 }

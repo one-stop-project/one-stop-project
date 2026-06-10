@@ -55,6 +55,8 @@ public class OutboxEvent extends BaseEntity {
 
     private static final String PAYMENT_APPROVED_TOPIC = "payment.approved";
     private static final String ORDER_AGGREGATE_TYPE = "ORDER";
+    private static final String DELIVERY_COMPLETED_TOPIC = "delivery.completed";
+    private static final String DELIVERY_AGGREGATE_TYPE = "DELIVERY";
 
     // Outbox 이벤트 ID
     @Id
@@ -172,6 +174,22 @@ public class OutboxEvent extends BaseEntity {
             ORDER_AGGREGATE_TYPE,
             orderId,
             PAYMENT_APPROVED_TOPIC,
+            String.valueOf(orderId),
+            payload
+        );
+    }
+
+    public static OutboxEvent deliveryCompleted(
+        String eventId,
+        Long orderId,
+        String payload
+    ) {
+        return new OutboxEvent(
+            eventId,
+            OutboxEventType.DELIVERY_COMPLETED,
+            DELIVERY_AGGREGATE_TYPE,
+            orderId,
+            DELIVERY_COMPLETED_TOPIC,
             String.valueOf(orderId),
             payload
         );
