@@ -108,12 +108,12 @@ jobs:
           script: |
             sudo systemctl restart one-stop-dummy
             echo "헬스체크 대기 중..."
-            for i in $(seq 1 24); do
+            for i in $(seq 1 48); do
               if curl --max-time 5 -sf http://localhost:8080/actuator/health | grep -q '"status":"UP"'; then
                 echo "EC2 2 정상 기동 완료"
                 exit 0
               fi
-              echo "대기 중... ($i/24)"
+              echo "대기 중... ($i/48)"
               sleep 5
             done
             echo "EC2 2 헬스체크 실패"
