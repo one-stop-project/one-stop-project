@@ -43,22 +43,40 @@ public class SubscriptionBenefitService {
     }
 
     /**
+     * 무료 배송 대상 여부
+     * 할인 판단과 동일하게 status가 아닌 endAt 기준(isValid)으로 판단
+     */
+    public boolean isFreeShippingEligible(Long userId) {
+        Subscription subscription = subscriptionRepository
+            .findTopByUserIdAndStatusInOrderByCreatedAtDesc(
+                userId,
+                List.of(
+                    SubscriptionStatus.ACTIVE,
+                    SubscriptionStatus.CANCELLED
+                )
+            )
+            .orElse(null);
+
+        return subscription != null && isValid(subscription);
+    }
+
+
+    /**
      * 구독 혜택 가능 여부 판단
      */
     private boolean isValid(Subscription subscription) {
         SubscriptionStatus status = subscription.getStatus();
 
-        // 1. ACTIVE는 무조건 OK
         if (status == SubscriptionStatus.ACTIVE) {
             return true;
         }
 
-        // 2. CANCELLED는 endAt 기준으로 판단
+        // CANCELLED는 endAt 기준으로 판단
         if (status == SubscriptionStatus.CANCELLED) {
             return subscription.getEndAt().isAfter(LocalDateTime.now());
         }
 
-        // 3. EXPIRED는 무조건 제외
+        // EXPIRED는 무조건 제외
         return false;
     }
 }
