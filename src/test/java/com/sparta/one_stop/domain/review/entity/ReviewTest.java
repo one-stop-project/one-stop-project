@@ -3,6 +3,7 @@ package com.sparta.one_stop.domain.review.entity;
 import com.sparta.one_stop.domain.order.entity.OrderItem;
 import com.sparta.one_stop.domain.product.entity.Product;
 import com.sparta.one_stop.domain.user.entity.User;
+import com.sparta.one_stop.global.enums.review.ReviewStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -12,7 +13,7 @@ import static org.mockito.Mockito.mock;
 class ReviewTest {
 
     @Test
-    @DisplayName("Review 생성 성공")
+    @DisplayName("Review 생성 성공 - 초기 상태는 ACTIVE")
     void create_success() {
         // given
         OrderItem orderItem = mock(OrderItem.class);
@@ -34,6 +35,28 @@ class ReviewTest {
         assertThat(review.getUser()).isSameAs(user);
         assertThat(review.getRating()).isEqualTo(5);
         assertThat(review.getContent()).isEqualTo("정말 좋은 상품입니다");
+        assertThat(review.getStatus()).isEqualTo(ReviewStatus.ACTIVE); // 추가
+    }
+
+    @Test
+    @DisplayName("리뷰 삭제 - soft delete 후 DELETED 상태")
+    void delete_success() {
+        // given
+        Review review = Review.builder()
+            .orderItem(mock(OrderItem.class))
+            .product(mock(Product.class))
+            .user(mock(User.class))
+            .rating(5)
+            .content("정말 좋은 상품입니다")
+            .build();
+
+        assertThat(review.getStatus()).isEqualTo(ReviewStatus.ACTIVE);
+
+        // when
+        review.delete();
+
+        // then
+        assertThat(review.getStatus()).isEqualTo(ReviewStatus.DELETED);
     }
 
     @Test

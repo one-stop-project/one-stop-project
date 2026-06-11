@@ -1,7 +1,6 @@
 package com.sparta.one_stop.domain.review.entity;
 
 import com.sparta.one_stop.global.entity.BaseEntity;
-import com.sparta.one_stop.global.enums.review.ReviewImageStatus;
 import jakarta.persistence.*;
 import lombok.*;
 
@@ -26,10 +25,6 @@ public class ReviewImage extends BaseEntity {
     @Column(name = "display_order")
     private Integer displayOrder;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 20)
-    private ReviewImageStatus status;
-
     @Builder
     public ReviewImage(
         Review review,
@@ -39,10 +34,5 @@ public class ReviewImage extends BaseEntity {
         this.review = review;
         this.imageUrl = imageUrl;
         this.displayOrder = displayOrder;
-        this.status = ReviewImageStatus.ACTIVE;
-    }
-
-    public void delete() {
-        this.status = ReviewImageStatus.DELETED;
     }
 }

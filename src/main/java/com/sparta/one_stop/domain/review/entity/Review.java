@@ -4,6 +4,7 @@ import com.sparta.one_stop.domain.order.entity.OrderItem;
 import com.sparta.one_stop.domain.product.entity.Product;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.global.entity.BaseEntity;
+import com.sparta.one_stop.global.enums.review.ReviewStatus;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import jakarta.persistence.*;
@@ -50,6 +51,10 @@ public class Review extends BaseEntity {
     @Column(columnDefinition = "TEXT")
     private String content;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private ReviewStatus status;
+
     @OneToMany(mappedBy = "review", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<ReviewImage> images = new ArrayList<>();
 
@@ -66,11 +71,16 @@ public class Review extends BaseEntity {
         this.user = user;
         this.rating = rating;
         this.content = content;
+        this.status = ReviewStatus.ACTIVE;
     }
 
     public void update(int rating, String content) {
         this.rating = rating;
         this.content = content;
+    }
+
+    public void delete() {
+        this.status = ReviewStatus.DELETED;
     }
 
     public void addImage(ReviewImage image) {

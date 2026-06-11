@@ -13,6 +13,7 @@ import com.sparta.one_stop.domain.review.repository.ReviewImageRepository;
 import com.sparta.one_stop.domain.review.repository.ReviewRepository;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.global.enums.order.OrderItemStatus;
+import com.sparta.one_stop.global.enums.review.ReviewStatus;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.security.AuthUser;
 import org.junit.jupiter.api.DisplayName;
@@ -47,8 +48,6 @@ class ReviewServiceTest {
 
     @InjectMocks
     private ReviewService reviewService;
-
-    // 헬퍼 내 stub은 실패 케이스에서 일부가 호출되지 않을 수 있어 lenient() 사용
 
     private AuthUser authUser(Long userId) {
         AuthUser au = mock(AuthUser.class);
@@ -246,6 +245,8 @@ class ReviewServiceTest {
             lenient().when(product.getId()).thenReturn(10L);
             lenient().when(rv.getImages()).thenReturn(List.of());
             lenient().when(rv.getCreatedAt()).thenReturn(LocalDateTime.now());
+            // soft delete 되지 않은 상태
+            lenient().when(rv.getStatus()).thenReturn(ReviewStatus.ACTIVE);
             return rv;
         }
 
@@ -261,7 +262,7 @@ class ReviewServiceTest {
             UpdateReviewRequest req = mock(UpdateReviewRequest.class);
             when(req.getRating()).thenReturn(4);
             when(req.getContent()).thenReturn("수정된 리뷰 내용입니다");
-            when(req.getImageUrls()).thenReturn(null);
+            when(req.getImageUrls()).thenReturn(List.of()); // @NotNull이므로 빈 배열
 
             reviewService.updateReview(authUser(userId), reviewId, req);
 
@@ -296,6 +297,21 @@ class ReviewServiceTest {
 
             assertThatThrownBy(() ->
                 reviewService.updateReview(authUser(1L), 99L, mock(UpdateReviewRequest.class))
+            ).isInstanceOf(CustomException.class);
+        }
+
+        @Test
+        @DisplayName("실패 - 이미 삭제된 리뷰")
+        void fail_deletedReview() {
+            Long reviewId = 1L;
+            Long userId   = 1L;
+
+            Review rv = mock(Review.class);
+            when(rv.getStatus()).thenReturn(ReviewStatus.DELETED);
+            when(reviewRepository.findById(reviewId)).thenReturn(Optional.of(rv));
+
+            assertThatThrownBy(() ->
+                reviewService.updateReview(authUser(userId), reviewId, mock(UpdateReviewRequest.class))
             ).isInstanceOf(CustomException.class);
         }
 
@@ -355,11 +371,12 @@ class ReviewServiceTest {
             lenient().when(user.getId()).thenReturn(userId);
             lenient().when(rv.getProduct()).thenReturn(product);
             lenient().when(product.getId()).thenReturn(10L);
+            lenient().when(rv.getStatus()).thenReturn(ReviewStatus.ACTIVE);
             return rv;
         }
 
         @Test
-        @DisplayName("성공")
+        @DisplayName("성공 - soft delete 호출 확인")
         void success() {
             Long reviewId = 1L;
             Long userId   = 1L;
@@ -369,7 +386,23 @@ class ReviewServiceTest {
 
             reviewService.deleteReview(authUser(userId), reviewId);
 
-            verify(reviewRepository).delete(rv);
+            // hard delete가 아닌 soft delete 확인
+            verify(rv).delete();
+            verify(reviewRepository, never()).delete(any());
+        }
+
+        @Test
+        @DisplayName("실패 - 이미 삭제된 리뷰")
+        void fail_alreadyDeleted() {
+            Long reviewId = 1L;
+            Long userId   = 1L;
+
+            Review rv = mock(Review.class);
+            when(rv.getStatus()).thenReturn(ReviewStatus.DELETED);
+            when(reviewRepository.findById(reviewId)).thenReturn(Optional.of(rv));
+
+            assertThatThrownBy(() -> reviewService.deleteReview(authUser(userId), reviewId))
+                .isInstanceOf(CustomException.class);
         }
 
         @Test
@@ -403,7 +436,8 @@ class ReviewServiceTest {
         void success_empty() {
             Long     userId   = 1L;
             Pageable pageable = mock(Pageable.class);
-            when(reviewRepository.findAllByUser_Id(userId, pageable)).thenReturn(Page.empty());
+            when(reviewRepository.findAllByUser_IdAndStatus(userId, ReviewStatus.ACTIVE, pageable))
+                .thenReturn(Page.empty());
 
             Page<?> result = reviewService.getMyReviews(authUser(userId), pageable);
 
@@ -424,7 +458,7 @@ class ReviewServiceTest {
             lenient().when(rv.getContent()).thenReturn("좋아요");
             lenient().when(rv.getImages()).thenReturn(List.of());
 
-            when(reviewRepository.findAllByUser_Id(userId, pageable))
+            when(reviewRepository.findAllByUser_IdAndStatus(userId, ReviewStatus.ACTIVE, pageable))
                 .thenReturn(new PageImpl<>(List.of(rv)));
 
             Page<?> result = reviewService.getMyReviews(authUser(userId), pageable);
@@ -488,11 +522,12 @@ class ReviewServiceTest {
         void success_empty() {
             Long userId = 1L;
             when(orderItemRepository.findAllReviewableByUserId(userId)).thenReturn(List.of());
-            when(reviewRepository.findReviewedOrderItemIds(List.of())).thenReturn(List.of());
 
             var result = reviewService.getReviewable(authUser(userId));
 
             assertThat(result).isEmpty();
+            // 방어코드로 인해 findReviewedOrderItemIds 호출 자체가 없어야 함
+            verify(reviewRepository, never()).findReviewedOrderItemIds(anyList());
         }
 
         @Test

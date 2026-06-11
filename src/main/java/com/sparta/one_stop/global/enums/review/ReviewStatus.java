@@ -1,6 +1,6 @@
 package com.sparta.one_stop.global.enums.review;
 
-public enum ReviewImageStatus {
+public enum ReviewStatus {
     ACTIVE,
     DELETED
 }

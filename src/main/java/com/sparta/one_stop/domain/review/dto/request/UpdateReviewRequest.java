@@ -19,6 +19,7 @@ public class UpdateReviewRequest {
     @Size(min = 10, max = 1000)
     private String content;
 
+    @NotNull
     @Size(max = 5)
     private List<String> imageUrls;
 }

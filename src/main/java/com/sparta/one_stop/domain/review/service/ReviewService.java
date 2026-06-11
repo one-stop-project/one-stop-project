@@ -13,6 +13,7 @@ import com.sparta.one_stop.domain.review.event.ReviewSummaryRefreshEvent;
 import com.sparta.one_stop.domain.review.repository.ReviewImageRepository;
 import com.sparta.one_stop.domain.review.repository.ReviewRepository;
 import com.sparta.one_stop.global.enums.order.OrderItemStatus;
+import com.sparta.one_stop.global.enums.review.ReviewStatus;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import com.sparta.one_stop.global.security.AuthUser;
@@ -107,6 +108,10 @@ public class ReviewService {
         Review review = reviewRepository.findById(reviewId)
             .orElseThrow(() -> new CustomException(ErrorCode.REVIEW_005));
 
+        if (review.getStatus() == ReviewStatus.DELETED) {
+            throw new CustomException(ErrorCode.REVIEW_005);
+        }
+
         if (!review.getUser().getId().equals(authUser.userId())) {
             throw new CustomException(ErrorCode.REVIEW_006);
         }
@@ -120,17 +125,15 @@ public class ReviewService {
 
         reviewImageRepository.deleteAll(review.getImages());
 
-        if (request.getImageUrls() != null) {
-            int idx = 0;
-            for (String url : request.getImageUrls()) {
-                reviewImageRepository.save(
-                    ReviewImage.builder()
-                        .review(review)
-                        .imageUrl(url)
-                        .displayOrder(idx++)
-                        .build()
-                );
-            }
+        List<String> newImageUrls = request.getImageUrls();
+        for (int idx = 0; idx < newImageUrls.size(); idx++) {
+            reviewImageRepository.save(
+                ReviewImage.builder()
+                    .review(review)
+                    .imageUrl(newImageUrls.get(idx))
+                    .displayOrder(idx)
+                    .build()
+            );
         }
 
         try {
@@ -143,7 +146,7 @@ public class ReviewService {
     }
 
     /**
-     * 리뷰 삭제
+     * 리뷰 삭제 — soft delete
      */
     @Transactional
     public void deleteReview(AuthUser authUser, Long reviewId) {
@@ -151,12 +154,16 @@ public class ReviewService {
         Review review = reviewRepository.findById(reviewId)
             .orElseThrow(() -> new CustomException(ErrorCode.REVIEW_005));
 
+        if (review.getStatus() == ReviewStatus.DELETED) {
+            throw new CustomException(ErrorCode.REVIEW_005);
+        }
+
         if (!review.getUser().getId().equals(authUser.userId())) {
             throw new CustomException(ErrorCode.REVIEW_006);
         }
 
         Long productId = review.getProduct().getId();
-        reviewRepository.delete(review);
+        review.delete();
 
         try {
             eventPublisher.publishEvent(new ReviewSummaryRefreshEvent(productId));
@@ -169,7 +176,7 @@ public class ReviewService {
      * 내 리뷰 목록
      */
     public Page<ReviewResponse> getMyReviews(AuthUser authUser, Pageable pageable) {
-        return reviewRepository.findAllByUser_Id(authUser.userId(), pageable)
+        return reviewRepository.findAllByUser_IdAndStatus(authUser.userId(), ReviewStatus.ACTIVE, pageable)
             .map(this::toResponse);
     }
 
@@ -180,6 +187,10 @@ public class ReviewService {
 
         List<OrderItem> items =
             orderItemRepository.findAllReviewableByUserId(authUser.userId());
+
+        if (items.isEmpty()) {
+            return List.of();
+        }
 
         Set<Long> reviewedOrderItemIds =
             reviewRepository.findReviewedOrderItemIds(

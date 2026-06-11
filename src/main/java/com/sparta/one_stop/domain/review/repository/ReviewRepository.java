@@ -1,6 +1,7 @@
 package com.sparta.one_stop.domain.review.repository;
 
 import com.sparta.one_stop.domain.review.entity.Review;
+import com.sparta.one_stop.global.enums.review.ReviewStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -14,12 +15,14 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
 
     boolean existsByOrderItem_Id(Long orderItemId);
 
-    Optional<Review> findByIdAndUser_Id(Long reviewId, Long userId);
+    Optional<Review> findByIdAndUser_IdAndStatus(Long reviewId, Long userId, ReviewStatus status);
 
-    Page<Review> findAllByUser_Id(Long userId, Pageable pageable);
+    // 내 리뷰 목록: ACTIVE만 조회
+    Page<Review> findAllByUser_IdAndStatus(Long userId, ReviewStatus status, Pageable pageable);
 
     // 리뷰 작성 가능 목록 조회 시 사용
     // existsByOrderItem_Id() 반복 호출에 따른 N+1 문제 방지
+    // 재작성 불가: 삭제된 리뷰도 "이미 작성됨"으로 간주
     @Query("""
     select r.orderItem.id
     from Review r
