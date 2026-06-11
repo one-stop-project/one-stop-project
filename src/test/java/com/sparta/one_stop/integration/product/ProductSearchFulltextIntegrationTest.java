@@ -190,6 +190,31 @@ class ProductSearchFulltextIntegrationTest extends IntegrationTestSupport {
         assertThat(firstPage.getTotalPages()).isEqualTo(2);
     }
 
+    @Test
+    @DisplayName("ngram 부분 토큰 매칭 — 공백 없이 붙은 상품명도 중간 토큰으로 검색된다 (ngram 파서 동작 검증)")
+    void ngramPartialToken_matchesSubstringInName() {
+        // 공백 없는 합성어. ngram(2-gram)이면 '등산' 부분 토큰으로 매칭되지만,
+        // 일반 FULLTEXT 파서는 전체를 한 토큰으로 봐 매칭하지 못한다 → ngram이 실제로 동작한다는 직접 증거.
+        persistProduct(approvedSeller, "초경량등산스틱", "휴대용 스틱", ProductStatus.APPROVED);
+
+        Page<Product> page = productRepository.search(
+            keywordCond("등산"), PageRequest.of(0, 10));
+
+        assertThat(names(page)).containsExactly("초경량등산스틱");
+        assertThat(page.getTotalElements()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("ngram 토큰 크기(2) 미만 — 1글자 키워드는 토큰화되지 않아 결과가 없다")
+    void singleCharKeyword_belowNgramTokenSize_returnsEmpty() {
+        // ngram_token_size=2라 1글자 검색어는 인덱스 토큰이 되지 못해 BOOLEAN MODE 매칭이 0건이다.
+        Page<Product> page = productRepository.search(
+            keywordCond("의"), PageRequest.of(0, 10));
+
+        assertThat(page.getContent()).isEmpty();
+        assertThat(page.getTotalElements()).isZero();
+    }
+
     // ===== 헬퍼 =====
 
     // test 프로필에선 FulltextIndexInitializer(@Profile("!test"))가 안 도므로, 운영과 동일한 인덱스를 직접 보장한다.
