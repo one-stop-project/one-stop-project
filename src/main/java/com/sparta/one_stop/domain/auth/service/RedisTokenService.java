@@ -11,6 +11,10 @@ import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -63,7 +67,7 @@ public class RedisTokenService {
     public void saveRefreshToken(Long userId, String deviceId, String token, long expirySeconds) {
         String key = rtKey(userId, deviceId);
         try {
-            redisTemplate.opsForValue().set(key, token, expirySeconds, TimeUnit.SECONDS);
+            redisTemplate.opsForValue().set(key, hashToken(token), expirySeconds, TimeUnit.SECONDS);
         } catch (RedisConnectionFailureException | RedisSystemException e) {
             log.error("Redis 통신 장애 (RT 저장 실패) - Key: {}", key, e);
             throw new CustomException(ErrorCode.COMMON_008);
@@ -97,7 +101,7 @@ public class RedisTokenService {
             Long result = redisTemplate.execute(
                 ROTATE_RT,
                 List.of(key),
-                oldToken, newToken, String.valueOf(expirySeconds)
+                hashToken(oldToken), hashToken(newToken), String.valueOf(expirySeconds)
             );
             return result != null && result == 1L;
         } catch (RedisConnectionFailureException | RedisSystemException e) {
@@ -211,4 +215,29 @@ public class RedisTokenService {
     private String cutoffKey(Long userId) {
         return USER_TOKEN_CUTOFF_PREFIX + userId;
     }
+
+    /**
+     * RT를 SHA-256으로 단방향 해싱 (Hex 문자열)
+     *
+     * <p>RT는 이미 HMAC 서명된 고엔트로피 JWT라 무차별 대입/레인보우 테이블
+     * 위험이 없다. 따라서 비밀번호용 bcrypt(느린 해시)가 아니라 빠른 SHA-256으로
+     * 충분하다 — 매 refresh마다 호출되므로 성능도 중요.
+     *
+     * <p>목적: Redis가 유출돼도 저장된 해시값으로는 재발급(refresh)이 불가능.
+     * (JWT 서명 검증과는 별개의 방어선 — 서명은 "우리가 발급했나",
+     *  해시 저장은 "저장소 유출 시 재사용 차단")
+     */
+    private String hashToken(String token) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+
+            byte[] hash = digest.digest(token.getBytes(StandardCharsets.UTF_8));
+
+            return HexFormat.of().formatHex(hash);
+        } catch (NoSuchAlgorithmException e) {
+            // SHA-256은 JVM 표준 — 실질적으로 발생 불가
+            throw new IllegalStateException("SHA-256 알고리즘을 찾을 수 없습니다", e);
+        }
+    }
+
 }

@@ -36,7 +36,10 @@ public class PointService {
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     @Retryable(
-        retryFor = ObjectOptimisticLockingFailureException.class,
+        retryFor = {
+            ObjectOptimisticLockingFailureException.class,
+            org.springframework.dao.DataIntegrityViolationException.class  // 신규 유저 동시 첫 충전 시 user_id UNIQUE 위반 재시도
+        },
         maxAttempts = 3,
         backoff = @Backoff(delay = 50, multiplier = 2.0, maxDelay = 500)
     )
@@ -55,52 +58,39 @@ public class PointService {
         throw new CustomException(ErrorCode.POINT_005);
     }
 
+    @Recover
+    public PointChargeResponse recoverChargePointDive(
+        org.springframework.dao.DataIntegrityViolationException e,
+        Long userId, PointChargeRequest request) {
+
+        // DIVE 재시도도 모두 실패 — 재시도 사이 다른 트랜잭션이 지갑을 만들었어야 정상인데
+        // 여기까지 왔다면 일시적 충돌이 아닌 진짜 제약 위반
+        log.error("[POINT_CHARGE] 지갑 생성 충돌 재시도 3회 실패 — userId={}", userId, e);
+        throw new CustomException(ErrorCode.POINT_005);
+    }
+
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     //  사용 — 결제 흐름의 핵심 (충돌 빈번)
+    //  ★ 재시도는 결제(PaymentService) 레벨에서 수행한다.
+    //    이유: usePoint는 결제 트랜잭션에 합류(REQUIRED)해야 원자성이 유지된다.
+    //         (포인트만 차감되고 결제 실패하는 부분 커밋 방지)
+    //    낙관락 충돌 시 결제 트랜잭션 전체가 롤백되고 결제 레벨에서 재시도된다.
+    //    여기에 @Retryable을 두면 TX 안에서 재시도가 돌아 낙관락 예외가
+    //    커밋 시점에 터지므로 무용 — 그래서 제거함.
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    @Retryable(
-        retryFor = ObjectOptimisticLockingFailureException.class,
-        maxAttempts = 3,
-        backoff = @Backoff(delay = 50, multiplier = 2.0, maxDelay = 500)
-    )
     public void usePoint(Long userId, Order order, Integer usedPoint) {
         pointTxService.usePoint(userId, order, usedPoint);
     }
 
-    @Recover
-    public void recoverUsePoint(
-        ObjectOptimisticLockingFailureException e,
-        Long userId, Order order, Integer usedPoint) {
-
-        log.error("[POINT_USE] 낙관적 락 재시도 3회 모두 실패 — userId={}, orderId={}, amount={}",
-            userId, order != null ? order.getId() : null, usedPoint, e);
-
-        throw new CustomException(ErrorCode.POINT_005);
-    }
-
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     //  환불 — 주문 취소 (관리자/사용자 동시 호출 가능)
+    //  ★ 재시도는 주문 취소(OrderCommandService) 레벨에서 수행한다.
+    //    환불도 주문 취소 트랜잭션에 합류해야 원자성이 유지되므로 동일 정책.
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    @Retryable(
-        retryFor = ObjectOptimisticLockingFailureException.class,
-        maxAttempts = 3,
-        backoff = @Backoff(delay = 50, multiplier = 2.0, maxDelay = 500)
-    )
     public Integer refundPointByOrder(Order order) {
         return pointTxService.refundPointByOrder(order);
-    }
-
-    @Recover
-    public Integer recoverRefundPointByOrder(
-        ObjectOptimisticLockingFailureException e,
-        Order order) {
-
-        log.error("[POINT_REFUND] 낙관적 락 재시도 3회 모두 실패 — orderId={}",
-            order != null ? order.getId() : null, e);
-
-        throw new CustomException(ErrorCode.POINT_005);
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

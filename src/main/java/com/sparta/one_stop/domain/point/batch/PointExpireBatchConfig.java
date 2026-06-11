@@ -14,8 +14,8 @@ import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.batch.core.step.builder.StepBuilder;
 import org.springframework.batch.item.ItemProcessor;
 import org.springframework.batch.item.ItemWriter;
-import org.springframework.batch.item.database.JpaCursorItemReader;
-import org.springframework.batch.item.database.builder.JpaCursorItemReaderBuilder;
+import org.springframework.batch.item.database.JpaPagingItemReader;
+import org.springframework.batch.item.database.builder.JpaPagingItemReaderBuilder;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -88,7 +88,7 @@ public class PointExpireBatchConfig {
     public Step pointExpireStep(
         JobRepository jobRepository,
         PlatformTransactionManager transactionManager,
-        JpaCursorItemReader<PointHistory> reader,
+        JpaPagingItemReader<PointHistory> reader,
         ItemProcessor<PointHistory, ExpireResult> processor,
         ItemWriter<ExpireResult> writer) {
 
@@ -108,17 +108,30 @@ public class PointExpireBatchConfig {
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-    //  Reader — Cursor 기반 (스트리밍)
+    //  Reader — Paging 기반 (청크 트랜잭션 EM 합류)
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     /**
-     * 만료 대상 조회 — 결과를 메모리에 다 안 올리고 커서로 스트리밍
+     * 만료 대상 조회 — 페이지 단위 조회
      *
-     * <p>JpaCursorItemReader는 결과를 한 건씩 fetch (메모리 안정)
+     * <p><b>왜 Cursor가 아니라 Paging인가 (★ 무한 만료 버그 수정)</b>
+     * <pre>
+     *   JpaCursorItemReader는 자체 EntityManager로 커서를 열어,
+     *   조회된 엔티티가 청크 트랜잭션의 영속성 컨텍스트에 들어가지 않는다.
+     *   → Processor에서 point.decreaseBalance() / expireRemainingAmount()로
+     *     상태를 바꿔도 더티 체킹이 안 일어나 flush 누락
+     *   → balance/remainingAmount가 DB에 반영 안 됨
+     *   → 매 실행 같은 행을 다시 만료 처리 (EXPIRE 이력 중복 + balance 영구 손상)
+     *
+     *   JpaPagingItemReader는 페이지마다 청크 트랜잭션의 EM을 통해 조회하므로
+     *   조회 엔티티가 영속 상태 → 변경이 더티 체킹으로 flush된다.
+     *
+     *   pageSize는 chunkSize와 동일하게 맞춰 페이지-청크 경계를 일치시킨다.
+     * </pre>
      */
     @Bean
     @StepScope
-    public JpaCursorItemReader<PointHistory> expireTargetReader(
+    public JpaPagingItemReader<PointHistory> expireTargetReader(
         @Value("#{jobParameters['expireDate']}") String expireDateStr) {
 
         LocalDate expireDate = (expireDateStr != null && !expireDateStr.isBlank())
@@ -129,9 +142,10 @@ public class PointExpireBatchConfig {
         params.put("types", List.of(PointHistoryType.CHARGE, PointHistoryType.EARN, PointHistoryType.REFUND));
         params.put("expireDate", expireDate);
 
-        return new JpaCursorItemReaderBuilder<PointHistory>()
+        return new JpaPagingItemReaderBuilder<PointHistory>()
             .name("expireTargetReader")
             .entityManagerFactory(entityManagerFactory)
+            .pageSize(CHUNK_SIZE)  // 청크 크기와 일치 → 페이지-청크 경계 정렬
             .queryString("""
                         SELECT ph FROM PointHistory ph
                          WHERE ph.type IN :types
@@ -141,7 +155,7 @@ public class PointExpireBatchConfig {
                          ORDER BY ph.id ASC
                         """)
             .parameterValues(params)
-            .saveState(false)  // 단순 만료라 재시작 상태 불필요
+            .saveState(false)
             .build();
     }
 

@@ -38,6 +38,36 @@ public class DecrCouponIssueStrategy implements CouponIssueStrategy {
 
     private static final String COUPON_STOCK_KEY_PREFIX = "coupon:stock:";
     private static final String COUPON_ISSUED_USERS_KEY_PREFIX = "coupon:issued-users:";
+    private static final Long REDIS_STOCK_KEY_NOT_FOUND = -3L;
+    private static final Long REDIS_STOCK_KEY_NO_TTL = -4L;
+
+    /**
+     * Redis stock key 안전 차감 스크립트
+     * 목적:
+     * - stock key가 TTL 만료로 사라진 상태에서 DECR이 실행되면 Redis가 TTL 없는 -1 key를 새로 생성할 수 있다.
+     * - 이 경우 이후 setIfAbsent가 실패하여 쿠폰이 영구 소진 상태처럼 남을 수 있다.
+     * 반환값:
+     * - -3: stock key가 존재하지 않음
+     * - -4: stock key는 존재하지만 TTL이 없음
+     * - 그 외: DECR 수행 결과
+     */
+    private static final DefaultRedisScript<Long> SAFE_DECR_SCRIPT =
+        new DefaultRedisScript<>(
+            """
+            if redis.call('EXISTS', KEYS[1]) == 0 then
+                return -3
+            end
+
+            local ttl = redis.call('PTTL', KEYS[1])
+
+            if ttl == -1 then
+                return -4
+            end
+
+            return redis.call('DECR', KEYS[1])
+            """,
+            Long.class
+        );
 
     private final CouponRepository couponRepository;
     private final UserCouponRepository userCouponRepository;
@@ -52,7 +82,8 @@ public class DecrCouponIssueStrategy implements CouponIssueStrategy {
     /**
      * Redis DECR 기반 선착순 쿠폰 발급
      * - Redis Set 기준 중복 발급 1차 검증
-     * - Redis DECR 명령으로 쿠폰 잔여 수량 원자적 차감
+     * - Lua Script로 Redis stock key 존재 여부와 TTL을 검증한 뒤 DECR 수행
+     * - stock key가 없거나 TTL이 없는 비정상 key이면 DB 기준으로 재초기화 후 1회 재시도
      * - DB Unique 제약 기반 중복 발급 2차 검증
      * - DB 처리 중 예외 발생 시 Redis 수량 및 발급 사용자 Set 보상
      * - 트랜잭션 커밋 실패로 롤백되는 경우 afterCompletion 콜백에서 Redis 보상
@@ -95,12 +126,19 @@ public class DecrCouponIssueStrategy implements CouponIssueStrategy {
         ));
 
         try {
-            Long remainingStock = decreaseRedisStock(stockKey);
+            Long remainingStock = decreaseRedisStockSafely(
+                couponId,
+                stockKey,
+                now
+            );
 
             if (remainingStock == null) {
                 throw new CustomException(ErrorCode.COUPON_012);
             }
 
+            // SAFE_DECR_SCRIPT의 -3, -4 비정상 key 결과는 decreaseRedisStockSafely()에서 먼저 처리된다.
+            // 이 분기는 정상 TTL key에서 DECR 결과가 음수가 된 경우, 즉 Redis 기준 수량 소진 상황이다.
+            // DECR로 감소된 값을 다시 1 증가시켜 0으로 복구한 뒤 수량 소진 예외를 반환한다.
             if (remainingStock < 0) {
                 increaseRedisStock(stockKey);
                 throw new CustomException(ErrorCode.COUPON_001);
@@ -214,8 +252,10 @@ public class DecrCouponIssueStrategy implements CouponIssueStrategy {
     }
 
     private Long decreaseRedisStock(String stockKey) {
-        return redisTemplate.opsForValue()
-            .decrement(stockKey);
+        return redisTemplate.execute(
+            SAFE_DECR_SCRIPT,
+            List.of(stockKey)
+        );
     }
 
     private void increaseRedisStock(String stockKey) {
@@ -364,6 +404,81 @@ public class DecrCouponIssueStrategy implements CouponIssueStrategy {
         }
 
         throw new CustomException(ErrorCode.COUPON_001);
+    }
+
+    private Long decreaseRedisStockSafely(
+        Long couponId,
+        String stockKey,
+        LocalDateTime now
+    ) {
+        Long remainingStock = decreaseRedisStock(stockKey);
+
+        if (isInvalidStockKeyResult(remainingStock)) {
+            reinitializeCouponStock(
+                couponId,
+                stockKey,
+                now
+            );
+
+            remainingStock = decreaseRedisStock(stockKey);
+        }
+
+        if (isInvalidStockKeyResult(remainingStock)) {
+            throw new CustomException(ErrorCode.COUPON_012);
+        }
+
+        return remainingStock;
+    }
+
+    private boolean isInvalidStockKeyResult(Long result) {
+        return REDIS_STOCK_KEY_NOT_FOUND.equals(result)
+            || REDIS_STOCK_KEY_NO_TTL.equals(result);
+    }
+
+    /**
+
+     * Redis stock key 재초기화
+     * 재초기화가 필요한 경우:
+     * - stock key가 TTL 만료로 사라진 경우
+     * - stock key가 존재하지만 TTL이 없는 비정상 key로 남은 경우
+     * 처리 방식:
+     * - DB에서 최신 Coupon을 다시 조회하여 잔여 수량을 계산한다.
+     * - 기존 stock key를 삭제한 뒤 DB 기준 잔여 수량과 TTL로 다시 초기화한다.
+     * 주의:
+     * - TTL 없는 0 또는 음수 key가 남아 있을 수 있으므로 delete 후 setIfAbsent를 수행한다.
+     * - 재초기화 후에도 안전 DECR이 실패하면 쿠폰 발급 처리 장애로 본다.
+     */
+    private void reinitializeCouponStock(
+        Long couponId,
+        String stockKey,
+        LocalDateTime now
+    ) {
+        Coupon latestCoupon = couponRepository.findById(couponId)
+            .orElseThrow(() -> new CustomException(ErrorCode.COUPON_004));
+
+        latestCoupon.validateIssuable(now);
+
+        Integer remainingQuantity =
+            latestCoupon.getTotalQuantity() - latestCoupon.getIssuedQuantity();
+
+        if (remainingQuantity <= 0) {
+            throw new CustomException(ErrorCode.COUPON_001);
+        }
+
+        Duration ttl = Duration.between(now, latestCoupon.getExpiredAt());
+
+        if (ttl.isNegative() || ttl.isZero()) {
+            throw new CustomException(ErrorCode.COUPON_007);
+        }
+
+        redisTemplate.delete(stockKey);
+
+        redisTemplate.opsForValue()
+            .setIfAbsent(
+                stockKey,
+                String.valueOf(remainingQuantity),
+                ttl
+            );
     }
 
 }

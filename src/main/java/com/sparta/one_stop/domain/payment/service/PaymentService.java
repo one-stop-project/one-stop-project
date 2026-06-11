@@ -11,6 +11,7 @@ import com.sparta.one_stop.domain.payment.dto.response.ApprovePaymentResponse;
 import com.sparta.one_stop.domain.payment.entity.Payment;
 import com.sparta.one_stop.domain.payment.event.PaymentApprovedEventPayload;
 import com.sparta.one_stop.domain.payment.repository.PaymentRepository;
+import com.sparta.one_stop.domain.point.payment.PaymentPointGuard;
 import com.sparta.one_stop.domain.point.service.PointService;
 import com.sparta.one_stop.global.enums.order.OrderStatus;
 import com.sparta.one_stop.global.enums.payment.PaymentMethod;
@@ -33,6 +34,7 @@ public class PaymentService {
     private final OrderRepository orderRepository;
     private final PaymentRepository paymentRepository;
     private final PointService pointService;
+    private final PaymentPointGuard paymentPointGuard;
     private final CouponCommandService couponCommandService;
     private final DeliveryService deliveryService;
     private final OutboxEventService outboxEventService;
@@ -66,6 +68,11 @@ public class PaymentService {
             order,
             request.amount()
         );
+
+        // 결제 승인 직전 무결성 재검증 (DB 직접 조작 감지 + 주문~결제 사이 잔액 변동 감지)
+        // REQUIRES_NEW 별도 트랜잭션이라 결제 트랜잭션과 격리됨
+        paymentPointGuard.validateBeforePaymentApproval(
+            userId, order.getUsedPoint(), order.getId());
 
         // 결제 승인 전 포인트 실제 차감
         pointService.usePoint(
