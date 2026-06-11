@@ -11,6 +11,7 @@ import com.sparta.one_stop.domain.payment.dto.response.ApprovePaymentResponse;
 import com.sparta.one_stop.domain.payment.entity.Payment;
 import com.sparta.one_stop.domain.payment.event.PaymentApprovedEventPayload;
 import com.sparta.one_stop.domain.payment.repository.PaymentRepository;
+import com.sparta.one_stop.domain.point.payment.PaymentPointGuard;
 import com.sparta.one_stop.domain.point.service.PointService;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.global.enums.order.OrderStatus;
@@ -53,6 +54,9 @@ class PaymentServiceTest {
 
     @Mock
     private PointService pointService;
+
+    @Mock
+    private PaymentPointGuard paymentPointGuard;
 
     @Mock
     private CouponCommandService couponCommandService;
