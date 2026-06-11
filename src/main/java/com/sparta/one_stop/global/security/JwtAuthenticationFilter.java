@@ -58,6 +58,11 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 throw new CustomException(ErrorCode.AUTH_009, "보안 정책에 의해 만료된 토큰입니다. 다시 로그인해주세요.");
             }
 
+            // tokenVersion 검증 (DB 영속 계층 — Redis 죽어도 무효화 유지)
+            // 발급 시점 ver와 현재 ver(캐시)가 다르면 거부
+            int tokenVersion = jwtTokenProvider.getTokenVersion(claims);
+            authQueryService.verifyTokenVersion(userId, tokenVersion);
+
             // 활성 상태 검증(정지/탈퇴 실시간 반영)
             authQueryService.verifyActiveByCache(userId);
 

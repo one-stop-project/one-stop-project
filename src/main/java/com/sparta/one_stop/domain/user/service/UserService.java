@@ -88,6 +88,10 @@ public class UserService {
         String newEncoded = passwordEncoder.encode(request.newPassword());
         user.changePassword(newEncoded);
 
+        // tokenVersion++ (DB 영속 무효화) + 캐시 갱신
+        user.increaseTokenVersion();
+        userStatusCacheService.evictTokenVersion(userId);
+
         // 4. 이벤트 발행 — DB 커밋 후 Listener가 Redis 정리
         eventPublisher.publishEvent(new AllDevicesLogoutEvent(userId, "PASSWORD_CHANGED"));
 
@@ -109,8 +113,12 @@ public class UserService {
         // Soft Delete (status = WITHDRAWN)
         user.withdraw();
 
-        // 캐시 무효화
+        // tokenVersion++ (DB 영속 무효화)
+        user.increaseTokenVersion();
+
+        // 캐시 무효화 (status + tokenVersion)
         userStatusCacheService.evict(userId);
+        userStatusCacheService.evictTokenVersion(userId);
 
         // 이벤트 발행 — Redis 정리 + 알림 발송 등
         eventPublisher.publishEvent(new AllDevicesLogoutEvent(userId, "WITHDRAWN"));
@@ -124,8 +132,12 @@ public class UserService {
         User user = findUserById(userId);
         user.suspend();
 
-        // 캐시 무효화
+        // tokenVersion++ (DB 영속 무효화)
+        user.increaseTokenVersion();
+
+        // 캐시 무효화 (status + tokenVersion)
         userStatusCacheService.evict(userId);
+        userStatusCacheService.evictTokenVersion(userId);
 
         //정지된 사용자 전체 세션 무효화
         eventPublisher.publishEvent(new AllDevicesLogoutEvent(userId, "SUSPENDED"));

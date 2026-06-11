@@ -71,6 +71,19 @@ public class User extends BaseEntity {
     @Column(name = "last_login_at")
     private java.time.LocalDateTime lastLoginAt;
 
+    /**
+     * 토큰 버전 — user-level 토큰 무효화의 영속 기준점
+     *
+     * 비밀번호 변경/탈퇴/정지 등 "확실한 무효화" 시 1 증가시킨다.
+     * 발급 시점의 version이 박힌 AccessToken은, 이 값이 오르면
+     * 검증 단계에서 version 불일치로 거부된다.
+     *
+     * iat-cutoff(Redis, 휘발)와 계층 관계: Redis가 죽어도 DB에 남아
+     * 무효화가 유지되는 영속 계층.
+     */
+    @Column(name = "token_version", nullable = false)
+    private int tokenVersion = 0;
+
     @Builder
     private User(String email, String password, String name,
                  String phone, String address, UserRole role) {
@@ -81,6 +94,16 @@ public class User extends BaseEntity {
         this.address = address;
         this.role = role;
         this.status = UserStatus.ACTIVE;
+        this.tokenVersion = 0;
+    }
+
+
+    /**
+     * 토큰 버전 증가 — 기존 발급 AccessToken 전부 무효화
+     * (비밀번호 변경/탈퇴/정지/보안 침해 시 호출)
+     */
+    public void increaseTokenVersion() {
+        this.tokenVersion++;
     }
 
     // domain별 필요 로직

@@ -13,13 +13,13 @@ import com.sparta.one_stop.domain.user.repository.UserRepository;
 import com.sparta.one_stop.global.enums.user.UserStatus;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
-import org.springframework.cache.annotation.CachePut;
-import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.CachePut;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 
 @Slf4j
@@ -38,6 +38,30 @@ public class UserStatusCacheService {
 
         return userRepository.findStatusById(userId)
             .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_001));
+    }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    //  토큰 버전 — user-level 무효화 (DB 영속 계층)
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    /**
+     * 현재 토큰 버전 조회 (캐시 우선) — 매 요청 필터에서 호출되므로 캐싱 필수
+     *
+     * <p>status 캐시와 별도 키로 둬 인증 핵심 경로(verifyActiveByCache)에
+     * 영향을 주지 않는다.
+     */
+    @Cacheable(value = "userTokenVersion", key = "#userId", cacheManager = "redisCacheManager")
+    @Transactional(readOnly = true)
+    public int getTokenVersion(Long userId) {
+        log.debug("[UserTokenVersion] DB조회 (캐시미스) : userId = {}", userId);
+        return userRepository.findTokenVersionById(userId)
+            .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_001));
+    }
+
+    /** 토큰 버전 캐시 무효화 — version++ 후 호출 */
+    @CacheEvict(value = "userTokenVersion", key = "#userId", cacheManager = "redisCacheManager")
+    public void evictTokenVersion(Long userId) {
+        log.info("[UserTokenVersion] 캐시 무효화: userId={}", userId);
     }
 
 

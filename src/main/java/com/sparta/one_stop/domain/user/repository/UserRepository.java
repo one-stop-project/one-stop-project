@@ -35,6 +35,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
     @Query("SELECT u.status FROM User u WHERE u.id = :userId")
     Optional<UserStatus> findStatusById(@Param("userId") Long userId);
 
+    @Query("SELECT u.tokenVersion FROM User u WHERE u.id = :userId")
+    Optional<Integer> findTokenVersionById(@Param("userId") Long userId);
+
+
     // ── 관리자/통계 ──
     long countByStatus(UserStatus status);
 

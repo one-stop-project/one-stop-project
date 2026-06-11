@@ -112,8 +112,19 @@ public class AuthQueryService {
     // 활성 상태만 검증
     // 사용시점 : 1. JwtAuthenticationFilter, 2. User 전체 필요 없는 경우
     // 효과 : DB조회X (캐시 히트 시)
-
     public void verifyActiveByCache(Long userId) {
         userStatusCacheService.verifyActive(userId);
+    }
+
+
+    // 토큰 버전 검증 - 발급 시점 ver가 현재 ver보다 낮으면 무효화된 토큰
+    // 비번 변경/탈퇴/정지 시 version++되므로, 그 이전 발급된 AT는 tokenVersion < 현재 version이 되어 거부
+    public void verifyTokenVersion(Long userId, int tokenVersion) {
+        int currentVersion = userStatusCacheService.getTokenVersion(userId);
+        if (tokenVersion < currentVersion) {
+            throw new com.sparta.one_stop.global.exception.CustomException(
+                com.sparta.one_stop.global.exception.ErrorCode.AUTH_009,
+                "보안 정책에 의해 만료된 토큰입니다. 다시 로그인해주세요.");
+        }
     }
 }
