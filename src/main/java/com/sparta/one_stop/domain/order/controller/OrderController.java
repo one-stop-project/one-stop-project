@@ -58,6 +58,26 @@ public class OrderController {
             .body(ApiResponse.success(response));
     }
 
+    // Redis 분산 락 주문 생성 (테스트용)
+    @PostMapping("/redis-lock")
+    public ResponseEntity<ApiResponse<CreateOrderResponse>> createOrderRedisLock(
+        @AuthenticationPrincipal AuthUser authUser,
+        @Valid @RequestBody CreateOrderRequest request
+    ) {
+        rateLimitService.tryConsume(
+            RateLimitPolicy.ORDER_CREATE_PER_USER,
+            String.valueOf(authUser.userId())
+        );
+
+        CreateOrderResponse response = orderService.createOrderWithRedisLock(
+            authUser.userId(),
+            request
+        );
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+            .body(ApiResponse.success(response));
+    }
+
     // 내 주문 목록
     @GetMapping
     public ResponseEntity<ApiResponse<OrderPageResponse>> getMyOrders(

@@ -34,6 +34,19 @@ public interface ProductItemRepository extends JpaRepository<ProductItem, Long> 
         @Param("itemIds") List<Long> itemIds
     );
 
+    // Redis 분산 락 테스트용 — DB 비관적 락 없이 조회 (락은 상위 레이어에서 처리)
+    @Query("""
+        select pi
+        from ProductItem pi
+        join fetch pi.product p
+        join fetch p.seller
+        where pi.id in :itemIds
+        order by pi.id asc
+    """)
+    List<ProductItem> findAllByIdInNoLock(
+        @Param("itemIds") List<Long> itemIds
+    );
+
     // 비로그인 장바구니 조회용
     // Redis에는 itemId와 quantity만 저장되므로, 응답 생성에 필요한 ProductItem/Product 정보를 한 번에 조회
     // ProductItem → Product를 fetch join하여 DTO 변환 시 N+1 문제 방지

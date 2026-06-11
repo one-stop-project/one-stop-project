@@ -12,7 +12,6 @@ import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
@@ -28,10 +27,6 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 @Slf4j
 @Component("luaCouponIssueStrategy")
-@ConditionalOnProperty(
-    name = "coupon.issue.strategy",
-    havingValue = "lua"
-)
 @RequiredArgsConstructor
 public class LuaCouponIssueStrategy implements CouponIssueStrategy {
 

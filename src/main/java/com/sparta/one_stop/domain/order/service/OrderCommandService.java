@@ -274,6 +274,123 @@ public class OrderCommandService {
     }
 
     /**
+     * Redis 분산 락 테스트용 주문 생성 — DB 비관적 락 미사용
+     * 락 획득은 OrderService.createOrderWithRedisLock()에서 처리한다.
+     */
+    public CreateOrderResponse createOrderNoLock(
+        Long userId,
+        CreateOrderRequest request
+    ) {
+        User user = userRepository.findById(userId)
+            .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_001));
+
+        validateOrderType(request);
+
+        List<OrderTarget> orderTargets = prepareOrderTargetsNoLock(userId, request);
+
+        List<OrderTarget> sortedTargets = orderTargets.stream()
+            .sorted(Comparator.comparing(target -> target.productItem().getId()))
+            .toList();
+
+        Long totalPrice = calculateTotalPrice(sortedTargets);
+
+        Long subscriptionDiscount =
+            subscriptionBenefitService.calculateDiscount(userId, totalPrice);
+
+        subscriptionDiscount = subscriptionDiscount != null ? subscriptionDiscount : 0L;
+
+        validateMinimumOrderPrice(totalPrice);
+
+        CouponDiscountResult couponDiscountResult = couponQueryService.validateAndCalculateDiscount(
+            userId,
+            request.userCouponId(),
+            totalPrice
+        );
+
+        Long discountPrice = couponDiscountResult.discountPrice();
+        Integer usedPoint = request.usedPoint() != null ? request.usedPoint() : 0;
+
+        validateDiscountAndPointLimit(totalPrice, discountPrice, usedPoint, subscriptionDiscount);
+
+        if (usedPoint > 0) {
+            paymentPointGuard.validateOnOrderCreation(userId, usedPoint);
+        }
+
+        Long deliveryFee = DEFAULT_DELIVERY_FEE;
+        Long finalPrice = totalPrice - discountPrice - usedPoint - subscriptionDiscount + deliveryFee;
+
+        validateFinalPrice(finalPrice);
+
+        Order order = new Order(
+            user,
+            couponDiscountResult.userCoupon(),
+            totalPrice,
+            discountPrice,
+            finalPrice,
+            usedPoint,
+            subscriptionDiscount,
+            request.receiverName(),
+            request.receiverPhone(),
+            request.receiverAddress(),
+            request.deliveryMessage(),
+            deliveryFee,
+            request.orderType()
+        );
+
+        Order savedOrder = orderRepository.save(order);
+
+        List<OrderItem> orderItems = sortedTargets.stream()
+            .map(target -> createOrderItem(savedOrder, target))
+            .toList();
+
+        orderItemRepository.saveAll(orderItems);
+
+        if (request.orderType() == OrderType.CART) {
+            cartItemRepository.deleteAllById(request.cartItemIds());
+        }
+
+        List<CreateOrderItemResponse> orderItemResponses = orderItems.stream()
+            .map(CreateOrderItemResponse::of)
+            .toList();
+
+        return CreateOrderResponse.of(savedOrder, orderItemResponses);
+    }
+
+    private List<OrderTarget> prepareOrderTargetsNoLock(Long userId, CreateOrderRequest request) {
+        if (request.orderType() == OrderType.DIRECT) {
+            return getDirectOrderTargetsNoLock(request.items());
+        }
+        return getCartOrderTargets(userId, request.cartItemIds());
+    }
+
+    private List<OrderTarget> getDirectOrderTargetsNoLock(List<CreateOrderItemRequest> items) {
+        List<Long> itemIds = items.stream()
+            .map(CreateOrderItemRequest::itemId)
+            .distinct()
+            .sorted()
+            .toList();
+
+        Map<Long, ProductItem> productItemMap = productItemRepository.findAllByIdInNoLock(itemIds)
+            .stream()
+            .collect(Collectors.toMap(ProductItem::getId, Function.identity()));
+
+        return items.stream()
+            .map(itemRequest -> {
+                ProductItem productItem = productItemMap.get(itemRequest.itemId());
+
+                if (productItem == null) {
+                    throw new CustomException(ErrorCode.PRODUCT_001);
+                }
+
+                validateOrderableProductItem(productItem, itemRequest.quantity());
+                productItem.decreaseStock(itemRequest.quantity());
+
+                return new OrderTarget(productItem, itemRequest.quantity());
+            })
+            .toList();
+    }
+
+    /**
      * 주문 유형 검증
      * - DIRECT: items 필수
      * - CART: cartItemIds 필수
