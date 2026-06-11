@@ -43,6 +43,7 @@ const USER_PW  = __ENV.USER_PW || 'Test1234!';
 const VU_COUNT = 1000;
 
 export const options = {
+  setupTimeout: '5m',
   scenarios: {
     // Phase 1: DB 비관적 락 (2분)
     db_pessimistic_lock: {

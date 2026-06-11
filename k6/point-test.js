@@ -2,7 +2,7 @@
  * 포인트 낙관적 락(@Version) + @Retryable 정합성 테스트
  *
  * 시나리오:
- *   - testbuyer1 계정 1개를 500 VU가 동시에 100pt 차감 시도
+ *   - testbuyer1 계정 1개를 1000 VU가 동시에 100pt 차감 시도
  *   - @Version 충돌 시 @Retryable 최대 5회 재시도
  *   - 최종 잔액이 = 초기잔액 - (성공건수 × 100) 이면 정합성 OK
  *   - 잔액이 음수거나 성공건수 > 초기잔액/100 이면 정합성 깨진 것
@@ -34,10 +34,10 @@ const TEST_EMAIL   = 'testbuyer1@test.com';
 const USER_PW      = __ENV.USER_PW   || 'Test1234!';
 const DEDUCT_AMOUNT = 100;
 
-// 500 VU 동시 차감 — 배포 서버 스케일
-const VU_COUNT = 500;
-// 초기 잔액: 500 VU × 100pt × 2배 여유 = 100,000pt
-const INITIAL_CHARGE = 100_000;
+// 1000 VU 동시 차감 — 배포 서버 스케일
+const VU_COUNT = 1000;
+// 초기 잔액: 1000 VU × 100pt × 2배 여유 = 200,000pt
+const INITIAL_CHARGE = 200_000;
 
 export const options = {
   scenarios: {

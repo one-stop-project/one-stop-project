@@ -53,6 +53,7 @@ const USER_PW         = __ENV.USER_PW         || 'Test1234!';
 const VU_COUNT = 1000;
 
 export const options = {
+  setupTimeout: '5m',
   scenarios: {
     // Phase 1: Redis DECR 전략
     coupon_decr: {
