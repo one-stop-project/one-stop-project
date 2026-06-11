@@ -26,6 +26,7 @@ import com.sparta.one_stop.global.enums.order.OrderStatus;
 import com.sparta.one_stop.global.enums.order.OrderType;
 import com.sparta.one_stop.global.enums.payment.PaymentStatus;
 import com.sparta.one_stop.global.enums.user.UserRole;
+import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.integration.IntegrationTestSupport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -35,15 +36,21 @@ import org.springframework.beans.factory.annotation.Autowired;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * Cart → Order → Payment 핵심 구매 플로우 통합 테스트
+ *
  * 1차 커밋: 로그인 사용자 구매 성공 플로우
  * - 로그인 사용자가 상품을 장바구니에 담는다.
  * - 장바구니 상품을 기반으로 주문을 생성한다.
  * - 주문 생성 후 장바구니 상품이 삭제되는지 확인한다.
  * - 주문 생성 시 상품 재고가 차감되는지 확인한다.
  * - 결제 승인 후 주문/결제 상태가 정상적으로 변경되는지 확인한다.
+ *
+ * 2차 커밋: 대표 실패 플로우
+ * - 주문 생성 시점에 재고가 부족하면 주문 생성에 실패하는지 확인한다.
+ * - 이미 결제 완료된 주문에 대해 중복 결제 승인을 방지하는지 확인한다.
  */
 class CartOrderPaymentIntegrationTest extends IntegrationTestSupport {
 
@@ -201,6 +208,140 @@ class CartOrderPaymentIntegrationTest extends IntegrationTestSupport {
         Payment payment = paymentRepository.findByOrderId(orderResponse.orderId()).orElseThrow();
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PAID);
         assertThat(payment.getApprovedAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("장바구니 상품 주문 생성 시 재고가 부족하면 주문 생성에 실패한다")
+    void createOrderFromCart_fail_whenStockIsInsufficient() {
+        // given: 구매자가 재고 100개인 상품 옵션 2개를 장바구니에 담는다.
+        cartService.addCartItem(
+            buyer.getId(),
+            new AddCartItemRequest(productItem.getId(), 2)
+        );
+
+        List<CartItem> cartItems = cartItemRepository.findAll().stream()
+            .filter(ci -> ci.getCart().getUser().getId().equals(buyer.getId()))
+            .toList();
+
+        assertThat(cartItems).hasSize(1);
+        assertThat(cartItems.get(0).getQuantity()).isEqualTo(2);
+
+        Long cartItemId = cartItems.get(0).getId();
+
+        // given: 장바구니에 담은 이후, 주문 생성 전에 상품 재고가 1개로 감소한 상황을 만든다.
+        // 이 테스트는 장바구니 담기 실패가 아니라 주문 생성 시점의 재고 부족을 검증한다.
+        productItem.updateForAdjustment(
+            null,
+            null,
+            1L
+        );
+
+        productItemRepository.saveAndFlush(productItem);
+
+        CreateOrderRequest orderRequest = new CreateOrderRequest(
+            OrderType.CART,
+            null,
+            List.of(cartItemId),
+            "홍길동",
+            "010-1234-5678",
+            "서울시 강남구",
+            "문 앞에 놓아주세요",
+            null,
+            0
+        );
+
+        // when & then: 주문 수량 2개가 현재 재고 1개를 초과하므로 주문 생성에 실패한다.
+        assertThatThrownBy(() -> orderCommandService.createOrder(
+            buyer.getId(),
+            orderRequest
+        ))
+            .isInstanceOf(CustomException.class)
+            .hasMessage("재고가 부족합니다");
+
+        // then: 주문 생성 실패 시 장바구니 상품은 삭제되지 않는다.
+        assertThat(cartItemRepository.findById(cartItemId)).isPresent();
+
+        // then: 실패한 주문 생성으로 인해 재고가 추가 차감되지 않는다.
+        ProductItem updatedItem = productItemRepository.findById(productItem.getId())
+            .orElseThrow();
+
+        assertThat(updatedItem.getStock()).isEqualTo(1L);
+    }
+
+    @Test
+    @DisplayName("이미 결제 완료된 주문은 중복 결제 승인할 수 없다")
+    void approvePayment_fail_whenOrderAlreadyPaid() {
+        // given: 구매자가 상품 옵션 2개를 장바구니에 담는다.
+        cartService.addCartItem(
+            buyer.getId(),
+            new AddCartItemRequest(productItem.getId(), 2)
+        );
+
+        List<CartItem> cartItems = cartItemRepository.findAll().stream()
+            .filter(ci -> ci.getCart().getUser().getId().equals(buyer.getId()))
+            .toList();
+
+        assertThat(cartItems).hasSize(1);
+
+        Long cartItemId = cartItems.get(0).getId();
+
+        CreateOrderRequest orderRequest = new CreateOrderRequest(
+            OrderType.CART,
+            null,
+            List.of(cartItemId),
+            "홍길동",
+            "010-1234-5678",
+            "서울시 강남구",
+            "문 앞에 놓아주세요",
+            null,
+            0
+        );
+
+        CreateOrderResponse orderResponse = orderCommandService.createOrder(
+            buyer.getId(),
+            orderRequest
+        );
+
+        ApprovePaymentRequest paymentRequest = new ApprovePaymentRequest(
+            orderResponse.orderId(),
+            orderResponse.finalPrice()
+        );
+
+        // given: 첫 번째 결제 승인은 정상 처리된다.
+        ApprovePaymentResponse firstPaymentResponse = paymentService.approvePayment(
+            buyer.getId(),
+            paymentRequest
+        );
+
+        assertThat(firstPaymentResponse).isNotNull();
+
+        Order paidOrder = orderRepository.findById(orderResponse.orderId())
+            .orElseThrow();
+
+        assertThat(paidOrder.getStatus()).isEqualTo(OrderStatus.PAID);
+
+        Payment paidPayment = paymentRepository.findByOrderId(orderResponse.orderId())
+            .orElseThrow();
+
+        assertThat(paidPayment.getStatus()).isEqualTo(PaymentStatus.PAID);
+        assertThat(paidPayment.getApprovedAt()).isNotNull();
+
+        // when & then: 이미 PAID 상태인 주문에 대해 다시 결제를 승인하면 실패한다.
+        assertThatThrownBy(() -> paymentService.approvePayment(
+            buyer.getId(),
+            paymentRequest
+        ))
+            .isInstanceOf(CustomException.class);
+
+        // then: 중복 결제 시도 이후에도 주문과 결제 상태는 PAID로 유지된다.
+        Order afterDuplicatePaymentOrder = orderRepository.findById(orderResponse.orderId())
+            .orElseThrow();
+
+        Payment afterDuplicatePayment = paymentRepository.findByOrderId(orderResponse.orderId())
+            .orElseThrow();
+
+        assertThat(afterDuplicatePaymentOrder.getStatus()).isEqualTo(OrderStatus.PAID);
+        assertThat(afterDuplicatePayment.getStatus()).isEqualTo(PaymentStatus.PAID);
     }
 
 }
