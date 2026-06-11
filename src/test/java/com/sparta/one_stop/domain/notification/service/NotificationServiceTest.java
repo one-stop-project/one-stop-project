@@ -1,10 +1,10 @@
 package com.sparta.one_stop.domain.notification.service;
 
-import com.sparta.one_stop.domain.notification.dto.response.NotificationSseResponse;
+import com.sparta.one_stop.domain.notification.dto.pubsub.NotificationPubSubMessage;
 import com.sparta.one_stop.domain.notification.entity.Notification;
+import com.sparta.one_stop.domain.notification.publisher.NotificationRedisPublisher;
 import com.sparta.one_stop.domain.notification.repository.NotificationRepository;
 import com.sparta.one_stop.global.enums.notification.NotificationType;
-import com.sparta.one_stop.global.sse.SseConnectionManager;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -15,9 +15,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -30,13 +28,13 @@ class NotificationServiceTest {
     private NotificationRepository notificationRepository;
 
     @Mock
-    private SseConnectionManager sseConnectionManager;
+    private NotificationRedisPublisher notificationRedisPublisher;
 
     @InjectMocks
     private NotificationService notificationService;
 
     @Test
-    @DisplayName("notify 성공 - 알림 저장 후 SSE 전송을 호출한다")
+    @DisplayName("notify 성공 - 알림 저장 후 Redis Pub/Sub 발행을 요청한다")
     void notify_success() {
         // given
         Long userId = 1L;
@@ -75,14 +73,22 @@ class NotificationServiceTest {
         assertThat(savedNotification.getMessage()).isEqualTo(message);
         assertThat(savedNotification.isRead()).isFalse();
 
-        verify(sseConnectionManager).send(
-            eq(userId),
-            any(NotificationSseResponse.class)
-        );
+        ArgumentCaptor<NotificationPubSubMessage> messageCaptor =
+            ArgumentCaptor.forClass(NotificationPubSubMessage.class);
+
+        verify(notificationRedisPublisher).publish(messageCaptor.capture());
+
+        NotificationPubSubMessage publishedMessage = messageCaptor.getValue();
+
+        assertThat(publishedMessage.userId()).isEqualTo(userId);
+        assertThat(publishedMessage.eventId()).isEqualTo(eventId);
+        assertThat(publishedMessage.type()).isEqualTo(type);
+        assertThat(publishedMessage.title()).isEqualTo(title);
+        assertThat(publishedMessage.message()).isEqualTo(message);
     }
 
     @Test
-    @DisplayName("notify 스킵 - eventId 중복 시 저장하지 않는다")
+    @DisplayName("notify 스킵 - eventId 중복 시 저장하지 않고 Redis Pub/Sub 발행도 하지 않는다")
     void notify_skip_whenEventIdAlreadyExists() {
         // given
         String eventId = "payment-approved-1";
@@ -101,14 +107,11 @@ class NotificationServiceTest {
 
         // then
         verify(notificationRepository, never()).saveAndFlush(any(Notification.class));
-        verify(sseConnectionManager, never()).send(
-            any(),
-            any()
-        );
+        verify(notificationRedisPublisher, never()).publish(any(NotificationPubSubMessage.class));
     }
 
     @Test
-    @DisplayName("notify 스킵 - DataIntegrityViolationException 발생 시 SSE 전송하지 않는다")
+    @DisplayName("notify 스킵 - DataIntegrityViolationException 발생 시 Redis Pub/Sub 발행하지 않는다")
     void notify_skip_whenDataIntegrityViolationExceptionOccurs() {
         // given
         String eventId = "payment-approved-1";
@@ -131,76 +134,7 @@ class NotificationServiceTest {
 
         // then
         verify(notificationRepository).saveAndFlush(any(Notification.class));
-        verify(sseConnectionManager, never()).send(
-            any(),
-            any()
-        );
-    }
-
-    @Test
-    @DisplayName("notify 성공 - SSE 전송 실패해도 예외를 전파하지 않는다")
-    void notify_success_whenSseSendFails() {
-        // given
-        Long userId = 1L;
-        String eventId = "payment-approved-1";
-
-        when(notificationRepository.existsByEventId(eventId))
-            .thenReturn(false);
-
-        when(notificationRepository.saveAndFlush(any(Notification.class)))
-            .thenAnswer(invocation -> invocation.getArgument(0));
-
-        doThrow(new RuntimeException("sse error"))
-            .when(sseConnectionManager)
-            .send(
-                any(),
-                any()
-            );
-
-        // when & then
-        assertThatCode(() -> notificationService.notify(
-            userId,
-            eventId,
-            NotificationType.PAYMENT_APPROVED,
-            "결제 완료",
-            "주문 #1 결제가 완료되었습니다."
-        )).doesNotThrowAnyException();
-
-        verify(notificationRepository).saveAndFlush(any(Notification.class));
-        verify(sseConnectionManager).send(
-            eq(userId),
-            any(NotificationSseResponse.class)
-        );
-    }
-
-    @Test
-    @DisplayName("notify 성공 - SSE 연결이 없어도 알림 저장은 성공한다")
-    void notify_success_whenSseConnectionDoesNotExist() {
-        // given
-        Long userId = 1L;
-        String eventId = "payment-approved-1";
-
-        when(notificationRepository.existsByEventId(eventId))
-            .thenReturn(false);
-
-        when(notificationRepository.saveAndFlush(any(Notification.class)))
-            .thenAnswer(invocation -> invocation.getArgument(0));
-
-        // when
-        notificationService.notify(
-            userId,
-            eventId,
-            NotificationType.PAYMENT_APPROVED,
-            "결제 완료",
-            "주문 #1 결제가 완료되었습니다."
-        );
-
-        // then
-        verify(notificationRepository).saveAndFlush(any(Notification.class));
-        verify(sseConnectionManager).send(
-            eq(userId),
-            any(NotificationSseResponse.class)
-        );
+        verify(notificationRedisPublisher, never()).publish(any(NotificationPubSubMessage.class));
     }
 
 }
