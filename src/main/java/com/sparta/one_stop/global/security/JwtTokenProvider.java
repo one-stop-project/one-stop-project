@@ -64,7 +64,7 @@ public class JwtTokenProvider {
      * Payload: userId + role (email 등 PII 제거)
      * JTI(고유 ID)포함
      */
-    public String createAccessToken(Long userId, UserRole role) {
+    public String createAccessToken(Long userId, UserRole role, int tokenVersion) {
         Date now = new Date();
         Date expire = new Date(now.getTime() + accessTokenExpiry.toMillis());
 
@@ -72,10 +72,20 @@ public class JwtTokenProvider {
             .id(UUID.randomUUID().toString())            // JTI
             .subject(String.valueOf(userId))             // userId
             .claim("role", role.name())            // role
+            .claim("ver", tokenVersion)                  // tokenVersion (user-level 무효화)
             .issuedAt(now)
             .expiration(expire)
             .signWith(secretKey, Jwts.SIG.HS256)         //  알고리즘 명시
             .compact();
+    }
+
+    /**
+     * 토큰 버전(ver) 추출 — user-level 무효화 검증용
+     * @return ver claim, 없으면 0 (구 토큰 호환)
+     */
+    public int getTokenVersion(Claims claims) {
+        Integer ver = claims.get("ver", Integer.class);
+        return ver != null ? ver : 0;
     }
 
     /**
@@ -122,7 +132,7 @@ public class JwtTokenProvider {
         try {
             return UserRole.valueOf(claims.get("role", String.class));
         } catch (IllegalArgumentException | NullPointerException e) {
-            // [개선 9] Enum 매칭 실패 시 500 에러가 나지 않도록 커스텀 예외로 변환
+            // Enum 매칭 실패 시 500 에러가 나지 않도록 커스텀 예외로 변환
             throw new CustomException(ErrorCode.AUTH_010, "유효하지 않은 권한 정보입니다.");
         }
     }
