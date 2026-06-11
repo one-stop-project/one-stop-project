@@ -1,12 +1,16 @@
 /**
- * DB 비관적 락 vs Redis 분산 락 — 대용량 부하 비교 테스트
+ * DB 비관적 락 vs Redis 분산 락 — 1000 VU 부하 비교 테스트 (배포 서버)
  *
- * 변경 전제:
- *   ORDER_CREATE_PER_USER: 10→500/60s (임시 상향, 테스트 후 원복)
+ * 변경 전제 (테스트 후 원복 필수):
+ *   DEVICE_REGISTER_PER_IP: 10 → 1000
+ *   LOGIN_PER_IP:           20 → 1000
+ *   ORDER_CREATE_PER_USER:  10 → 500
  *
- * 실행 전 준비:
- *   UPDATE product_item SET stock = 5000 WHERE item_id = 1;
- *   Redis ratelimit 키 전체 플러시
+ * 실행 전 DB 준비:
+ *   SOURCE k6/seed-users.sql;          -- testbuyer1~50
+ *   SOURCE k6/seed-users-1000.sql;     -- testbuyer51~1000
+ *   UPDATE product_item SET stock = 50000 WHERE item_id = {ITEM_ID};
+ *   -- Redis rate limit 키 전체 플러시 (선택)
  *
  * 실행:
  *   k6 run k6/concurrency-test.js -e ITEM_ID=1 --summary-export=k6/concurrency-result.json
@@ -14,7 +18,7 @@
  * 비교 포인트:
  *   - avg / p(95) / p(99) 응답시간
  *   - 락 타임아웃(409 ORDER_013) 발생 수
- *   - 재고 정합성: 5000 - stock = db_orders
+ *   - 재고 정합성: 50000 - stock = db_orders 수
  */
 
 import http from 'k6/http';
@@ -30,13 +34,13 @@ const redisLockSuccess  = new Counter('redis_lock_success');
 const redisLockTimeout  = new Counter('redis_lock_timeout'); // 409 ORDER_013
 const redisLockFail     = new Counter('redis_lock_other_fail');
 
-const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
+const BASE_URL = __ENV.BASE_URL || 'http://54.116.46.196';
 const ITEM_ID  = Number(__ENV.ITEM_ID || '1');
 if (isNaN(ITEM_ID) || ITEM_ID <= 0) { throw new Error(`유효하지 않은 ITEM_ID: ${__ENV.ITEM_ID}`); }
 const USER_PW  = __ENV.USER_PW || 'Test1234!';
 
-// DEVICE_REGISTER_PER_IP: 10/600s — 9개 고정
-const VU_COUNT = 9;
+// 1000 VU — DEVICE_REGISTER_PER_IP, LOGIN_PER_IP 임시 상향 전제
+const VU_COUNT = 1000;
 
 export const options = {
   scenarios: {
@@ -50,7 +54,7 @@ export const options = {
       tags: { lock_type: 'pessimistic' },
     },
     // Phase 2: Redis 분산 락 (2분)
-    // 70s gap (2m + 70s = 3m10s): ORDER_CREATE_PER_USER 60s 윈도우 만료 보장
+    // 70s gap: ORDER_CREATE_PER_USER 60s 윈도우 만료 보장
     redis_distributed_lock: {
       executor: 'constant-vus',
       vus: VU_COUNT,
@@ -61,8 +65,8 @@ export const options = {
     },
   },
   thresholds: {
-    db_lock_duration:    ['p(95)<1000'],
-    redis_lock_duration: ['p(95)<1000'],
+    db_lock_duration:    ['p(95)<3000'],
+    redis_lock_duration: ['p(95)<3000'],
   },
 };
 
@@ -70,14 +74,14 @@ const JSON_HEADERS = { 'Content-Type': 'application/json' };
 
 export function setup() {
   const tokens = [];
+  // LOGIN_PER_IP=1000/60s, DEVICE_REGISTER_PER_IP=1000/600s 상향으로 sleep 불필요
   for (let i = 1; i <= VU_COUNT; i++) {
     const res = http.post(`${BASE_URL}/api/auth/login`,
       JSON.stringify({ email: `testbuyer${i}@test.com`, password: USER_PW }),
       { headers: JSON_HEADERS });
     const token = JSON.parse(res.body)?.data?.accessToken;
-    if (!token) throw new Error(`testbuyer${i} 토큰 발급 실패`);
+    if (!token) throw new Error(`testbuyer${i} 토큰 발급 실패 (status=${res.status})`);
     tokens.push(token);
-    sleep(3.5);
   }
   return { tokens };
 }
@@ -88,7 +92,7 @@ const ORDER_PAYLOAD = JSON.stringify({
   receiverName: 'K6 락비교',
   receiverPhone: '010-0000-0000',
   receiverAddress: '서울시 강남구 테스트로 1',
-  deliveryMessage: 'K6 대용량 락 비교',
+  deliveryMessage: 'K6 1000VU 락 비교',
   usedPoint: 0,
 });
 
