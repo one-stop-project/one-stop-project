@@ -1,7 +1,6 @@
 package com.sparta.one_stop.domain.point.audit;
 
 import com.sparta.one_stop.global.audit.AdminAuditLog;
-import com.sparta.one_stop.global.audit.AdminAuditLogRepository;
 import com.sparta.one_stop.global.security.AuthUser;
 import com.sparta.one_stop.global.util.ClientIpExtractor;
 import jakarta.servlet.http.HttpServletRequest;
@@ -11,7 +10,6 @@ import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.annotation.AfterReturning;
 import org.aspectj.lang.annotation.AfterThrowing;
 import org.aspectj.lang.annotation.Aspect;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -40,7 +38,7 @@ public class PointAuditAspect {
     private static final int MAX_USER_AGENT_LENGTH = 255;
     private static final int MAX_METHOD_NAME_LENGTH = 200;
     private static final int MAX_CLIENT_IP_LENGTH = 45;  // ★ 추가 — IPv6 호환
-    private final AdminAuditLogRepository auditRepository;
+    private final PointAuditWriter pointAuditWriter;
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     //  성공 케이스 — PointService에 실제 존재하는 메서드만 가리킴
@@ -49,21 +47,18 @@ public class PointAuditAspect {
     @AfterReturning(
         pointcut = "execution(* com.sparta.one_stop.domain.point.service.PointService.chargePoint(..))",
         returning = "result")
-    @Async
     public void auditCharge(JoinPoint jp, Object result) {
         record("POINT_CHARGE", jp, "SUCCESS", null);
     }
 
     @AfterReturning(
         pointcut = "execution(* com.sparta.one_stop.domain.point.service.PointService.usePoint(..))")
-    @Async
     public void auditUse(JoinPoint jp) {
         record("POINT_USE", jp, "SUCCESS", null);
     }
 
     @AfterReturning(
         pointcut = "execution(* com.sparta.one_stop.domain.point.service.PointService.refundPointByOrder(..))")
-    @Async
     public void auditRefund(JoinPoint jp) {
         record("POINT_REFUND", jp, "SUCCESS", null);
     }
@@ -75,7 +70,6 @@ public class PointAuditAspect {
     @AfterThrowing(
         pointcut = "execution(* com.sparta.one_stop.domain.point.service.PointService.*(..))",
         throwing = "ex")
-    @Async
     public void auditFailure(JoinPoint jp, Throwable ex) {
         String methodName = jp.getSignature().getName();
         String action = METHOD_TO_ACTION.getOrDefault(methodName, DEFAULT_ACTION);
@@ -108,7 +102,7 @@ public class PointAuditAspect {
                 .occurredAt(LocalDateTime.now())
                 .build();
 
-            auditRepository.save(auditLog);
+            pointAuditWriter.persist(auditLog);
         } catch (Exception e) {
             log.error("[AUDIT_ASPECT] 감사 로그 기록 실패 — action={}, result={}, cause={}",
                 action, result, e.getMessage(), e);

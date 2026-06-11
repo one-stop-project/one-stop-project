@@ -25,6 +25,7 @@ import com.sparta.one_stop.domain.order.repository.OrderItemRepository;
 import com.sparta.one_stop.domain.order.repository.OrderRepository;
 import com.sparta.one_stop.domain.payment.entity.Payment;
 import com.sparta.one_stop.domain.payment.repository.PaymentRepository;
+import com.sparta.one_stop.domain.point.payment.PaymentPointGuard;
 import com.sparta.one_stop.domain.point.service.PointService;
 import com.sparta.one_stop.domain.product.entity.ProductItem;
 import com.sparta.one_stop.domain.product.repository.ProductItemRepository;
@@ -66,6 +67,7 @@ public class OrderCommandService {
     private final DeliveryHistoryRepository deliveryHistoryRepository;
     private final PaymentRepository paymentRepository;
     private final PointService pointService;
+    private final PaymentPointGuard paymentPointGuard;
     private final CouponQueryService couponQueryService;
     private final CouponCommandService couponCommandService;
     private final SubscriptionBenefitService subscriptionBenefitService;
@@ -125,6 +127,10 @@ public class OrderCommandService {
             usedPoint,
             subscriptionDiscount
         );
+
+        if (usedPoint > 0) {
+            paymentPointGuard.validateOnOrderCreation(userId, usedPoint);
+        }
 
         Long deliveryFee = DEFAULT_DELIVERY_FEE;
         Long finalPrice = totalPrice - discountPrice - usedPoint - subscriptionDiscount + deliveryFee;

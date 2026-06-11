@@ -7,7 +7,13 @@ import com.sparta.one_stop.domain.order.dto.response.CreateOrderResponse;
 import com.sparta.one_stop.domain.order.dto.response.OrderDetailResponse;
 import com.sparta.one_stop.domain.order.dto.response.OrderPageResponse;
 import com.sparta.one_stop.global.enums.order.OrderStatus;
+import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Recover;
+import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -61,6 +67,11 @@ public class OrderService {
     }
 
     // 주문 취소
+    @Retryable(
+        retryFor = org.springframework.orm.ObjectOptimisticLockingFailureException.class,
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 50, multiplier = 2.0, maxDelay = 500)
+    )
     public CancelOrderResponse cancelOrder(
         Long userId,
         Long orderId,
@@ -72,4 +83,13 @@ public class OrderService {
             request
         );
     }
+
+    @Recover
+    public CancelOrderResponse recoverCancelOrder(
+        ObjectOptimisticLockingFailureException e,
+        Long userId, Long orderId, CancelOrderRequest request) {
+        throw new CustomException(ErrorCode.POINT_005);
+    }
+
+
 }
