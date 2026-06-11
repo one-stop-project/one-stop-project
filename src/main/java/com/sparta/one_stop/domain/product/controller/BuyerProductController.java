@@ -3,7 +3,7 @@ package com.sparta.one_stop.domain.product.controller;
 import com.sparta.one_stop.domain.product.dto.response.CacheableProductList;
 import com.sparta.one_stop.domain.product.dto.response.PopularKeywordResponse;
 import com.sparta.one_stop.domain.product.dto.response.PopularProductResponse;
-import com.sparta.one_stop.domain.product.dto.response.ProductDetailResponse;
+import com.sparta.one_stop.domain.product.dto.response.BuyerProductDetailResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductSummaryResponse;
 import com.sparta.one_stop.domain.product.service.BuyerProductService;
 import com.sparta.one_stop.domain.product.service.PopularKeywordService;
@@ -142,12 +142,12 @@ public class BuyerProductController {
     // 응답은 캐시(productDetail 10분), 조회수는 캐시와 무관하게 매 요청마다 카운트
     @Operation(summary = "상품 단건 상세 조회")
     @GetMapping("/{productId}")
-    public ResponseEntity<ApiResponse<ProductDetailResponse>> getDetail(
+    public ResponseEntity<ApiResponse<BuyerProductDetailResponse>> getDetail(
         @PathVariable Long productId,
         @AuthenticationPrincipal AuthUser authUser
     ) {
         Long userId = authUser != null ? authUser.userId() : null;
-        ProductDetailResponse response = buyerProductService.getDetail(productId);
+        BuyerProductDetailResponse response = buyerProductService.getDetail(productId);
         buyerProductService.recordView(productId, userId);
         return ResponseEntity.ok(ApiResponse.success(response));
     }

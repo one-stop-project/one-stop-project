@@ -1,7 +1,7 @@
 package com.sparta.one_stop.domain.product.service;
 
 import com.sparta.one_stop.domain.product.dto.response.CacheableProductList;
-import com.sparta.one_stop.domain.product.dto.response.ProductDetailResponse;
+import com.sparta.one_stop.domain.product.dto.response.BuyerProductDetailResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductSummaryResponse;
 import com.sparta.one_stop.domain.product.entity.Product;
 import com.sparta.one_stop.domain.product.repository.ProductRepository;
@@ -123,9 +123,9 @@ public class BuyerProductService {
     // 단건 응답만 캐시 (10분)
     // 조회수는 캐시 hit이어도 매번 세야 해서 컨트롤러에서 따로 호출
     @Cacheable(value = "productDetail", key = "#productId", cacheManager = "redisCacheManager")
-    public ProductDetailResponse getDetail(Long productId) {
+    public BuyerProductDetailResponse getDetail(Long productId) {
         Product product = findApprovedProduct(productId);
-        return ProductDetailResponse.from(product);
+        return BuyerProductDetailResponse.from(product);
     }
 
     // 조회수 카운트 — 단건 조회 성공 후 컨트롤러에서 호출
