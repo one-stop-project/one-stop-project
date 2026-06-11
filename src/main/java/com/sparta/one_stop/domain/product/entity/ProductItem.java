@@ -125,6 +125,11 @@ public class ProductItem extends BaseEntity {
         return this.status.isOnSale();
     }
 
+    // 재고 0 = 품절(구매자 화면 "일시 품절" 표시용). status는 ON_SALE 유지
+    public boolean isSoldOut() {
+        return this.stock == null || this.stock <= 0;
+    }
+
     // 옵션 정보 요약
     public String getOptionSummary() {
 

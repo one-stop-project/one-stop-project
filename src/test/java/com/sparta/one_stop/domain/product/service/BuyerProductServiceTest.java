@@ -12,7 +12,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 
 import com.sparta.one_stop.domain.product.dto.response.CacheableProductList;
-import com.sparta.one_stop.domain.product.dto.response.ProductDetailResponse;
+import com.sparta.one_stop.domain.product.dto.response.BuyerProductDetailResponse;
+import com.sparta.one_stop.domain.product.dto.response.BuyerProductItemResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductSummaryResponse;
 import com.sparta.one_stop.domain.product.entity.Category;
 import com.sparta.one_stop.domain.product.entity.Product;
@@ -377,9 +378,27 @@ class BuyerProductServiceTest {
             given(productRepository.findWithCollectionsById(PRODUCT_ID))
                 .willReturn(Optional.of(product));
 
-            ProductDetailResponse response = buyerProductService.getDetail(PRODUCT_ID);
+            BuyerProductDetailResponse response = buyerProductService.getDetail(PRODUCT_ID);
 
             assertThat(response).isNotNull();
+        }
+
+        @Test
+        @DisplayName("구매자 응답은 재고 수량 대신 품절 여부(soldOut)만 노출한다")
+        void hidesStock_exposesSoldOutOnly() {
+            Product product = approvedProductWithOnSaleItem(PRODUCT_ID);  // 재고 10 아이템 1개
+            ProductItem soldOutItem = ProductItem.builder().price(2000L).stock(0L).build();
+            ReflectionTestUtils.setField(soldOutItem, "status", ProductItemStatus.ON_SALE);
+            product.getProductItems().add(soldOutItem);
+            given(productRepository.findWithCollectionsById(PRODUCT_ID))
+                .willReturn(Optional.of(product));
+
+            BuyerProductDetailResponse response = buyerProductService.getDetail(PRODUCT_ID);
+
+            // 재고 10 → soldOut=false, 재고 0 → soldOut=true (재고 수량 자체는 구매자 응답 타입에 없음)
+            assertThat(response.getItems())
+                .extracting(BuyerProductItemResponse::isSoldOut)
+                .containsExactlyInAnyOrder(false, true);
         }
     }
 
