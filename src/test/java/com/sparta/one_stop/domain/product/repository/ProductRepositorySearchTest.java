@@ -34,7 +34,8 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 
 // 상품 검색 QueryDSL 동적 쿼리 통합 테스트 (실제 H2 실행)
-// FULLTEXT(MATCH AGAINST) 키워드 경로는 H2 미지원이라 여기서 제외 — MySQL 수동 검증 대상.
+// FULLTEXT(MATCH AGAINST) 키워드 경로는 H2 미지원이라 여기서 제외하고,
+// 실제 MySQL + ngram 기준은 ProductSearchFulltextIntegrationTest(Testcontainers)에서 검증한다.
 // 여기서는 키워드 없는 동적 쿼리 로직(정렬/카테고리/가격필터/ON_SALE 의미/페이징)을 검증한다.
 // JPA 슬라이스 — @Scheduled 백그라운드 빈을 안 띄워서 전역 통계 카운터가 오염되지 않음
 // (N+1 검증의 쿼리 수가 백그라운드 쿼리에 밀려 흔들리던 문제 제거). H2(MODE=MySQL) test 프로필 그대로 사용.
