@@ -21,6 +21,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Map;
+
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/users/me/points")
@@ -68,6 +70,16 @@ public class PointController {
         return ResponseEntity.ok(
             ApiResponse.success(response)
         );
+    }
+
+    // 낙관적 락 동시성 테스트용 직접 차감 (테스트 후 제거)
+    @PostMapping("/test/deduct")
+    public ResponseEntity<ApiResponse<Map<String, Integer>>> deductForTest(
+        @AuthenticationPrincipal AuthUser authUser,
+        @RequestParam Integer amount
+    ) {
+        Integer balance = pointService.deductPointForTest(authUser.userId(), amount);
+        return ResponseEntity.ok(ApiResponse.success(Map.of("balance", balance)));
     }
 
 }

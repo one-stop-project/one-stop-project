@@ -83,6 +83,23 @@ public class PointService {
         pointTxService.usePoint(userId, order, usedPoint);
     }
 
+    // 낙관적 락 동시성 테스트용 직접 차감 (테스트 후 제거)
+    @Retryable(
+        retryFor = ObjectOptimisticLockingFailureException.class,
+        maxAttempts = 5,
+        backoff = @Backoff(delay = 30, multiplier = 2.0, maxDelay = 300)
+    )
+    public Integer deductPointForTest(Long userId, Integer amount) {
+        return pointTxService.deductPointForTest(userId, amount);
+    }
+
+    @Recover
+    public Integer recoverDeductForTest(ObjectOptimisticLockingFailureException e,
+        Long userId, Integer amount) {
+        log.error("[POINT_TEST] 낙관적 락 재시도 5회 실패 — userId={}, amount={}", userId, amount, e);
+        throw new CustomException(ErrorCode.POINT_005);
+    }
+
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     //  환불 — 주문 취소 (관리자/사용자 동시 호출 가능)
     //  ★ 재시도는 주문 취소(OrderCommandService) 레벨에서 수행한다.

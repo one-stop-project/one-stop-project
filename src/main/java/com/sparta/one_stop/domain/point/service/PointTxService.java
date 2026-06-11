@@ -150,6 +150,29 @@ public class PointTxService {
     }
 
     /**
+     * 낙관적 락 동시성 테스트용 포인트 직접 차감
+     * - 결제 흐름 없이 balance만 차감 (테스트 후 제거)
+     * - @Version 충돌 시 상위 레이어(PointService)의 @Retryable에서 재시도
+     */
+    @Transactional
+    public Integer deductPointForTest(Long userId, Integer amount) {
+        if (amount == null || amount <= 0) {
+            throw new CustomException(ErrorCode.POINT_003, "차감 금액은 양수여야 합니다: " + amount);
+        }
+
+        Point point = pointRepository.findByUserId(userId)
+            .orElseThrow(() -> new CustomException(ErrorCode.POINT_001));
+
+        if (point.getBalance() < amount) {
+            throw new CustomException(ErrorCode.POINT_002,
+                String.format("포인트 부족: balance=%d, requested=%d", point.getBalance(), amount));
+        }
+
+        point.decreaseBalance(amount);
+        return point.getBalance();
+    }
+
+    /**
      * 포인트 사용 / 차감
      * - 결제 승인 시 호출
      * - usedPoint가 0이면 차감하지 않음
