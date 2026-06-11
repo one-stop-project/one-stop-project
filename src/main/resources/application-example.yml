@@ -105,8 +105,13 @@ app:
     # 허용할 프론트엔드 Origin을 입력하세요 (로컬: http://localhost:8080, 배포: 실제 도메인)
     allowed-origins: "http://localhost:8080"
   image:
-    bucket: ${S3_BUCKET_NAME}
+    # 배포(!local) 프로필 — S3 저장. 기본값을 빈 값으로 둬야 로컬(local) 프로필이 S3 env 없이 기동 가능
+    # (배포에서 미설정이면 S3Client 빈 생성 시점에 즉시 실패)
+    bucket: ${S3_BUCKET_NAME:}
     region: ${AWS_REGION:ap-northeast-2}
+    # 로컬(local) 프로필 — 로컬 파일 저장. 미설정 시 기본값(local-dir=./uploads/images, url-prefix=/images) 사용
+    # local-dir: ./uploads/images
+    # url-prefix: /images
   security:
     csp:
       # 로컬 개발 환경에서는 Swagger UI 렌더링을 위해 아래 정책을 그대로 사용하세요.
