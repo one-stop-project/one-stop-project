@@ -30,19 +30,17 @@ public class SubscriptionExpirationSchedulerService {
     public void processExpiration() {
 
         LocalDateTime now = LocalDateTime.now();
-        int page = 0;
         while (true) {
             List<Subscription> subscriptions =
                 subscriptionRepository.findAllByStatusAndEndAtBefore(
                     SubscriptionStatus.CANCELLED,
                     now,
-                    PageRequest.of(page, CHUNK_SIZE, Sort.by("id").ascending())
+                    PageRequest.of(0, CHUNK_SIZE, Sort.by("id").ascending())
                 );
             if (subscriptions.isEmpty()) {
                 break;
             }
             processSubscriptions(subscriptions);
-            page++;
         }
     }
 
