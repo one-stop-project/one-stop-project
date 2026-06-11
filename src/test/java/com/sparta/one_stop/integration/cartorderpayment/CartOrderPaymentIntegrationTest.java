@@ -27,6 +27,7 @@ import com.sparta.one_stop.domain.user.repository.UserRepository;
 import com.sparta.one_stop.global.enums.order.OrderStatus;
 import com.sparta.one_stop.global.enums.order.OrderType;
 import com.sparta.one_stop.global.enums.payment.PaymentStatus;
+import com.sparta.one_stop.global.enums.product.ProductItemStatus;
 import com.sparta.one_stop.global.enums.user.UserRole;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.integration.IntegrationTestSupport;
@@ -74,6 +75,10 @@ import static org.mockito.Mockito.when;
  * - 로그인 시 Redis 장바구니가 DB 장바구니로 merge되는지 확인한다.
  * - merge 후 Redis Hash/ZSet key가 삭제되는지 확인한다.
  * - merge된 DB 장바구니 기준으로 주문 생성 및 결제 승인까지 완료되는지 확인한다.
+ *
+ * 4차 커밋: 추가 실패 플로우
+ * - 장바구니에 담은 상품이 주문 생성 전에 판매 중지되면 주문 생성에 실패하는지 확인한다.
+ * - 결제 승인 금액이 주문 최종 금액과 다르면 결제 승인에 실패하고 주문 상태가 유지되는지 확인한다.
  */
 class CartOrderPaymentIntegrationTest extends IntegrationTestSupport {
 
@@ -527,6 +532,130 @@ class CartOrderPaymentIntegrationTest extends IntegrationTestSupport {
 
         assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PAID);
         assertThat(payment.getApprovedAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("장바구니 상품이 주문 생성 전에 판매 중지되면 주문 생성에 실패한다")
+    void createOrderFromCart_fail_whenProductItemIsStoppedBeforeOrder() {
+        // given: 구매자가 판매 중인 상품 옵션 2개를 장바구니에 담는다.
+        cartService.addCartItem(
+            buyer.getId(),
+            new AddCartItemRequest(productItem.getId(), 2)
+        );
+
+        List<CartItem> cartItems = cartItemRepository.findAll().stream()
+            .filter(ci -> ci.getCart().getUser().getId().equals(buyer.getId()))
+            .toList();
+
+        assertThat(cartItems).hasSize(1);
+        assertThat(cartItems.get(0).getQuantity()).isEqualTo(2);
+
+        Long cartItemId = cartItems.get(0).getId();
+
+        // given: 장바구니에 담은 이후, 주문 생성 전에 상품 옵션이 판매 중지된 상황을 만든다.
+        // 이 테스트는 장바구니 담기 실패가 아니라 주문 생성 시점의 판매 상태 검증을 확인한다.
+        productItem.updateForAdjustment(
+            null,
+            ProductItemStatus.STOP,
+            null
+        );
+
+        productItemRepository.saveAndFlush(productItem);
+
+        CreateOrderRequest orderRequest = new CreateOrderRequest(
+            OrderType.CART,
+            null,
+            List.of(cartItemId),
+            "홍길동",
+            "010-1234-5678",
+            "서울시 강남구",
+            "문 앞에 놓아주세요",
+            null,
+            0
+        );
+
+        // when & then: 판매 중지 상품은 주문 생성 대상이 될 수 없다.
+        assertThatThrownBy(() -> orderCommandService.createOrder(
+            buyer.getId(),
+            orderRequest
+        ))
+            .isInstanceOf(CustomException.class);
+
+        // then: 주문 생성 실패 시 장바구니 상품은 삭제되지 않는다.
+        assertThat(cartItemRepository.findById(cartItemId)).isPresent();
+
+        // then: 실패한 주문 생성으로 인해 재고가 차감되지 않는다.
+        ProductItem stoppedItem = productItemRepository.findById(productItem.getId())
+            .orElseThrow();
+
+        assertThat(stoppedItem.isOnSale()).isFalse();
+        assertThat(stoppedItem.getStock()).isEqualTo(100L);
+    }
+
+    @Test
+    @DisplayName("결제 승인 금액이 주문 금액과 다르면 결제에 실패하고 주문 상태는 결제 대기로 유지된다")
+    void approvePayment_fail_whenAmountMismatchAndOrderStatusRemainsPendingPayment() {
+        // given: 구매자가 상품 옵션 2개를 장바구니에 담는다.
+        cartService.addCartItem(
+            buyer.getId(),
+            new AddCartItemRequest(productItem.getId(), 2)
+        );
+
+        List<CartItem> cartItems = cartItemRepository.findAll().stream()
+            .filter(ci -> ci.getCart().getUser().getId().equals(buyer.getId()))
+            .toList();
+
+        assertThat(cartItems).hasSize(1);
+
+        Long cartItemId = cartItems.get(0).getId();
+
+        CreateOrderRequest orderRequest = new CreateOrderRequest(
+            OrderType.CART,
+            null,
+            List.of(cartItemId),
+            "홍길동",
+            "010-1234-5678",
+            "서울시 강남구",
+            "문 앞에 놓아주세요",
+            null,
+            0
+        );
+
+        CreateOrderResponse orderResponse = orderCommandService.createOrder(
+            buyer.getId(),
+            orderRequest
+        );
+
+        Order pendingOrder = orderRepository.findById(orderResponse.orderId())
+            .orElseThrow();
+
+        assertThat(pendingOrder.getStatus()).isEqualTo(OrderStatus.PENDING_PAYMENT);
+        assertThat(orderResponse.finalPrice()).isEqualTo(23000L);
+
+        // when & then: 주문 최종 금액과 다른 금액으로 결제를 승인하면 실패한다.
+        assertThatThrownBy(() -> paymentService.approvePayment(
+            buyer.getId(),
+            new ApprovePaymentRequest(
+                orderResponse.orderId(),
+                orderResponse.finalPrice() - 1000L
+            )
+        ))
+            .isInstanceOf(CustomException.class);
+
+        // then: 결제 실패 후에도 주문 상태는 결제 대기 상태로 유지된다.
+        Order afterFailedPaymentOrder = orderRepository.findById(orderResponse.orderId())
+            .orElseThrow();
+
+        assertThat(afterFailedPaymentOrder.getStatus()).isEqualTo(OrderStatus.PENDING_PAYMENT);
+
+        // then: 결제 실패 시 Payment는 생성되지 않는다.
+        assertThat(paymentRepository.findByOrderId(orderResponse.orderId())).isEmpty();
+
+        // then: 주문 생성 시점에 차감된 재고는 결제 실패만으로 자동 복구되지 않는다.
+        ProductItem updatedItem = productItemRepository.findById(productItem.getId())
+            .orElseThrow();
+
+        assertThat(updatedItem.getStock()).isEqualTo(98L);
     }
 
 }
