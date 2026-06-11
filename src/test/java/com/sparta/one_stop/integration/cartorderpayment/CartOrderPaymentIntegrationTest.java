@@ -3,7 +3,9 @@ package com.sparta.one_stop.integration.cartorderpayment;
 import com.sparta.one_stop.domain.cart.dto.request.AddCartItemRequest;
 import com.sparta.one_stop.domain.cart.entity.CartItem;
 import com.sparta.one_stop.domain.cart.repository.CartItemRepository;
+import com.sparta.one_stop.domain.cart.service.CartMergeService;
 import com.sparta.one_stop.domain.cart.service.CartService;
+import com.sparta.one_stop.domain.cart.support.GuestCartRedisKeyProvider;
 import com.sparta.one_stop.domain.order.dto.request.CreateOrderRequest;
 import com.sparta.one_stop.domain.order.dto.response.CreateOrderResponse;
 import com.sparta.one_stop.domain.order.entity.Order;
@@ -31,12 +33,24 @@ import com.sparta.one_stop.integration.IntegrationTestSupport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 /**
  * Cart → Order → Payment 핵심 구매 플로우 통합 테스트
@@ -51,6 +65,15 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * 2차 커밋: 대표 실패 플로우
  * - 주문 생성 시점에 재고가 부족하면 주문 생성에 실패하는지 확인한다.
  * - 이미 결제 완료된 주문에 대해 중복 결제 승인을 방지하는지 확인한다.
+ *
+ * 3차 커밋: 비로그인 장바구니 merge 플로우
+ * - 비로그인 사용자가 Redis 장바구니에 상품을 담는다.
+ * - Redis Hash에 수량이 저장되는지 확인한다.
+ * - Redis ZSet에 담기 순서가 저장되는지 확인한다.
+ * - CartMergeService의 Redisson Lock은 mock으로 제어하고, Redis Hash/ZSet은 실제 Redis Testcontainer로 검증한다.
+ * - 로그인 시 Redis 장바구니가 DB 장바구니로 merge되는지 확인한다.
+ * - merge 후 Redis Hash/ZSet key가 삭제되는지 확인한다.
+ * - merge된 DB 장바구니 기준으로 주문 생성 및 결제 승인까지 완료되는지 확인한다.
  */
 class CartOrderPaymentIntegrationTest extends IntegrationTestSupport {
 
@@ -74,6 +97,15 @@ class CartOrderPaymentIntegrationTest extends IntegrationTestSupport {
     private OrderRepository orderRepository;
     @Autowired
     private PaymentRepository paymentRepository;
+    @Autowired
+    private CartMergeService cartMergeService;
+    @Autowired
+    private GuestCartRedisKeyProvider guestCartRedisKeyProvider;
+    @Autowired
+    private RedisTemplate<String, String> redisTemplate;
+
+    @MockitoBean
+    private RedissonClient redissonClient;
 
     private User buyer;
     private Seller seller;
@@ -342,6 +374,159 @@ class CartOrderPaymentIntegrationTest extends IntegrationTestSupport {
 
         assertThat(afterDuplicatePaymentOrder.getStatus()).isEqualTo(OrderStatus.PAID);
         assertThat(afterDuplicatePayment.getStatus()).isEqualTo(PaymentStatus.PAID);
+    }
+
+    @Test
+    @DisplayName("비로그인 장바구니는 로그인 시 DB 장바구니로 병합되고 주문/결제까지 완료할 수 있다")
+    void guestCart_isMergedToUserCart_whenLoginAndCanCreateOrderAndPayment() throws InterruptedException {
+        // given: 비로그인 장바구니를 식별할 guestCartId를 준비한다.
+        // Redis 데이터는 트랜잭션 롤백 대상이 아니므로 테스트마다 고유한 key를 사용한다.
+        String guestCartId = "guest-cart-" + UUID.randomUUID();
+
+        String guestCartKey = guestCartRedisKeyProvider.buildGuestCartKey(guestCartId);
+        String guestCartOrderKey = guestCartRedisKeyProvider.buildGuestCartOrderKey(guestCartId);
+
+        redisTemplate.delete(guestCartKey);
+        redisTemplate.delete(guestCartOrderKey);
+
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        // given: 비로그인 사용자가 상품 옵션 2개를 장바구니에 담는다.
+        cartService.addCartItem(
+            null,
+            guestCartId,
+            response,
+            new AddCartItemRequest(productItem.getId(), 2)
+        );
+
+        String itemField = String.valueOf(productItem.getId());
+
+        // then: Redis Hash에 itemId → quantity 형태로 수량이 저장된다.
+        Object savedQuantity = redisTemplate.opsForHash()
+            .get(
+                guestCartKey,
+                itemField
+            );
+
+        assertThat(savedQuantity).isEqualTo("2");
+
+        // then: Redis ZSet에 itemId가 저장되어 담기 순서 관리 대상이 된다.
+        Set<String> orderedItemIds = redisTemplate.opsForZSet()
+            .range(
+                guestCartOrderKey,
+                0,
+                -1
+            );
+
+        assertThat(orderedItemIds)
+            .isNotNull()
+            .containsExactly(itemField);
+
+        // given: CartMergeService가 사용하는 Redisson Lock은 테스트에서 mock으로 제어한다.
+        // Redis Hash/ZSet은 실제 Redis Testcontainer를 사용하고, Lock 획득만 성공하도록 구성한다.
+        RLock lock = mock(RLock.class);
+
+        when(redissonClient.getLock("lock:cart:merge:" + guestCartId))
+            .thenReturn(lock);
+
+        when(lock.tryLock(
+            anyLong(),
+            anyLong(),
+            eq(TimeUnit.SECONDS)
+        )).thenReturn(true);
+
+        when(lock.isHeldByCurrentThread())
+            .thenReturn(true);
+
+        // when: 사용자가 로그인하면 Redis 장바구니를 DB 장바구니로 병합한다.
+        boolean merged = cartMergeService.mergeGuestCartToUserCart(
+            buyer.getId(),
+            guestCartId
+        );
+
+        // then: merge가 성공한다.
+        assertThat(merged).isTrue();
+
+        // then: merge 후 Redis Hash/ZSet key가 삭제된다.
+        assertThat(redisTemplate.hasKey(guestCartKey)).isFalse();
+        assertThat(redisTemplate.hasKey(guestCartOrderKey)).isFalse();
+
+        // then: DB 장바구니에 Redis 장바구니 상품이 병합된다.
+        List<CartItem> mergedCartItems = cartItemRepository.findAll().stream()
+            .filter(cartItem -> cartItem.getCart()
+                .getUser()
+                .getId()
+                .equals(buyer.getId()))
+            .toList();
+
+        assertThat(mergedCartItems).hasSize(1);
+        assertThat(mergedCartItems.get(0).getProductItem().getId())
+            .isEqualTo(productItem.getId());
+        assertThat(mergedCartItems.get(0).getQuantity()).isEqualTo(2);
+
+        Long cartItemId = mergedCartItems.get(0).getId();
+
+        // when: merge된 DB 장바구니 상품을 기반으로 주문을 생성한다.
+        CreateOrderRequest orderRequest = new CreateOrderRequest(
+            OrderType.CART,
+            null,
+            List.of(cartItemId),
+            "홍길동",
+            "010-1234-5678",
+            "서울시 강남구",
+            "문 앞에 놓아주세요",
+            null,
+            0
+        );
+
+        CreateOrderResponse orderResponse = orderCommandService.createOrder(
+            buyer.getId(),
+            orderRequest
+        );
+
+        // then: 주문이 결제 대기 상태로 생성된다.
+        assertThat(orderResponse).isNotNull();
+        assertThat(orderResponse.finalPrice()).isEqualTo(23000L);
+
+        Order order = orderRepository.findById(orderResponse.orderId())
+            .orElseThrow();
+
+        assertThat(order.getStatus()).isEqualTo(OrderStatus.PENDING_PAYMENT);
+        assertThat(order.getTotalPrice()).isEqualTo(20000L);
+        assertThat(order.getDeliveryFee()).isEqualTo(3000L);
+
+        // then: 주문 생성 후 DB 장바구니 상품은 삭제된다.
+        assertThat(cartItemRepository.findById(cartItemId)).isEmpty();
+
+        // then: 주문 수량만큼 상품 재고가 차감된다. 100개 - 2개 = 98개
+        ProductItem updatedItem = productItemRepository.findById(productItem.getId())
+            .orElseThrow();
+
+        assertThat(updatedItem.getStock()).isEqualTo(98L);
+
+        // when: 생성된 주문 금액으로 결제를 승인한다.
+        ApprovePaymentResponse paymentResponse = paymentService.approvePayment(
+            buyer.getId(),
+            new ApprovePaymentRequest(
+                orderResponse.orderId(),
+                orderResponse.finalPrice()
+            )
+        );
+
+        // then: 결제 승인 후 주문 상태는 PAID가 된다.
+        assertThat(paymentResponse).isNotNull();
+
+        Order paidOrder = orderRepository.findById(orderResponse.orderId())
+            .orElseThrow();
+
+        assertThat(paidOrder.getStatus()).isEqualTo(OrderStatus.PAID);
+
+        // then: 결제 정보도 PAID 상태로 저장되고 승인 시간이 기록된다.
+        Payment payment = paymentRepository.findByOrderId(orderResponse.orderId())
+            .orElseThrow();
+
+        assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PAID);
+        assertThat(payment.getApprovedAt()).isNotNull();
     }
 
 }
