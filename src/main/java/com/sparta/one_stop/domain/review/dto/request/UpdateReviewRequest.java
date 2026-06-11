@@ -21,5 +21,5 @@ public class UpdateReviewRequest {
 
     @NotNull
     @Size(max = 5)
-    private List<String> imageUrls;
+    private List<@NotBlank String> imageUrls;
 }
