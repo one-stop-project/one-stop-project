@@ -32,6 +32,7 @@ const redisLockFail     = new Counter('redis_lock_other_fail');
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
 const ITEM_ID  = Number(__ENV.ITEM_ID || '1');
+if (isNaN(ITEM_ID) || ITEM_ID <= 0) { throw new Error(`유효하지 않은 ITEM_ID: ${__ENV.ITEM_ID}`); }
 const USER_PW  = __ENV.USER_PW || 'Test1234!';
 
 // DEVICE_REGISTER_PER_IP: 10/600s — 9개 고정
@@ -49,12 +50,12 @@ export const options = {
       tags: { lock_type: 'pessimistic' },
     },
     // Phase 2: Redis 분산 락 (2분)
-    // 70s gap: ORDER_CREATE_PER_USER 60s 윈도우 만료 보장
+    // 70s gap (2m + 70s = 3m10s): ORDER_CREATE_PER_USER 60s 윈도우 만료 보장
     redis_distributed_lock: {
       executor: 'constant-vus',
       vus: VU_COUNT,
       duration: '2m',
-      startTime: '2m30s',
+      startTime: '3m10s',
       exec: 'testRedisLock',
       tags: { lock_type: 'redis' },
     },
