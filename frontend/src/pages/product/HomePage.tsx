@@ -7,7 +7,7 @@ export default function HomePage() {
   const { data: popular, isLoading: popularLoading } = usePopularProductsQuery(8);
   const { data: latest, isLoading: latestLoading } = useProductListQuery({
     page: 0,
-    size: 8,
+    size: 10,
     sort: 'LATEST',
   });
 
