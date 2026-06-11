@@ -31,6 +31,8 @@ import java.util.List;
 @Transactional
 public class CartService {
 
+    private static final int MAX_CART_ITEM_QUANTITY = 99;
+
     private final CartRepository cartRepository;
     private final CartItemRepository cartItemRepository;
     private final UserRepository userRepository;
@@ -191,6 +193,9 @@ public class CartService {
             int nextQuantity =
                 cartItem.getQuantity() + request.quantity();
 
+            // 장바구니 수량 상한 검증
+            validateCartItemQuantityLimit(nextQuantity);
+
             // 재고 초과 검증
             validateStockLimit(
                 productItem,
@@ -339,7 +344,8 @@ public class CartService {
      * 검증 우선순위:
      * 1. 본인 상품 담기 불가
      * 2. STOP 상품 담기 불가
-     * 3. 품절/재고 초과 상품 담기 불가
+     * 3. 장바구니 수량 상한 검증
+     * 4. 품절/재고 초과 상품 담기 불가
      */
     private void validateAddableProductItem(
         Long userId,
@@ -362,12 +368,14 @@ public class CartService {
             throw new CustomException(ErrorCode.CART_001);
         }
 
-        // 3. 재고
+        // 3. 장바구니 수량 범위
+        validateCartItemQuantityLimit(quantity);
+
+        // 4. 재고
         validateStockLimit(
             productItem,
             quantity
         );
-
     }
 
     /**
@@ -396,9 +404,19 @@ public class CartService {
     }
 
     /**
+     * 장바구니 상품 수량 최대 99개 검증
+     */
+    private void validateCartItemQuantityLimit(int quantity) {
+        if (quantity > MAX_CART_ITEM_QUANTITY) {
+            throw new CustomException(ErrorCode.CART_002);
+        }
+    }
+
+    /**
      * 장바구니 수량 증가 가능 여부 검증
      * - nextQuantity는 변경 후 최종 수량
      * - STOP 상품은 수량 증가 불가
+     * - 변경 후 최종 수량은 99개를 초과할 수 없음
      * - 변경 후 최종 수량은 재고를 초과할 수 없음
      */
     private void validateIncreaseCartItemQuantity(
@@ -408,6 +426,8 @@ public class CartService {
         if (!productItem.isOnSale()) {
             throw new CustomException(ErrorCode.CART_001);
         }
+
+        validateCartItemQuantityLimit(nextQuantity);
 
         validateStockLimit(
             productItem,

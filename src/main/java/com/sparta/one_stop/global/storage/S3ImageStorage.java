@@ -4,6 +4,7 @@ import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Component;
 import software.amazon.awssdk.core.exception.SdkException;
 import software.amazon.awssdk.core.sync.RequestBody;
@@ -12,29 +13,20 @@ import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
 import software.amazon.awssdk.services.s3.model.PutObjectRequest;
 
 import java.net.URI;
-import java.util.Locale;
-import java.util.Map;
 import java.util.UUID;
 
 @Slf4j
 @Component
+@Profile("!local")
 @RequiredArgsConstructor
 public class S3ImageStorage implements ImageStorage {
-
-    private static final Map<String, String> EXTENSIONS = Map.of(
-            "image/jpeg", "jpg",
-            "image/jpg", "jpg",
-            "image/png", "png",
-            "image/webp", "webp",
-            "image/gif", "gif"
-    );
 
     private final S3Client s3Client;
     private final ImageStorageProperties properties;
 
     @Override
     public String store(byte[] content, String contentType) {
-        String extension = resolveExtension(contentType);
+        String extension = ImageStorage.resolveExtension(contentType);
         String key = UUID.randomUUID() + "." + extension;
 
         try {
@@ -69,15 +61,5 @@ public class S3ImageStorage implements ImageStorage {
         } catch (Exception e) {
             log.warn("S3 이미지 삭제 실패: {}", url, e);
         }
-    }
-
-    private String resolveExtension(String contentType) {
-        String mimeType = contentType == null ? "" : contentType.split(";", 2)[0].trim();
-        String key = mimeType.toLowerCase(Locale.ROOT);
-        String extension = EXTENSIONS.get(key);
-        if (extension == null) {
-            throw new CustomException(ErrorCode.COMMON_006);
-        }
-        return extension;
     }
 }

@@ -525,6 +525,98 @@ class CartServiceTest {
     }
 
     @Test
+    @DisplayName("로그인 장바구니 담기 실패 - 신규 상품 요청 수량이 99개를 초과하면 담을 수 없다")
+    void addCartItem_fail_whenRequestQuantityExceedsMaxLimit() {
+        // given
+        Long userId = 1L;
+        Long sellerUserId = 2L;
+        Long itemId = 101L;
+
+        AddCartItemRequest request = new AddCartItemRequest(
+            itemId,
+            100
+        );
+
+        User user = user();
+
+        ProductItem productItem = productItemForAddValidation(
+            true,
+            null,
+            sellerUserId
+        );
+
+        when(userRepository.findById(userId))
+            .thenReturn(Optional.of(user));
+        when(productItemRepository.findById(itemId))
+            .thenReturn(Optional.of(productItem));
+
+        // when & then
+        assertThatThrownBy(() -> cartService.addCartItem(
+            userId,
+            request
+        ))
+            .isInstanceOf(CustomException.class)
+            .hasMessage("수량은 1개 이상 99개 이하여야 합니다");
+
+        verify(cartRepository, never()).findByUserId(any());
+        verify(cartItemRepository, never()).save(any(CartItem.class));
+    }
+
+    @Test
+    @DisplayName("로그인 장바구니 담기 실패 - 기존 상품 수량 증가 후 99개를 초과하면 담을 수 없다")
+    void addCartItem_fail_whenIncreasedQuantityExceedsMaxLimit() {
+        // given
+        Long userId = 1L;
+        Long sellerUserId = 2L;
+        Long itemId = 101L;
+
+        AddCartItemRequest request = new AddCartItemRequest(
+            itemId,
+            10
+        );
+
+        User user = user();
+        Cart cart = cart(10L);
+
+        ProductItem productItem = productItem(
+            itemId,
+            true,
+            200L,
+            sellerUserId
+        );
+
+        CartItem existingCartItem = new CartItem(
+            cart,
+            productItem,
+            90
+        );
+
+        when(userRepository.findById(userId))
+            .thenReturn(Optional.of(user));
+        when(productItemRepository.findById(itemId))
+            .thenReturn(Optional.of(productItem));
+        when(cartRepository.findByUserId(userId))
+            .thenReturn(Optional.of(cart));
+        when(cartItemRepository.findByCartIdAndProductItemId(
+            cart.getId(),
+            itemId
+        )).thenReturn(Optional.of(existingCartItem));
+
+        // when & then
+        assertThatThrownBy(() -> cartService.addCartItem(
+            userId,
+            request
+        ))
+            .isInstanceOf(CustomException.class)
+            .hasMessage("수량은 1개 이상 99개 이하여야 합니다");
+
+        verify(cartItemRepository, never()).save(any(CartItem.class));
+        verify(cartItemRepository, never()).countByCartId(any());
+
+        assertThat(existingCartItem.getQuantity()).isEqualTo(90);
+    }
+
+    @Test
     @DisplayName("로그인 장바구니 조회 성공 - 장바구니가 없으면 빈 장바구니를 반환한다")
     void getCart_success_returnEmptyCart_whenCartDoesNotExist() {
         // given
@@ -646,6 +738,47 @@ class CartServiceTest {
 
         assertThat(result.itemId()).isEqualTo(itemId);
         assertThat(result.quantity()).isEqualTo(5);
+    }
+
+    @Test
+    @DisplayName("로그인 장바구니 수량 변경 실패 - 최종 수량이 99개를 초과하면 변경할 수 없다")
+    void updateCartItemQuantityByItemId_fail_whenRequestQuantityExceedsMaxLimit() {
+        // given
+        Long userId = 1L;
+        Long itemId = 101L;
+
+        UpdateCartItemRequest request = new UpdateCartItemRequest(100);
+
+        Cart cart = cart(10L);
+
+        ProductItem productItem = productItemForQuantityUpdate(
+            true,
+            null
+        );
+
+        CartItem cartItem = cartItemForQuantityUpdate(
+            productItem,
+            90
+        );
+
+        when(cartRepository.findByUserId(userId))
+            .thenReturn(Optional.of(cart));
+        when(cartItemRepository.findByCartIdAndProductItemId(
+            cart.getId(),
+            itemId
+        )).thenReturn(Optional.of(cartItem));
+
+        // when & then
+        assertThatThrownBy(() -> cartService.updateCartItemQuantityByItemId(
+            userId,
+            itemId,
+            request
+        ))
+            .isInstanceOf(CustomException.class)
+            .hasMessage("수량은 1개 이상 99개 이하여야 합니다");
+
+        verify(cartItem, never()).increaseQuantity(anyInt());
+        verify(cartItem, never()).decreaseQuantity(anyInt());
     }
 
     @Test
@@ -775,7 +908,10 @@ class CartServiceTest {
         ProductItem productItem = org.mockito.Mockito.mock(ProductItem.class);
 
         when(productItem.isOnSale()).thenReturn(onSale);
-        when(productItem.getStock()).thenReturn(stock);
+
+        if (stock != null) {
+            when(productItem.getStock()).thenReturn(stock);
+        }
 
         return productItem;
     }

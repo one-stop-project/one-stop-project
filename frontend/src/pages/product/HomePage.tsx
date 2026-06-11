@@ -7,7 +7,7 @@ export default function HomePage() {
   const { data: popular, isLoading: popularLoading } = usePopularProductsQuery(8);
   const { data: latest, isLoading: latestLoading } = useProductListQuery({
     page: 0,
-    size: 8,
+    size: 10,
     sort: 'LATEST',
   });
 
@@ -80,7 +80,7 @@ export default function HomePage() {
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
           {latestLoading
-            ? Array.from({ length: 8 }).map((_, i) => <ProductCardSkeleton key={i} />)
+            ? Array.from({ length: 10 }).map((_, i) => <ProductCardSkeleton key={i} />)
             : latestProducts.map((product) => (
                 <ProductCard key={product.productId} product={product} />
               ))}

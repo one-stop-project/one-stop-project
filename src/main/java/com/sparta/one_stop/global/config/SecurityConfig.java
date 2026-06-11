@@ -104,6 +104,11 @@ public class SecurityConfig {
                     "/vite.svg"
                 ).permitAll()
 
+                // 로컬 저장 상품 이미지 서빙 (app.image.url-prefix)
+                //    local 프로필의 LocalImageStorage가 저장한 파일을 ResourceHandler로 공개
+                //    배포(!local)는 S3 직접 서빙이라 이 경로를 타지 않는다
+                .requestMatchers(HttpMethod.GET, "/images/**").permitAll()
+
                 // SPA 라우트 경로 허용 (점이 없는 경로 = 화면 라우트)[FE]
                 //    /products, /cart, /login 등 React Router 경로
                 //    이 경로들은 SpaForwardController가 index.html로 forward

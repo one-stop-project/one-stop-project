@@ -8,6 +8,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.ZSetOperations;
@@ -16,8 +18,10 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -43,6 +47,12 @@ class CartMergeServiceTest {
     @Mock
     private GuestCartRedisKeyProvider guestCartRedisKeyProvider;
 
+    @Mock
+    private RedissonClient redissonClient;
+
+    @Mock
+    private RLock lock;
+
     @InjectMocks
     private CartMergeService cartMergeService;
 
@@ -65,6 +75,7 @@ class CartMergeServiceTest {
         verifyNoInteractions(redisTemplate);
         verifyNoInteractions(cartMergeExecutor);
         verifyNoInteractions(guestCartRedisKeyProvider);
+        verifyNoInteractions(redissonClient);
     }
 
     @Test
@@ -86,16 +97,83 @@ class CartMergeServiceTest {
         verifyNoInteractions(redisTemplate);
         verifyNoInteractions(cartMergeExecutor);
         verifyNoInteractions(guestCartRedisKeyProvider);
+        verifyNoInteractions(redissonClient);
+    }
+
+    @Test
+    @DisplayName("merge 실패 - guestCartId Lock 획득 실패 시 merge를 실행하지 않는다")
+    void mergeGuestCartToUserCart_returnFalse_whenLockNotAcquired() throws InterruptedException {
+        // given
+        Long userId = 1L;
+        String guestCartId = "guest-id";
+
+        prepareLockNotAcquired(guestCartId);
+
+        // when
+        boolean result = cartMergeService.mergeGuestCartToUserCart(
+            userId,
+            guestCartId
+        );
+
+        // then
+        assertThat(result).isFalse();
+
+        verifyNoInteractions(guestCartRedisKeyProvider);
+        verifyNoInteractions(redisTemplate);
+        verifyNoInteractions(cartMergeExecutor);
+
+        verify(lock, never()).unlock();
+    }
+
+    @Test
+    @DisplayName("merge 실패 - Lock 대기 중 인터럽트 발생 시 false 반환")
+    void mergeGuestCartToUserCart_returnFalse_whenInterruptedWhileWaitingLock() throws InterruptedException {
+        // given
+        Long userId = 1L;
+        String guestCartId = "guest-id";
+
+        when(redissonClient.getLock("lock:cart:merge:" + guestCartId))
+            .thenReturn(lock);
+
+        when(lock.tryLock(
+            anyLong(),
+            anyLong(),
+            eq(TimeUnit.SECONDS)
+        ))
+            .thenThrow(new InterruptedException("interrupted"));
+
+        try {
+            // when
+            boolean result = cartMergeService.mergeGuestCartToUserCart(
+                userId,
+                guestCartId
+            );
+
+            // then
+            assertThat(result).isFalse();
+
+            verifyNoInteractions(guestCartRedisKeyProvider);
+            verifyNoInteractions(redisTemplate);
+            verifyNoInteractions(cartMergeExecutor);
+
+            verify(lock, never()).unlock();
+
+            assertThat(Thread.currentThread().isInterrupted()).isTrue();
+        } finally {
+            Thread.interrupted();
+        }
     }
 
     @Test
     @DisplayName("merge 성공 - Redis Hash가 비어 있으면 Hash/ZSet key 삭제 후 true 반환")
-    void mergeGuestCartToUserCart_success_whenRedisHashIsEmpty() {
+    void mergeGuestCartToUserCart_success_whenRedisHashIsEmpty() throws InterruptedException {
         // given
         Long userId = 1L;
         String guestCartId = "guest-id";
         String redisKey = "guest:cart:guest-id";
         String orderKey = "guest:cart-order:guest-id";
+
+        prepareLockAcquired(guestCartId);
 
         when(guestCartRedisKeyProvider.buildGuestCartKey(guestCartId))
             .thenReturn(redisKey);
@@ -118,6 +196,7 @@ class CartMergeServiceTest {
 
         verify(redisTemplate).delete(redisKey);
         verify(redisTemplate).delete(orderKey);
+        verify(lock).unlock();
         verify(cartMergeExecutor, never()).execute(
             eq(userId),
             anyMap()
@@ -126,7 +205,7 @@ class CartMergeServiceTest {
 
     @Test
     @DisplayName("merge 성공 - ZSet 순서대로 Redis 장바구니를 Executor에 전달")
-    void mergeGuestCartToUserCart_success_withZSetOrder() {
+    void mergeGuestCartToUserCart_success_withZSetOrder() throws InterruptedException {
         // given
         Long userId = 1L;
         String guestCartId = "guest-id";
@@ -142,6 +221,8 @@ class CartMergeServiceTest {
         orderedItemFields.add("104");
         orderedItemFields.add("101");
         orderedItemFields.add("105");
+
+        prepareLockAcquired(guestCartId);
 
         when(guestCartRedisKeyProvider.buildGuestCartKey(guestCartId))
             .thenReturn(redisKey);
@@ -186,11 +267,12 @@ class CartMergeServiceTest {
 
         verify(redisTemplate).delete(redisKey);
         verify(redisTemplate).delete(orderKey);
+        verify(lock).unlock();
     }
 
     @Test
     @DisplayName("merge 성공 - ZSet에 없는 Hash-only 데이터는 뒤에 병합")
-    void mergeGuestCartToUserCart_success_appendHashOnlyDataAfterZSetOrder() {
+    void mergeGuestCartToUserCart_success_appendHashOnlyDataAfterZSetOrder() throws InterruptedException {
         // given
         Long userId = 1L;
         String guestCartId = "guest-id";
@@ -206,6 +288,8 @@ class CartMergeServiceTest {
         Set<String> orderedItemFields = new LinkedHashSet<>();
         orderedItemFields.add("104");
         orderedItemFields.add("101");
+
+        prepareLockAcquired(guestCartId);
 
         when(guestCartRedisKeyProvider.buildGuestCartKey(guestCartId))
             .thenReturn(redisKey);
@@ -251,11 +335,12 @@ class CartMergeServiceTest {
 
         verify(redisTemplate).delete(redisKey);
         verify(redisTemplate).delete(orderKey);
+        verify(lock).unlock();
     }
 
     @Test
     @DisplayName("merge 성공 - 파싱 가능한 Redis 데이터가 없으면 Hash/ZSet key 삭제 후 true 반환")
-    void mergeGuestCartToUserCart_success_whenParsedMapIsEmpty() {
+    void mergeGuestCartToUserCart_success_whenParsedMapIsEmpty() throws InterruptedException {
         // given
         Long userId = 1L;
         String guestCartId = "guest-id";
@@ -265,6 +350,8 @@ class CartMergeServiceTest {
         Map<Object, Object> entries = new LinkedHashMap<>();
         entries.put("invalid-item-id", "1");
         entries.put("101", "invalid-quantity");
+
+        prepareLockAcquired(guestCartId);
 
         when(guestCartRedisKeyProvider.buildGuestCartKey(guestCartId))
             .thenReturn(redisKey);
@@ -297,11 +384,12 @@ class CartMergeServiceTest {
 
         verify(redisTemplate).delete(redisKey);
         verify(redisTemplate).delete(orderKey);
+        verify(lock).unlock();
     }
 
     @Test
     @DisplayName("merge 성공 - ZSet이 없으면 Hash itemId DESC 기준으로 merge")
-    void mergeGuestCartToUserCart_success_whenZSetIsEmpty() {
+    void mergeGuestCartToUserCart_success_whenZSetIsEmpty() throws InterruptedException {
         // given
         Long userId = 1L;
         String guestCartId = "guest-id";
@@ -312,6 +400,8 @@ class CartMergeServiceTest {
         entries.put("101", "1");
         entries.put("104", "4");
         entries.put("102", "2");
+
+        prepareLockAcquired(guestCartId);
 
         when(guestCartRedisKeyProvider.buildGuestCartKey(guestCartId))
             .thenReturn(redisKey);
@@ -357,11 +447,39 @@ class CartMergeServiceTest {
 
         verify(redisTemplate).delete(redisKey);
         verify(redisTemplate).delete(orderKey);
+        verify(lock).unlock();
     }
 
     @SuppressWarnings("unchecked")
     private ArgumentCaptor<Map<Long, Integer>> mapCaptor() {
         return ArgumentCaptor.forClass(Map.class);
+    }
+
+    private void prepareLockAcquired(String guestCartId) throws InterruptedException {
+        when(redissonClient.getLock("lock:cart:merge:" + guestCartId))
+            .thenReturn(lock);
+
+        when(lock.tryLock(
+            anyLong(),
+            anyLong(),
+            eq(TimeUnit.SECONDS)
+        ))
+            .thenReturn(true);
+
+        when(lock.isHeldByCurrentThread())
+            .thenReturn(true);
+    }
+
+    private void prepareLockNotAcquired(String guestCartId) throws InterruptedException {
+        when(redissonClient.getLock("lock:cart:merge:" + guestCartId))
+            .thenReturn(lock);
+
+        when(lock.tryLock(
+            anyLong(),
+            anyLong(),
+            eq(TimeUnit.SECONDS)
+        ))
+            .thenReturn(false);
     }
 
 }

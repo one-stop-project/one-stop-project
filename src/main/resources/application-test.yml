@@ -1,6 +1,11 @@
 spring:
   config:
     import: "optional:classpath:prompts.yml"
+
+  autoconfigure:
+    exclude:
+      - org.redisson.spring.starter.RedissonAutoConfigurationV2
+
   datasource:
     url: jdbc:h2:mem:testdb;MODE=MySQL;NON_KEYWORDS=USER
     username: sa
@@ -31,10 +36,6 @@ spring:
 gemini:
   dummy-api-key: "test-dummy-key"
 
-  autoconfigure:
-    exclude:
-      - org.redisson.spring.starter.RedissonAutoConfigurationV2
-
 jwt:
   secret:
     key: ${JWT_SECRET_KEY:c3ByaW5nLWJvb3Qtc2VjdXJpdHktand0LXR1dG9yaWFsLXNlY3JldC1rZXktMjAyMw==}
@@ -47,6 +48,11 @@ app:
   image:
     bucket: test-bucket
     region: ap-northeast-2
+  redisson:
+    enabled: false
+
+test-data:
+  init: true
 
 resilience4j:
   circuitbreaker:
@@ -69,8 +75,6 @@ resilience4j:
         timeout-duration: 30s
       ai-assistant:
         timeout-duration: 10s
-  test-data:
-    init: true
 
 coupon:
   issue:
@@ -84,3 +88,4 @@ point:
   integrity:
     # 테스트 환경을 통과하기 위한 32바이트 이상의 임시(더미) 시크릿 키
     secret: "test_secret_key_for_point_integrity_validation_must_be_long"
+
