@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="800">
+  <rect width="800" height="800" fill="#f1f5f9"/>
+  <rect x="316" y="232" width="168" height="168" rx="38" fill="#dc2626"/>
+  <g transform="translate(357,273) scale(3.6)" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/>
+    <path d="M3 6h18"/>
+    <path d="M16 10a4 4 0 0 1-8 0"/>
+  </g>
+  <text x="400" y="505" font-family="Apple SD Gothic Neo, AppleGothic, sans-serif" font-size="50" fill="#475569" text-anchor="middle" font-weight="bold">이미지 준비중</text>
+  <text x="400" y="558" font-family="Apple SD Gothic Neo, AppleGothic, sans-serif" font-size="26" fill="#94a3b8" text-anchor="middle">One-Stop</text>
+</svg>
