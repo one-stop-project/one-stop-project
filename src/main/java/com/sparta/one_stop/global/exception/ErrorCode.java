@@ -21,6 +21,7 @@ public enum ErrorCode {
     COMMON_007(HttpStatus.INTERNAL_SERVER_ERROR, "COMMON_007", "서버 내부 오류가 발생했습니다"),
     COMMON_008(HttpStatus.SERVICE_UNAVAILABLE, "COMMON_008", "서비스가 일시적으로 이용 불가합니다"),
     COMMON_009(HttpStatus.TOO_MANY_REQUESTS, "COMMON_009", "요청이 너무 많습니다. 잠시 후 다시 시도해주세요"),
+    COMMON_010(HttpStatus.BAD_REQUEST, "COMMON_010", "요청 파라미터 값이 올바르지 않습니다"),
 
     // ===== AUTH - 인증/인가 =====
     AUTH_001(HttpStatus.BAD_REQUEST, "AUTH_001", "이메일 형식이 올바르지 않습니다"),
