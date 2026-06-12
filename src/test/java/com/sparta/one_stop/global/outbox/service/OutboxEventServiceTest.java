@@ -13,12 +13,12 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-
-import java.util.Optional;
+import org.springframework.dao.DataIntegrityViolationException;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -33,17 +33,14 @@ class OutboxEventServiceTest {
     private OutboxEventService outboxEventService;
 
     @Test
-    @DisplayName("savePaymentApprovedEvent 성공 - 중복 이벤트가 없으면 결제 승인 Outbox 이벤트를 저장한다")
+    @DisplayName("savePaymentApprovedEvent 성공 - 결제 승인 Outbox 이벤트를 저장한다")
     void savePaymentApprovedEvent_success() {
         // given
         String eventId = "event-1";
         Long orderId = 1L;
         String payload = "{\"orderId\":1}";
 
-        when(outboxEventRepository.findByEventId(eventId))
-            .thenReturn(Optional.empty());
-
-        when(outboxEventRepository.save(any(OutboxEvent.class)))
+        when(outboxEventRepository.saveAndFlush(any(OutboxEvent.class)))
             .thenAnswer(invocation -> invocation.getArgument(0));
 
         // when
@@ -66,8 +63,8 @@ class OutboxEventServiceTest {
         assertThat(savedEvent.getLastErrorMessage()).isNull();
         assertThat(savedEvent.getProcessedAt()).isNull();
 
-        verify(outboxEventRepository).findByEventId(eventId);
-        verify(outboxEventRepository).save(any(OutboxEvent.class));
+        verify(outboxEventRepository).saveAndFlush(any(OutboxEvent.class));
+        verify(outboxEventRepository, never()).findByEventId(anyString());
     }
 
     @Test
@@ -78,10 +75,7 @@ class OutboxEventServiceTest {
         Long orderId = 1L;
         String payload = "{\"orderId\":1}";
 
-        when(outboxEventRepository.findByEventId(eventId))
-            .thenReturn(Optional.empty());
-
-        when(outboxEventRepository.save(any(OutboxEvent.class)))
+        when(outboxEventRepository.saveAndFlush(any(OutboxEvent.class)))
             .thenAnswer(invocation -> invocation.getArgument(0));
 
         // when
@@ -94,7 +88,8 @@ class OutboxEventServiceTest {
         // then
         ArgumentCaptor<OutboxEvent> captor = ArgumentCaptor.forClass(OutboxEvent.class);
 
-        verify(outboxEventRepository).save(captor.capture());
+        verify(outboxEventRepository).saveAndFlush(captor.capture());
+        verify(outboxEventRepository, never()).findByEventId(anyString());
 
         OutboxEvent outboxEvent = captor.getValue();
 
@@ -109,37 +104,98 @@ class OutboxEventServiceTest {
     }
 
     @Test
-    @DisplayName("savePaymentApprovedEvent 실패 - 이미 같은 eventId가 존재하면 예외가 발생한다")
+    @DisplayName("savePaymentApprovedEvent 실패 - eventId unique constraint 위반 시 OUTBOX_001 예외가 발생한다")
     void savePaymentApprovedEvent_fail_whenEventIdAlreadyExists() {
         // given
         String eventId = "event-1";
         Long orderId = 1L;
         String payload = "{\"orderId\":1}";
 
-        OutboxEvent existingEvent = OutboxEvent.paymentApproved(
+        when(outboxEventRepository.saveAndFlush(any(OutboxEvent.class)))
+            .thenThrow(new DataIntegrityViolationException("duplicate event_id"));
+
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> outboxEventService.savePaymentApprovedEvent(
+                eventId,
+                orderId,
+                payload
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.OUTBOX_001);
+
+        verify(outboxEventRepository).saveAndFlush(any(OutboxEvent.class));
+        verify(outboxEventRepository, never()).findByEventId(anyString());
+    }
+
+    @Test
+    @DisplayName("saveDeliveryCompletedEvent 성공 - 배송 완료 Outbox 이벤트를 저장한다")
+    void saveDeliveryCompletedEvent_success() {
+        // given
+        String eventId = "event-2";
+        Long orderId = 1L;
+        String payload = "{\"orderId\":1}";
+
+        when(outboxEventRepository.saveAndFlush(any(OutboxEvent.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+
+        // when
+        OutboxEvent savedEvent = outboxEventService.saveDeliveryCompletedEvent(
             eventId,
             orderId,
             payload
         );
 
-        when(outboxEventRepository.findByEventId(eventId))
-            .thenReturn(Optional.of(existingEvent));
+        // then
+        assertThat(savedEvent.getEventId()).isEqualTo(eventId);
+        assertThat(savedEvent.getEventType()).isEqualTo(OutboxEventType.DELIVERY_COMPLETED);
+        assertThat(savedEvent.getAggregateType()).isEqualTo("DELIVERY");
+        assertThat(savedEvent.getAggregateId()).isEqualTo(orderId);
+        assertThat(savedEvent.getTopic()).isEqualTo("delivery.completed");
+        assertThat(savedEvent.getPartitionKey()).isEqualTo(String.valueOf(orderId));
+        assertThat(savedEvent.getPayload()).isEqualTo(payload);
+        assertThat(savedEvent.getStatus()).isEqualTo(OutboxEventStatus.PENDING);
+        assertThat(savedEvent.getRetryCount()).isEqualTo(0);
+        assertThat(savedEvent.getLastErrorMessage()).isNull();
+        assertThat(savedEvent.getProcessedAt()).isNull();
 
-        // when & then
-        assertThatThrownBy(() -> outboxEventService.savePaymentApprovedEvent(
-            eventId,
-            orderId,
-            payload
-        ))
-            .isInstanceOf(CustomException.class)
-            .hasFieldOrPropertyWithValue("errorCode", ErrorCode.OUTBOX_001);
-
-        verify(outboxEventRepository).findByEventId(eventId);
-        verify(outboxEventRepository, never()).save(any(OutboxEvent.class));
+        verify(outboxEventRepository).saveAndFlush(any(OutboxEvent.class));
+        verify(outboxEventRepository, never()).findByEventId(anyString());
     }
 
     @Test
-    @DisplayName("saveEvent 성공 - 중복 이벤트가 없으면 범용 Outbox 이벤트를 저장한다")
+    @DisplayName("saveDeliveryCompletedEvent 실패 - eventId unique constraint 위반 시 OUTBOX_001 예외가 발생한다")
+    void saveDeliveryCompletedEvent_fail_whenEventIdAlreadyExists() {
+        // given
+        String eventId = "event-2";
+        Long orderId = 1L;
+        String payload = "{\"orderId\":1}";
+
+        when(outboxEventRepository.saveAndFlush(any(OutboxEvent.class)))
+            .thenThrow(new DataIntegrityViolationException("duplicate event_id"));
+
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> outboxEventService.saveDeliveryCompletedEvent(
+                eventId,
+                orderId,
+                payload
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.OUTBOX_001);
+
+        verify(outboxEventRepository).saveAndFlush(any(OutboxEvent.class));
+        verify(outboxEventRepository, never()).findByEventId(anyString());
+    }
+
+    @Test
+    @DisplayName("saveEvent 성공 - 범용 Outbox 이벤트를 저장한다")
     void saveEvent_success() {
         // given
         String eventId = "event-1";
@@ -150,10 +206,7 @@ class OutboxEventServiceTest {
         String partitionKey = "1";
         String payload = "{\"orderId\":1}";
 
-        when(outboxEventRepository.findByEventId(eventId))
-            .thenReturn(Optional.empty());
-
-        when(outboxEventRepository.save(any(OutboxEvent.class)))
+        when(outboxEventRepository.saveAndFlush(any(OutboxEvent.class)))
             .thenAnswer(invocation -> invocation.getArgument(0));
 
         // when
@@ -180,8 +233,8 @@ class OutboxEventServiceTest {
         assertThat(savedEvent.getLastErrorMessage()).isNull();
         assertThat(savedEvent.getProcessedAt()).isNull();
 
-        verify(outboxEventRepository).findByEventId(eventId);
-        verify(outboxEventRepository).save(any(OutboxEvent.class));
+        verify(outboxEventRepository).saveAndFlush(any(OutboxEvent.class));
+        verify(outboxEventRepository, never()).findByEventId(anyString());
     }
 
     @Test
@@ -196,10 +249,7 @@ class OutboxEventServiceTest {
         String partitionKey = "1";
         String payload = "{\"orderId\":1}";
 
-        when(outboxEventRepository.findByEventId(eventId))
-            .thenReturn(Optional.empty());
-
-        when(outboxEventRepository.save(any(OutboxEvent.class)))
+        when(outboxEventRepository.saveAndFlush(any(OutboxEvent.class)))
             .thenAnswer(invocation -> invocation.getArgument(0));
 
         // when
@@ -216,7 +266,8 @@ class OutboxEventServiceTest {
         // then
         ArgumentCaptor<OutboxEvent> captor = ArgumentCaptor.forClass(OutboxEvent.class);
 
-        verify(outboxEventRepository).save(captor.capture());
+        verify(outboxEventRepository).saveAndFlush(captor.capture());
+        verify(outboxEventRepository, never()).findByEventId(anyString());
 
         OutboxEvent outboxEvent = captor.getValue();
 
@@ -231,39 +282,33 @@ class OutboxEventServiceTest {
     }
 
     @Test
-    @DisplayName("saveEvent 실패 - 이미 같은 eventId가 존재하면 예외가 발생한다")
+    @DisplayName("saveEvent 실패 - eventId unique constraint 위반 시 OUTBOX_001 예외가 발생한다")
     void saveEvent_fail_whenEventIdAlreadyExists() {
         // given
         String eventId = "event-1";
 
-        OutboxEvent existingEvent = OutboxEvent.create(
-            eventId,
-            OutboxEventType.PAYMENT_APPROVED,
-            "ORDER",
-            1L,
-            "payment.approved",
-            "1",
-            "{\"orderId\":1}"
+        when(outboxEventRepository.saveAndFlush(any(OutboxEvent.class)))
+            .thenThrow(new DataIntegrityViolationException("duplicate event_id"));
+
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> outboxEventService.saveEvent(
+                eventId,
+                OutboxEventType.PAYMENT_APPROVED,
+                "ORDER",
+                1L,
+                "payment.approved",
+                "1",
+                "{\"orderId\":1}"
+            )
         );
 
-        when(outboxEventRepository.findByEventId(eventId))
-            .thenReturn(Optional.of(existingEvent));
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.OUTBOX_001);
 
-        // when & then
-        assertThatThrownBy(() -> outboxEventService.saveEvent(
-            eventId,
-            OutboxEventType.PAYMENT_APPROVED,
-            "ORDER",
-            1L,
-            "payment.approved",
-            "1",
-            "{\"orderId\":1}"
-        ))
-            .isInstanceOf(CustomException.class)
-            .hasFieldOrPropertyWithValue("errorCode", ErrorCode.OUTBOX_001);
-
-        verify(outboxEventRepository).findByEventId(eventId);
-        verify(outboxEventRepository, never()).save(any(OutboxEvent.class));
+        verify(outboxEventRepository).saveAndFlush(any(OutboxEvent.class));
+        verify(outboxEventRepository, never()).findByEventId(anyString());
     }
 
 }
