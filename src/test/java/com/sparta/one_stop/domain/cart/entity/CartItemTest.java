@@ -1,6 +1,8 @@
 package com.sparta.one_stop.domain.cart.entity;
 
 import com.sparta.one_stop.domain.product.entity.ProductItem;
+import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -8,7 +10,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 @ExtendWith(MockitoExtension.class)
 class CartItemTest {
@@ -45,14 +47,18 @@ class CartItemTest {
         Cart nullCart = null;
         int quantity = 1;
 
-        // when & then
-        assertThatThrownBy(() -> new CartItem(
-            nullCart,
-            productItem,
-            quantity
-        ))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("장바구니 정보는 필수입니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new CartItem(
+                nullCart,
+                productItem,
+                quantity
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.CART_021);
     }
 
     @Test
@@ -62,14 +68,18 @@ class CartItemTest {
         ProductItem nullProductItem = null;
         int quantity = 1;
 
-        // when & then
-        assertThatThrownBy(() -> new CartItem(
-            cart,
-            nullProductItem,
-            quantity
-        ))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("상품 옵션 정보는 필수입니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new CartItem(
+                cart,
+                nullProductItem,
+                quantity
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.CART_022);
     }
 
     @Test
@@ -78,14 +88,18 @@ class CartItemTest {
         // given
         int quantity = 0;
 
-        // when & then
-        assertThatThrownBy(() -> new CartItem(
-            cart,
-            productItem,
-            quantity
-        ))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("수량은 1 이상이어야 합니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new CartItem(
+                cart,
+                productItem,
+                quantity
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.CART_023);
     }
 
     @Test
@@ -94,14 +108,18 @@ class CartItemTest {
         // given
         int quantity = 100;
 
-        // when & then
-        assertThatThrownBy(() -> new CartItem(
-            cart,
-            productItem,
-            quantity
-        ))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("장바구니 최대 수량은 99개입니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new CartItem(
+                cart,
+                productItem,
+                quantity
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.CART_024);
     }
 
     @Test
@@ -110,14 +128,18 @@ class CartItemTest {
         // given
         int quantity = -1;
 
-        // when & then
-        assertThatThrownBy(() -> new CartItem(
-            cart,
-            productItem,
-            quantity
-        ))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("수량은 1 이상이어야 합니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new CartItem(
+                cart,
+                productItem,
+                quantity
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.CART_023);
     }
 
     @Test
@@ -151,10 +173,14 @@ class CartItemTest {
 
         int increaseQuantity = 0;
 
-        // when & then
-        assertThatThrownBy(() -> cartItem.increaseQuantity(increaseQuantity))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("수량은 1 이상이어야 합니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> cartItem.increaseQuantity(increaseQuantity)
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.CART_023);
     }
 
     @Test
@@ -169,10 +195,14 @@ class CartItemTest {
 
         int increaseQuantity = -1;
 
-        // when & then
-        assertThatThrownBy(() -> cartItem.increaseQuantity(increaseQuantity))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("수량은 1 이상이어야 합니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> cartItem.increaseQuantity(increaseQuantity)
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.CART_023);
     }
 
     @Test
@@ -187,10 +217,14 @@ class CartItemTest {
 
         int increaseQuantity = 1;
 
-        // when & then
-        assertThatThrownBy(() -> cartItem.increaseQuantity(increaseQuantity))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("장바구니 최대 수량은 99개입니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> cartItem.increaseQuantity(increaseQuantity)
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.CART_024);
     }
 
     @Test
@@ -224,10 +258,14 @@ class CartItemTest {
 
         int decreaseQuantity = 0;
 
-        // when & then
-        assertThatThrownBy(() -> cartItem.decreaseQuantity(decreaseQuantity))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("수량은 1 이상이어야 합니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> cartItem.decreaseQuantity(decreaseQuantity)
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.CART_023);
     }
 
     @Test
@@ -242,10 +280,14 @@ class CartItemTest {
 
         int decreaseQuantity = -1;
 
-        // when & then
-        assertThatThrownBy(() -> cartItem.decreaseQuantity(decreaseQuantity))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("수량은 1 이상이어야 합니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> cartItem.decreaseQuantity(decreaseQuantity)
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.CART_023);
     }
 
     @Test
@@ -260,10 +302,14 @@ class CartItemTest {
 
         int decreaseQuantity = 5;
 
-        // when & then
-        assertThatThrownBy(() -> cartItem.decreaseQuantity(decreaseQuantity))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("수량은 1 미만이 될 수 없습니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> cartItem.decreaseQuantity(decreaseQuantity)
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.CART_025);
     }
 
     @Test
@@ -297,10 +343,14 @@ class CartItemTest {
 
         int changeQuantity = 0;
 
-        // when & then
-        assertThatThrownBy(() -> cartItem.changeQuantity(changeQuantity))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("수량은 1 이상이어야 합니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> cartItem.changeQuantity(changeQuantity)
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.CART_023);
     }
 
     @Test
@@ -315,10 +365,14 @@ class CartItemTest {
 
         int changeQuantity = -1;
 
-        // when & then
-        assertThatThrownBy(() -> cartItem.changeQuantity(changeQuantity))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("수량은 1 이상이어야 합니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> cartItem.changeQuantity(changeQuantity)
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.CART_023);
     }
 
     @Test
@@ -333,10 +387,14 @@ class CartItemTest {
 
         int changeQuantity = 100;
 
-        // when & then
-        assertThatThrownBy(() -> cartItem.changeQuantity(changeQuantity))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("장바구니 최대 수량은 99개입니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> cartItem.changeQuantity(changeQuantity)
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.CART_024);
     }
 
 }

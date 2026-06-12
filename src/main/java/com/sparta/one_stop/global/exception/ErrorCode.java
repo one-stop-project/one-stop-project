@@ -95,6 +95,14 @@ public enum ErrorCode {
     CART_005(HttpStatus.BAD_REQUEST, "CART_005", "본인의 상품은 장바구니에 담을 수 없습니다"),
     CART_006(HttpStatus.FORBIDDEN, "CART_006", "본인의 장바구니만 접근할 수 있습니다"),
 
+    // ===== CART - 장바구니 엔티티 검증 =====
+    CART_020(HttpStatus.BAD_REQUEST, "CART_020", "장바구니 소유자는 필수입니다"),
+    CART_021(HttpStatus.BAD_REQUEST, "CART_021", "장바구니 정보는 필수입니다"),
+    CART_022(HttpStatus.BAD_REQUEST, "CART_022", "상품 옵션 정보는 필수입니다"),
+    CART_023(HttpStatus.BAD_REQUEST, "CART_023", "수량은 1 이상이어야 합니다"),
+    CART_024(HttpStatus.BAD_REQUEST, "CART_024", "장바구니 최대 수량은 99개입니다"),
+    CART_025(HttpStatus.BAD_REQUEST, "CART_025", "수량은 1 미만이 될 수 없습니다"),
+
     // ===== ORDER - 주문 =====
     ORDER_001(HttpStatus.BAD_REQUEST, "ORDER_001", "주문할 상품이 없습니다"),
     ORDER_002(HttpStatus.BAD_REQUEST, "ORDER_002", "재고가 부족합니다"),
