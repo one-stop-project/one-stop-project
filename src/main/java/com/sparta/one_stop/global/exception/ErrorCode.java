@@ -181,6 +181,13 @@ public enum ErrorCode {
     OUTBOX_029(HttpStatus.BAD_REQUEST, "OUTBOX_029", "PROCESSING 상태의 이벤트만 실패 처리할 수 있습니다"),
     OUTBOX_030(HttpStatus.BAD_REQUEST, "OUTBOX_030", "최대 재시도 횟수는 0 이상이어야 합니다"),
 
+    // ===== NOTIFICATION - 알림 엔티티 검증 =====
+    NOTIFICATION_020(HttpStatus.BAD_REQUEST, "NOTIFICATION_020", "알림 대상 사용자는 필수입니다"),
+    NOTIFICATION_021(HttpStatus.BAD_REQUEST, "NOTIFICATION_021", "이벤트 ID는 필수입니다"),
+    NOTIFICATION_022(HttpStatus.BAD_REQUEST, "NOTIFICATION_022", "알림 유형은 필수입니다"),
+    NOTIFICATION_023(HttpStatus.BAD_REQUEST, "NOTIFICATION_023", "알림 제목은 필수입니다"),
+    NOTIFICATION_024(HttpStatus.BAD_REQUEST, "NOTIFICATION_024", "알림 내용은 필수입니다"),
+
     // ===== POINT - 포인트 =====
     POINT_001(HttpStatus.NOT_FOUND, "POINT_001", "포인트 계정을 찾을 수 없습니다"),
     POINT_002(HttpStatus.BAD_REQUEST, "POINT_002", "포인트가 부족합니다"),

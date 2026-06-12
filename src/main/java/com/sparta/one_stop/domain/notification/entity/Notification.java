@@ -2,6 +2,8 @@ package com.sparta.one_stop.domain.notification.entity;
 
 import com.sparta.one_stop.global.entity.BaseEntity;
 import com.sparta.one_stop.global.enums.notification.NotificationType;
+import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -107,14 +109,6 @@ public class Notification extends BaseEntity {
         return new Notification(userId, eventId, type, title, message);
     }
 
-    // == 비즈니스 메서드 ==
-
-    // 읽음 처리
-    // 향후 알림 읽음 처리 API 확장 시 사용
-    public void markRead() {
-        this.isRead = true;
-    }
-
     // == 검증 메서드 ==
 
     private void validateRequired(
@@ -125,24 +119,32 @@ public class Notification extends BaseEntity {
         String message
     ) {
         if (userId == null) {
-            throw new IllegalArgumentException("알림 대상 사용자는 필수입니다.");
+            throw new CustomException(ErrorCode.NOTIFICATION_020);
         }
 
         if (eventId == null || eventId.isBlank()) {
-            throw new IllegalArgumentException("이벤트 ID는 필수입니다.");
+            throw new CustomException(ErrorCode.NOTIFICATION_021);
         }
 
         if (type == null) {
-            throw new IllegalArgumentException("알림 유형은 필수입니다.");
+            throw new CustomException(ErrorCode.NOTIFICATION_022);
         }
 
         if (title == null || title.isBlank()) {
-            throw new IllegalArgumentException("알림 제목은 필수입니다.");
+            throw new CustomException(ErrorCode.NOTIFICATION_023);
         }
 
         if (message == null || message.isBlank()) {
-            throw new IllegalArgumentException("알림 내용은 필수입니다.");
+            throw new CustomException(ErrorCode.NOTIFICATION_024);
         }
+    }
+
+    // == 비즈니스 메서드 ==
+
+    // 읽음 처리
+    // 향후 알림 읽음 처리 API 확장 시 사용
+    public void markRead() {
+        this.isRead = true;
     }
 
 }
