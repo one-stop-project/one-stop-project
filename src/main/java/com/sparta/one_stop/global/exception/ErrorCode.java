@@ -141,6 +141,21 @@ public enum ErrorCode {
     ORDER_037(HttpStatus.BAD_REQUEST, "ORDER_037", "취소/거절 금액은 0원 이상이어야 합니다"),
     ORDER_038(HttpStatus.BAD_REQUEST, "ORDER_038", "복구 포인트는 0 이상이어야 합니다"),
 
+    // ===== ORDER - 주문 엔티티 검증 =====
+    ORDER_039(HttpStatus.BAD_REQUEST, "ORDER_039", "주문자는 필수입니다"),
+    ORDER_040(HttpStatus.BAD_REQUEST, "ORDER_040", "총 주문 금액은 0원 이상이어야 합니다"),
+    ORDER_041(HttpStatus.BAD_REQUEST, "ORDER_041", "총 할인 금액은 0원 이상이어야 합니다"),
+    ORDER_042(HttpStatus.BAD_REQUEST, "ORDER_042", "최종 결제 금액은 0원 이상이어야 합니다"),
+    ORDER_043(HttpStatus.BAD_REQUEST, "ORDER_043", "사용 포인트는 0 이상이어야 합니다"),
+    ORDER_044(HttpStatus.BAD_REQUEST, "ORDER_044", "구독 할인 금액은 0원 이상이어야 합니다"),
+    ORDER_045(HttpStatus.BAD_REQUEST, "ORDER_045", "수령인 이름은 필수입니다"),
+    ORDER_046(HttpStatus.BAD_REQUEST, "ORDER_046", "수령인 연락처는 필수입니다"),
+    ORDER_047(HttpStatus.BAD_REQUEST, "ORDER_047", "배송 주소는 필수입니다"),
+    ORDER_048(HttpStatus.BAD_REQUEST, "ORDER_048", "배송비는 0원 이상이어야 합니다"),
+    ORDER_049(HttpStatus.BAD_REQUEST, "ORDER_049", "주문 유형은 필수입니다"),
+    ORDER_050(HttpStatus.BAD_REQUEST, "ORDER_050", "결제 대기 상태에서만 결제 완료 처리할 수 있습니다"),
+    ORDER_051(HttpStatus.BAD_REQUEST, "ORDER_051", "이미 취소된 주문입니다"),
+
     // ===== PAYMENT - 결제 =====
     PAYMENT_001(HttpStatus.BAD_REQUEST, "PAYMENT_001", "이미 결제가 완료된 주문입니다"),
     PAYMENT_002(HttpStatus.BAD_REQUEST, "PAYMENT_002", "결제 금액이 주문 금액과 일치하지 않습니다"),
