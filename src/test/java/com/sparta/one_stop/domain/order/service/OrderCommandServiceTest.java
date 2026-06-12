@@ -235,6 +235,46 @@ class OrderCommandServiceTest {
         assertThat(savedOrder.getFinalPrice()).isEqualTo(22000L);
     }
 
+    @Test
+    @DisplayName("createOrder 성공 - 구독자는 무료 배송이 적용된다")
+    void createOrder_success_withFreeShipping() {
+        // given
+        Long userId = 1L;
+        Long itemId = 101L;
+        User user = mock(User.class);
+        ProductItem productItem = orderableProductItem(itemId, 10000L, 10L); // 10,000 x 2 = 20,000
+
+        CreateOrderRequest request = directOrderRequest(itemId, 2);
+
+        when(userRepository.findById(userId)).thenReturn(Optional.of(user));
+        mockProductItemsWithLock(List.of(itemId), List.of(productItem));
+        given(couponQueryService.validateAndCalculateDiscount(anyLong(), any(), anyLong()))
+            .willReturn(CouponDiscountResult.none());
+
+        // 구독자: 5% 할인 + 무료배송
+        given(subscriptionBenefitService.calculateDiscount(userId, 20000L)).willReturn(1000L);
+        given(subscriptionBenefitService.isFreeShippingEligible(userId)).willReturn(true);
+
+        when(orderRepository.save(any(Order.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+
+        // when
+        CreateOrderResponse result = orderCommandService.createOrder(userId, request);
+
+        // then
+        // 20,000(상품) - 0(쿠폰) - 0(포인트) - 1,000(구독할인) + 0(무료배송) = 19,000
+        assertThat(result.deliveryFee()).isEqualTo(0L);
+        assertThat(result.finalPrice()).isEqualTo(19000L);
+
+        ArgumentCaptor<Order> orderCaptor = ArgumentCaptor.forClass(Order.class);
+        verify(orderRepository).save(orderCaptor.capture());
+        Order savedOrder = orderCaptor.getValue();
+
+        assertThat(savedOrder.getDeliveryFee()).isEqualTo(0L);
+        assertThat(savedOrder.getSubscriptionDiscount()).isEqualTo(1000L);
+        assertThat(savedOrder.getFinalPrice()).isEqualTo(19000L);
+    }
+
 
     @Test
     @DisplayName("createOrder 성공 - CART 주문을 생성하고 cartItem을 삭제한다")
