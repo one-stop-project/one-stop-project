@@ -120,6 +120,17 @@ public enum ErrorCode {
     PAYMENT_007(HttpStatus.BAD_REQUEST, "PAYMENT_007", "지원하지 않는 결제 수단입니다"),
     PAYMENT_008(HttpStatus.BAD_REQUEST, "PAYMENT_008", "취소된 주문은 결제할 수 없습니다"),
     PAYMENT_009(HttpStatus.NOT_FOUND, "PAYMENT_009", "결제 정보를 찾을 수 없습니다"),
+    PAYMENT_010(HttpStatus.CONFLICT, "PAYMENT_010", "결제 처리 중입니다. 잠시 후 다시 시도해주세요."),
+
+    // ===== PAYMENT - 결제 엔티티 검증 =====
+    PAYMENT_020(HttpStatus.BAD_REQUEST, "PAYMENT_020", "주문 정보는 필수입니다"),
+    PAYMENT_021(HttpStatus.BAD_REQUEST, "PAYMENT_021", "결제 키는 필수입니다"),
+    PAYMENT_022(HttpStatus.BAD_REQUEST, "PAYMENT_022", "결제 금액은 0원 이상이어야 합니다"),
+    PAYMENT_023(HttpStatus.BAD_REQUEST, "PAYMENT_023", "결제 수단은 필수입니다"),
+    PAYMENT_024(HttpStatus.BAD_REQUEST, "PAYMENT_024", "결제 대기 상태에서만 승인할 수 있습니다"),
+    PAYMENT_025(HttpStatus.BAD_REQUEST, "PAYMENT_025", "결제 대기 상태에서만 실패 처리할 수 있습니다"),
+    PAYMENT_026(HttpStatus.BAD_REQUEST, "PAYMENT_026", "이미 취소된 결제입니다"),
+    PAYMENT_027(HttpStatus.BAD_REQUEST, "PAYMENT_027", "결제 완료 상태에서만 취소할 수 있습니다"),
 
     // ===== OUTBOX - 이벤트 발행 =====
     OUTBOX_001(HttpStatus.CONFLICT, "OUTBOX_001", "이미 저장된 Outbox 이벤트입니다"),
