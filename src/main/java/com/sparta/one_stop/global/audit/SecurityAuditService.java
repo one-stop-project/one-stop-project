@@ -18,6 +18,7 @@ import java.time.LocalDateTime;
 @RequiredArgsConstructor
 public class SecurityAuditService {
 
+    private final ClientIpExtractor clientIpExtractor;
     private final SecurityAuditWriter writer;
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -99,7 +100,7 @@ public class SecurityAuditService {
         }
         HttpServletRequest req = sra.getRequest();
         return new HttpContext(
-            ClientIpExtractor.extract(req),   // 공통 유틸 사용 (중복 제거)
+            clientIpExtractor.extract(req),   // 공통 유틸 사용 (중복 제거)
             req.getHeader("User-Agent"),
             req.getRequestURI(),
             req.getHeader("X-Trace-Id")

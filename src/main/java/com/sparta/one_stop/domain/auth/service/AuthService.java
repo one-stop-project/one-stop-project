@@ -321,6 +321,17 @@ public class AuthService {
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     //  POST /api/auth/logout
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    /**
+     * 로그아웃 호출 제한 (IP 기반)
+     *
+     * logout은 permitAll(인증 없이 접근)이라 토큰 없이도 호출 가능하다.
+     * userId 유무와 무관하게 모든 요청을 IP 단위로 제한해 무제한 호출 남용
+     * (자원 소모, 블랙리스트 키 폭증 등)을 막는다. 컨트롤러 진입부에서 먼저 호출.
+     */
+    public void checkLogoutRateLimit(String clientIp) {
+        rateLimitService.tryConsume(RateLimitPolicy.LOGOUT_PER_IP, clientIp);
+    }
+
     public void logout(Long userId, String deviceId, String accessToken) {
         // 각 작업이 독립적으로 실패해도 다른 작업은 진행 (best-effort)
 

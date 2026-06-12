@@ -89,3 +89,7 @@ point:
     # 테스트 환경을 통과하기 위한 32바이트 이상의 임시(더미) 시크릿 키
     secret: "test_secret_key_for_point_integrity_validation_must_be_long"
 
+security:
+  trusted-proxies:
+    - "127.0.0.1"        # IPv4 로컬
+    - "0:0:0:0:0:0:0:1"  # IPv6 로컬 (Mac 등에서 종종 사용됨)
