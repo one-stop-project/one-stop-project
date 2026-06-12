@@ -69,6 +69,16 @@ public class DecrCouponIssueStrategy implements CouponIssueStrategy {
             Long.class
         );
 
+    /**
+     * Redis key TTL 설정 스크립트
+     * - issued-users key에 쿠폰 만료 시각 기준 TTL을 적용한다.
+     */
+    private static final DefaultRedisScript<Long> EXPIRE_SCRIPT =
+        new DefaultRedisScript<>(
+            "return redis.call('expire', KEYS[1], ARGV[1])",
+            Long.class
+        );
+
     private final CouponRepository couponRepository;
     private final UserCouponRepository userCouponRepository;
     private final UserRepository userRepository;
@@ -275,13 +285,8 @@ public class DecrCouponIssueStrategy implements CouponIssueStrategy {
         }
 
         try {
-            DefaultRedisScript<Long> expireScript = new DefaultRedisScript<>(
-                "return redis.call('expire', KEYS[1], ARGV[1])",
-                Long.class
-            );
-
             Long result = redisTemplate.execute(
-                expireScript,
+                EXPIRE_SCRIPT,
                 List.of(key),
                 String.valueOf(ttlSeconds)
             );
@@ -436,7 +441,6 @@ public class DecrCouponIssueStrategy implements CouponIssueStrategy {
     }
 
     /**
-
      * Redis stock key 재초기화
      * 재초기화가 필요한 경우:
      * - stock key가 TTL 만료로 사라진 경우
