@@ -110,6 +110,29 @@ public enum ErrorCode {
     ORDER_012(HttpStatus.BAD_REQUEST, "ORDER_012", "쿠폰 할인 금액과 사용 포인트의 합은 상품 금액을 초과할 수 없습니다"),
     ORDER_013(HttpStatus.CONFLICT, "ORDER_013", "주문 처리 중입니다. 잠시 후 다시 시도해주세요."),
 
+    // ===== ORDER - 주문 상품 엔티티 검증 =====
+    ORDER_020(HttpStatus.BAD_REQUEST, "ORDER_020", "주문 정보는 필수입니다"),
+    ORDER_021(HttpStatus.BAD_REQUEST, "ORDER_021", "상품 옵션 정보는 필수입니다"),
+    ORDER_022(HttpStatus.BAD_REQUEST, "ORDER_022", "판매자 정보는 필수입니다"),
+    ORDER_023(HttpStatus.BAD_REQUEST, "ORDER_023", "상품명은 필수입니다"),
+    ORDER_024(HttpStatus.BAD_REQUEST, "ORDER_024", "수량은 1 이상이어야 합니다"),
+    ORDER_025(HttpStatus.BAD_REQUEST, "ORDER_025", "가격은 0원 이상이어야 합니다"),
+    ORDER_026(HttpStatus.BAD_REQUEST, "ORDER_026", "주문 접수는 결제 대기 상태에서만 처리할 수 있습니다"),
+    ORDER_027(HttpStatus.BAD_REQUEST, "ORDER_027", "주문 확정은 주문 접수 상태에서만 가능합니다"),
+    ORDER_028(HttpStatus.BAD_REQUEST, "ORDER_028", "배송 시작은 주문 확정 상태에서만 가능합니다"),
+    ORDER_029(HttpStatus.BAD_REQUEST, "ORDER_029", "배송 완료는 배송 중 상태에서만 가능합니다"),
+    ORDER_030(HttpStatus.BAD_REQUEST, "ORDER_030", "주문 거절은 주문 접수 상태에서만 가능합니다"),
+    ORDER_031(HttpStatus.BAD_REQUEST, "ORDER_031", "현재 상태에서는 주문 상품을 취소할 수 없습니다"),
+
+    // ===== ORDER - 주문 취소/거절 이력 엔티티 검증 =====
+    ORDER_032(HttpStatus.BAD_REQUEST, "ORDER_032", "처리 주체 유형은 필수입니다"),
+    ORDER_033(HttpStatus.BAD_REQUEST, "ORDER_033", "취소/거절 유형은 필수입니다"),
+    ORDER_034(HttpStatus.BAD_REQUEST, "ORDER_034", "처리자 ID는 필수입니다"),
+    ORDER_035(HttpStatus.BAD_REQUEST, "ORDER_035", "해당 처리 주체는 actorId를 가질 수 없습니다"),
+    ORDER_036(HttpStatus.BAD_REQUEST, "ORDER_036", "처리자 ID는 1 이상이어야 합니다"),
+    ORDER_037(HttpStatus.BAD_REQUEST, "ORDER_037", "취소/거절 금액은 0원 이상이어야 합니다"),
+    ORDER_038(HttpStatus.BAD_REQUEST, "ORDER_038", "복구 포인트는 0 이상이어야 합니다"),
+
     // ===== PAYMENT - 결제 =====
     PAYMENT_001(HttpStatus.BAD_REQUEST, "PAYMENT_001", "이미 결제가 완료된 주문입니다"),
     PAYMENT_002(HttpStatus.BAD_REQUEST, "PAYMENT_002", "결제 금액이 주문 금액과 일치하지 않습니다"),

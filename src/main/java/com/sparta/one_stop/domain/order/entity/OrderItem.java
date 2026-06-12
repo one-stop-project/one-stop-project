@@ -4,6 +4,8 @@ import com.sparta.one_stop.domain.product.entity.ProductItem;
 import com.sparta.one_stop.domain.user.entity.Seller;
 import com.sparta.one_stop.global.entity.BaseEntity;
 import com.sparta.one_stop.global.enums.order.OrderItemStatus;
+import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -85,18 +87,14 @@ public class OrderItem extends BaseEntity {
         Long price,
         String thumbnailUrl
     ) {
-
-        if (itemName == null || itemName.isBlank()) {
-            throw new IllegalArgumentException("상품명은 필수입니다.");
-        }
-
-        if (quantity <= 0) {
-            throw new IllegalArgumentException("수량은 1 이상이어야 합니다.");
-        }
-
-        if (price < 0) {
-            throw new IllegalArgumentException("가격은 0원 이상이어야 합니다.");
-        }
+        validateConstructorArguments(
+            order,
+            productItem,
+            seller,
+            itemName,
+            quantity,
+            price
+        );
 
         this.order = order;
         this.productItem = productItem;
@@ -108,13 +106,48 @@ public class OrderItem extends BaseEntity {
         this.status = OrderItemStatus.PENDING_PAYMENT;
     }
 
+    // == 검증 메서드 ==
+
+    private void validateConstructorArguments(
+        Order order,
+        ProductItem productItem,
+        Seller seller,
+        String itemName,
+        Integer quantity,
+        Long price
+    ) {
+        if (order == null) {
+            throw new CustomException(ErrorCode.ORDER_020);
+        }
+
+        if (productItem == null) {
+            throw new CustomException(ErrorCode.ORDER_021);
+        }
+
+        if (seller == null) {
+            throw new CustomException(ErrorCode.ORDER_022);
+        }
+
+        if (itemName == null || itemName.isBlank()) {
+            throw new CustomException(ErrorCode.ORDER_023);
+        }
+
+        if (quantity == null || quantity <= 0) {
+            throw new CustomException(ErrorCode.ORDER_024);
+        }
+
+        if (price == null || price < 0) {
+            throw new CustomException(ErrorCode.ORDER_025);
+        }
+    }
+
     // == 비즈니스 메서드 ==
 
     // 결제 완료 후 주문 접수 처리
     public void markOrdered() {
 
         if (this.status != OrderItemStatus.PENDING_PAYMENT) {
-            throw new IllegalStateException("주문 접수는 PENDING_PAYMENT 상태에서만 처리할 수 있습니다.");
+            throw new CustomException(ErrorCode.ORDER_026);
         }
 
         this.status = OrderItemStatus.ORDERED;
@@ -124,7 +157,7 @@ public class OrderItem extends BaseEntity {
     public void confirm() {
 
         if (this.status != OrderItemStatus.ORDERED) {
-            throw new IllegalStateException("주문 확정은 ORDERED 상태에서만 가능합니다.");
+            throw new CustomException(ErrorCode.ORDER_027);
         }
 
         this.status = OrderItemStatus.CONFIRMED;
@@ -134,7 +167,7 @@ public class OrderItem extends BaseEntity {
     public void startShipping() {
 
         if (this.status != OrderItemStatus.CONFIRMED) {
-            throw new IllegalStateException("배송 시작은 CONFIRMED 상태에서만 가능합니다.");
+            throw new CustomException(ErrorCode.ORDER_028);
         }
 
         this.status = OrderItemStatus.SHIPPING;
@@ -144,7 +177,7 @@ public class OrderItem extends BaseEntity {
     public void completeDelivery() {
 
         if (this.status != OrderItemStatus.SHIPPING) {
-            throw new IllegalStateException("배송 완료는 SHIPPING 상태에서만 가능합니다.");
+            throw new CustomException(ErrorCode.ORDER_029);
         }
 
         this.status = OrderItemStatus.DELIVERED;
@@ -154,7 +187,7 @@ public class OrderItem extends BaseEntity {
     public void reject() {
 
         if (this.status != OrderItemStatus.ORDERED) {
-            throw new IllegalStateException("주문 거절은 ORDERED 상태에서만 가능합니다.");
+            throw new CustomException(ErrorCode.ORDER_030);
         }
 
         this.status = OrderItemStatus.REJECTED;
@@ -165,7 +198,7 @@ public class OrderItem extends BaseEntity {
         if (this.status != OrderItemStatus.PENDING_PAYMENT
             && this.status != OrderItemStatus.ORDERED
             && this.status != OrderItemStatus.CONFIRMED)  {
-            throw new IllegalStateException("현재 상태에서는 주문 상품을 취소할 수 없습니다.");
+            throw new CustomException(ErrorCode.ORDER_031);
         }
 
         this.status = OrderItemStatus.CANCELLED;

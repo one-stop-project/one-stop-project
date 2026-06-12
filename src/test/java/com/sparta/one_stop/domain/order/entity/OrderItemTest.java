@@ -3,11 +3,13 @@ package com.sparta.one_stop.domain.order.entity;
 import com.sparta.one_stop.domain.product.entity.ProductItem;
 import com.sparta.one_stop.domain.user.entity.Seller;
 import com.sparta.one_stop.global.enums.order.OrderItemStatus;
+import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 
 class OrderItemTest {
@@ -43,71 +45,192 @@ class OrderItemTest {
     }
 
     @Test
+    @DisplayName("OrderItem 생성 실패 - 주문 정보가 null이면 예외 발생")
+    void createOrderItem_fail_whenOrderIsNull() {
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new OrderItem(
+                null,
+                mock(ProductItem.class),
+                mock(Seller.class),
+                "테스트 상품",
+                1,
+                10000L,
+                "thumbnail.jpg"
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.ORDER_020);
+    }
+
+    @Test
+    @DisplayName("OrderItem 생성 실패 - 상품 옵션 정보가 null이면 예외 발생")
+    void createOrderItem_fail_whenProductItemIsNull() {
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new OrderItem(
+                mock(Order.class),
+                null,
+                mock(Seller.class),
+                "테스트 상품",
+                1,
+                10000L,
+                "thumbnail.jpg"
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.ORDER_021);
+    }
+
+    @Test
+    @DisplayName("OrderItem 생성 실패 - 판매자 정보가 null이면 예외 발생")
+    void createOrderItem_fail_whenSellerIsNull() {
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new OrderItem(
+                mock(Order.class),
+                mock(ProductItem.class),
+                null,
+                "테스트 상품",
+                1,
+                10000L,
+                "thumbnail.jpg"
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.ORDER_022);
+    }
+
+    @Test
     @DisplayName("OrderItem 생성 실패 - 상품명이 null이면 예외 발생")
     void createOrderItem_fail_whenItemNameIsNull() {
-        // when & then
-        assertThatThrownBy(() -> new OrderItem(
-            mock(Order.class),
-            mock(ProductItem.class),
-            mock(Seller.class),
-            null,
-            1,
-            10000L,
-            "thumbnail.jpg"
-        ))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("상품명은 필수입니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new OrderItem(
+                mock(Order.class),
+                mock(ProductItem.class),
+                mock(Seller.class),
+                null,
+                1,
+                10000L,
+                "thumbnail.jpg"
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.ORDER_023);
     }
 
     @Test
     @DisplayName("OrderItem 생성 실패 - 상품명이 blank이면 예외 발생")
     void createOrderItem_fail_whenItemNameIsBlank() {
-        // when & then
-        assertThatThrownBy(() -> new OrderItem(
-            mock(Order.class),
-            mock(ProductItem.class),
-            mock(Seller.class),
-            " ",
-            1,
-            10000L,
-            "thumbnail.jpg"
-        ))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("상품명은 필수입니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new OrderItem(
+                mock(Order.class),
+                mock(ProductItem.class),
+                mock(Seller.class),
+                " ",
+                1,
+                10000L,
+                "thumbnail.jpg"
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.ORDER_023);
+    }
+
+    @Test
+    @DisplayName("OrderItem 생성 실패 - 수량이 null이면 예외 발생")
+    void createOrderItem_fail_whenQuantityIsNull() {
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new OrderItem(
+                mock(Order.class),
+                mock(ProductItem.class),
+                mock(Seller.class),
+                "테스트 상품",
+                null,
+                10000L,
+                "thumbnail.jpg"
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.ORDER_024);
     }
 
     @Test
     @DisplayName("OrderItem 생성 실패 - 수량이 1 미만이면 예외 발생")
     void createOrderItem_fail_whenQuantityIsLessThanOne() {
-        // when & then
-        assertThatThrownBy(() -> new OrderItem(
-            mock(Order.class),
-            mock(ProductItem.class),
-            mock(Seller.class),
-            "테스트 상품",
-            0,
-            10000L,
-            "thumbnail.jpg"
-        ))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("수량은 1 이상이어야 합니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new OrderItem(
+                mock(Order.class),
+                mock(ProductItem.class),
+                mock(Seller.class),
+                "테스트 상품",
+                0,
+                10000L,
+                "thumbnail.jpg"
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.ORDER_024);
+    }
+
+    @Test
+    @DisplayName("OrderItem 생성 실패 - 가격이 null이면 예외 발생")
+    void createOrderItem_fail_whenPriceIsNull() {
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new OrderItem(
+                mock(Order.class),
+                mock(ProductItem.class),
+                mock(Seller.class),
+                "테스트 상품",
+                1,
+                null,
+                "thumbnail.jpg"
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.ORDER_025);
     }
 
     @Test
     @DisplayName("OrderItem 생성 실패 - 가격이 0원 미만이면 예외 발생")
     void createOrderItem_fail_whenPriceIsNegative() {
-        // when & then
-        assertThatThrownBy(() -> new OrderItem(
-            mock(Order.class),
-            mock(ProductItem.class),
-            mock(Seller.class),
-            "테스트 상품",
-            1,
-            -1L,
-            "thumbnail.jpg"
-        ))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("가격은 0원 이상이어야 합니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new OrderItem(
+                mock(Order.class),
+                mock(ProductItem.class),
+                mock(Seller.class),
+                "테스트 상품",
+                1,
+                -1L,
+                "thumbnail.jpg"
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.ORDER_025);
     }
 
     @Test
@@ -130,10 +253,14 @@ class OrderItemTest {
         OrderItem orderItem = orderItem();
         orderItem.markOrdered();
 
-        // when & then
-        assertThatThrownBy(orderItem::markOrdered)
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessage("주문 접수는 PENDING_PAYMENT 상태에서만 처리할 수 있습니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            orderItem::markOrdered
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.ORDER_026);
     }
 
     @Test
@@ -155,10 +282,14 @@ class OrderItemTest {
         // given
         OrderItem orderItem = orderItem();
 
-        // when & then
-        assertThatThrownBy(orderItem::confirm)
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessage("주문 확정은 ORDERED 상태에서만 가능합니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            orderItem::confirm
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.ORDER_027);
     }
 
     @Test
@@ -180,10 +311,14 @@ class OrderItemTest {
         // given
         OrderItem orderItem = orderedOrderItem();
 
-        // when & then
-        assertThatThrownBy(orderItem::startShipping)
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessage("배송 시작은 CONFIRMED 상태에서만 가능합니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            orderItem::startShipping
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.ORDER_028);
     }
 
     @Test
@@ -205,10 +340,14 @@ class OrderItemTest {
         // given
         OrderItem orderItem = confirmedOrderItem();
 
-        // when & then
-        assertThatThrownBy(orderItem::completeDelivery)
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessage("배송 완료는 SHIPPING 상태에서만 가능합니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            orderItem::completeDelivery
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.ORDER_029);
     }
 
     @Test
@@ -230,10 +369,14 @@ class OrderItemTest {
         // given
         OrderItem orderItem = orderItem();
 
-        // when & then
-        assertThatThrownBy(orderItem::reject)
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessage("주문 거절은 ORDERED 상태에서만 가능합니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            orderItem::reject
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.ORDER_030);
     }
 
     @Test
@@ -281,10 +424,14 @@ class OrderItemTest {
         // given
         OrderItem orderItem = shippingOrderItem();
 
-        // when & then
-        assertThatThrownBy(orderItem::cancel)
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessage("현재 상태에서는 주문 상품을 취소할 수 없습니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            orderItem::cancel
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.ORDER_031);
     }
 
     @Test
@@ -293,10 +440,14 @@ class OrderItemTest {
         // given
         OrderItem orderItem = deliveredOrderItem();
 
-        // when & then
-        assertThatThrownBy(orderItem::cancel)
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessage("현재 상태에서는 주문 상품을 취소할 수 없습니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            orderItem::cancel
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.ORDER_031);
     }
 
     @Test
@@ -306,10 +457,14 @@ class OrderItemTest {
         OrderItem orderItem = orderedOrderItem();
         orderItem.reject();
 
-        // when & then
-        assertThatThrownBy(orderItem::cancel)
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessage("현재 상태에서는 주문 상품을 취소할 수 없습니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            orderItem::cancel
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.ORDER_031);
     }
 
     private OrderItem orderItem() {
