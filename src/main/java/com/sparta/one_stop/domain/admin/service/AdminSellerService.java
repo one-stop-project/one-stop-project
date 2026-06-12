@@ -113,6 +113,7 @@ public class AdminSellerService {
         // tokenVersion 캐시는 커밋 후 Listener가 evict
         Long userId = seller.getUser().getId();
         userStatusCacheService.evict(userId);
+        userStatusCacheService.evictTokenVersion(userId);
 
         // 전기기 로그아웃 — RT 삭제 + AT 무효화 (정지 판매자 RT 무기한 재발급 차단)
         eventPublisher.publishEvent(

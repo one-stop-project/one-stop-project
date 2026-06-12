@@ -132,7 +132,8 @@ public class OrderCommandService {
             paymentPointGuard.validateOnOrderCreation(userId, usedPoint);
         }
 
-        Long deliveryFee = DEFAULT_DELIVERY_FEE;
+        boolean freeShipping = subscriptionBenefitService.isFreeShippingEligible(userId);
+        Long deliveryFee = freeShipping ? 0L : DEFAULT_DELIVERY_FEE;
         Long finalPrice = totalPrice - discountPrice - usedPoint - subscriptionDiscount + deliveryFee;
 
         validateFinalPrice(finalPrice);

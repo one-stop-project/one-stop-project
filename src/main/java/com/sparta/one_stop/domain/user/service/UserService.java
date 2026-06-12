@@ -117,6 +117,7 @@ public class UserService {
 
         // 캐시 무효화 (status) — tokenVersion 캐시는 커밋 후 Listener가 evict
         userStatusCacheService.evict(userId);
+        userStatusCacheService.evictTokenVersion(userId);
 
         // 이벤트 발행 — Redis 정리 + 알림 발송 등
         eventPublisher.publishEvent(new AllDevicesLogoutEvent(userId, "WITHDRAWN"));
@@ -135,6 +136,7 @@ public class UserService {
 
         // 캐시 무효화 (status) — tokenVersion 캐시는 커밋 후 Listener가 evict
         userStatusCacheService.evict(userId);
+        userStatusCacheService.evictTokenVersion(userId);
 
         //정지된 사용자 전체 세션 무효화
         eventPublisher.publishEvent(new AllDevicesLogoutEvent(userId, "SUSPENDED"));
