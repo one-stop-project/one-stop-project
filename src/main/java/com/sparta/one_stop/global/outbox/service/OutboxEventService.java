@@ -6,6 +6,7 @@ import com.sparta.one_stop.global.exception.ErrorCode;
 import com.sparta.one_stop.global.outbox.entity.OutboxEvent;
 import com.sparta.one_stop.global.outbox.repository.OutboxEventRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,15 +24,13 @@ public class OutboxEventService {
         Long orderId,
         String payload
     ) {
-        validateDuplicateEvent(eventId);
-
         OutboxEvent outboxEvent = OutboxEvent.paymentApproved(
             eventId,
             orderId,
             payload
         );
 
-        return outboxEventRepository.save(outboxEvent);
+        return saveOutboxEvent(outboxEvent);
     }
 
     // 배송 완료 Outbox 이벤트 저장
@@ -41,15 +40,13 @@ public class OutboxEventService {
         Long orderId,
         String payload
     ) {
-        validateDuplicateEvent(eventId);
-
         OutboxEvent outboxEvent = OutboxEvent.deliveryCompleted(
             eventId,
             orderId,
             payload
         );
 
-        return outboxEventRepository.save(outboxEvent);
+        return saveOutboxEvent(outboxEvent);
     }
 
     // 범용 Outbox 이벤트 저장
@@ -63,8 +60,6 @@ public class OutboxEventService {
         String partitionKey,
         String payload
     ) {
-        validateDuplicateEvent(eventId);
-
         OutboxEvent outboxEvent = OutboxEvent.create(
             eventId,
             eventType,
@@ -75,13 +70,15 @@ public class OutboxEventService {
             payload
         );
 
-        return outboxEventRepository.save(outboxEvent);
+        return saveOutboxEvent(outboxEvent);
     }
 
-    // 이벤트 고유 ID 기준 중복 여부 확인
-    // 이미 저장된 이벤트이면 멱등성 보장을 위해 예외를 발생시킨다
-    private void validateDuplicateEvent(String eventId) {
-        if (outboxEventRepository.findByEventId(eventId).isPresent()) {
+    // Outbox 이벤트 저장
+    // event_id unique constraint 위반 시 OUTBOX_001로 변환한다
+    private OutboxEvent saveOutboxEvent(OutboxEvent outboxEvent) {
+        try {
+            return outboxEventRepository.saveAndFlush(outboxEvent);
+        } catch (DataIntegrityViolationException e) {
             throw new CustomException(ErrorCode.OUTBOX_001);
         }
     }
