@@ -3,6 +3,7 @@ package com.sparta.one_stop.global.exception;
 import com.sparta.one_stop.global.response.ErrorResponse;
 import jakarta.persistence.LockTimeoutException;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.PessimisticLockingFailureException;
@@ -49,6 +50,35 @@ public class GlobalExceptionHandler {
         return ResponseEntity
             .badRequest()
             .body(ErrorResponse.ofValidation(e.getBindingResult(), request.getRequestURI()));
+    }
+
+    /**
+     * @RequestParam, @PathVariable 등 Controller 메서드 파라미터 검증 실패 처리
+     */
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ErrorResponse> handleConstraintViolationException(
+        ConstraintViolationException e,
+        HttpServletRequest request
+    ) {
+        String detail = e.getConstraintViolations()
+            .stream()
+            .findFirst()
+            .map(violation -> violation.getMessage())
+            .orElse(null);
+
+        log.error(
+            "ConstraintViolationException: {} - {}",
+            request.getRequestURI(),
+            detail
+        );
+
+        return ResponseEntity
+            .status(ErrorCode.COMMON_010.getStatus())
+            .body(ErrorResponse.of(
+                ErrorCode.COMMON_010,
+                detail,
+                request.getRequestURI()
+            ));
     }
 
     /**
@@ -140,4 +170,5 @@ public class GlobalExceptionHandler {
             .status(ErrorCode.COMMON_007.getStatus())
             .body(ErrorResponse.of(ErrorCode.COMMON_007, null, request.getRequestURI()));
     }
+
 }

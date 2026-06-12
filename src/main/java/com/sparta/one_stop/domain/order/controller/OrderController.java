@@ -13,11 +13,14 @@ import com.sparta.one_stop.global.ratelimit.RateLimitService;
 import com.sparta.one_stop.global.response.ApiResponse;
 import com.sparta.one_stop.global.security.AuthUser;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -28,10 +31,15 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
 
+@Validated
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/orders")
 public class OrderController {
+
+    private static final int DEFAULT_PAGE = 0;
+    private static final int DEFAULT_SIZE = 20;
+    private static final int MAX_SIZE = 100;
 
     private final OrderService orderService;
     private final RateLimitService rateLimitService;
@@ -69,8 +77,13 @@ public class OrderController {
         @RequestParam(required = false)
         @DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
         LocalDate to,
-        @RequestParam(defaultValue = "0") int page,
-        @RequestParam(defaultValue = "20") int size
+        @RequestParam(defaultValue = "" + DEFAULT_PAGE)
+        @Min(value = 0, message = "페이지 번호는 0 이상이어야 합니다")
+        int page,
+        @RequestParam(defaultValue = "" + DEFAULT_SIZE)
+        @Min(value = 1, message = "페이지 크기는 1 이상이어야 합니다")
+        @Max(value = MAX_SIZE, message = "페이지 크기는 최대 100까지 가능합니다")
+        int size
     ) {
         OrderPageResponse response = orderService.getMyOrders(
             authUser.userId(),
@@ -119,4 +132,5 @@ public class OrderController {
             ApiResponse.success(response)
         );
     }
+
 }
