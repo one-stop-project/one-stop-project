@@ -60,8 +60,7 @@ public class OrderService {
     public CancelOrderResponse recoverCancelOrder(
         ObjectOptimisticLockingFailureException e,
         Long userId, Long orderId, CancelOrderRequest request) {
-        throw new CustomException(ErrorCode.POINT_005);
+        throw new CustomException(ErrorCode.ORDER_013);
     }
-
 
 }
