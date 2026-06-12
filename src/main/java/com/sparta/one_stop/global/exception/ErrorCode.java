@@ -208,6 +208,34 @@ public enum ErrorCode {
     COUPON_011(HttpStatus.NOT_FOUND, "COUPON_011", "사용자 쿠폰을 찾을 수 없습니다"),
     COUPON_012(HttpStatus.SERVICE_UNAVAILABLE, "COUPON_012", "쿠폰 발급 처리 중 일시적인 오류가 발생했습니다. 잠시 후 다시 시도해주세요"),
 
+    // ===== COUPON - 쿠폰 엔티티 검증 =====
+    COUPON_020(HttpStatus.BAD_REQUEST, "COUPON_020", "쿠폰명은 필수입니다"),
+    COUPON_021(HttpStatus.BAD_REQUEST, "COUPON_021", "쿠폰 할인 타입은 필수입니다"),
+    COUPON_022(HttpStatus.BAD_REQUEST, "COUPON_022", "쿠폰 할인 값은 1 이상이어야 합니다"),
+    COUPON_023(HttpStatus.BAD_REQUEST, "COUPON_023", "최소 주문 금액은 0원 이상이어야 합니다"),
+    COUPON_024(HttpStatus.BAD_REQUEST, "COUPON_024", "쿠폰 발급 가능 총 수량은 1 이상이어야 합니다"),
+    COUPON_025(HttpStatus.BAD_REQUEST, "COUPON_025", "쿠폰 시작일은 필수입니다"),
+    COUPON_026(HttpStatus.BAD_REQUEST, "COUPON_026", "쿠폰 만료일은 필수입니다"),
+    COUPON_027(HttpStatus.BAD_REQUEST, "COUPON_027", "쿠폰 만료일은 시작일 이후여야 합니다"),
+    COUPON_028(HttpStatus.BAD_REQUEST, "COUPON_028", "정률 쿠폰 할인율은 100 이하이어야 합니다"),
+    COUPON_029(HttpStatus.BAD_REQUEST, "COUPON_029", "정률 쿠폰은 최대 할인 금액이 필수입니다"),
+    COUPON_030(HttpStatus.BAD_REQUEST, "COUPON_030", "정액 쿠폰은 최대 할인 금액을 사용할 수 없습니다"),
+    COUPON_031(HttpStatus.BAD_REQUEST, "COUPON_031", "주문 금액은 0원 이상이어야 합니다"),
+    COUPON_032(HttpStatus.BAD_REQUEST, "COUPON_032", "현재 시각은 필수입니다"),
+    COUPON_033(HttpStatus.BAD_REQUEST, "COUPON_033", "비활성 쿠폰은 발급할 수 없습니다"),
+
+    // ===== COUPON - 사용자 쿠폰 엔티티 검증 =====
+    COUPON_034(HttpStatus.BAD_REQUEST, "COUPON_034", "쿠폰 소유자는 필수입니다"),
+    COUPON_035(HttpStatus.BAD_REQUEST, "COUPON_035", "쿠폰 정보는 필수입니다"),
+    COUPON_036(HttpStatus.BAD_REQUEST, "COUPON_036", "쿠폰을 사용할 주문 정보는 필수입니다"),
+    COUPON_037(HttpStatus.BAD_REQUEST, "COUPON_037", "쿠폰 사용 일시는 필수입니다"),
+    COUPON_038(HttpStatus.BAD_REQUEST, "COUPON_038", "사용 가능한 쿠폰이 아닙니다"),
+    COUPON_039(HttpStatus.BAD_REQUEST, "COUPON_039", "사용 완료된 쿠폰만 복구할 수 있습니다"),
+    COUPON_040(HttpStatus.BAD_REQUEST, "COUPON_040", "이미 사용된 쿠폰은 만료 처리할 수 없습니다"),
+    COUPON_041(HttpStatus.BAD_REQUEST, "COUPON_041", "아직 만료되지 않은 쿠폰입니다"),
+    COUPON_042(HttpStatus.BAD_REQUEST, "COUPON_042", "사용자 ID는 필수입니다"),
+    COUPON_043(HttpStatus.FORBIDDEN, "COUPON_043", "본인 쿠폰만 사용할 수 있습니다"),
+
     // ===== REVIEW - 리뷰 =====
     REVIEW_001(HttpStatus.BAD_REQUEST, "REVIEW_001", "배송 완료 후에만 리뷰를 작성할 수 있습니다"),
     REVIEW_002(HttpStatus.CONFLICT, "REVIEW_002", "이미 리뷰를 작성한 주문 상품입니다"),
