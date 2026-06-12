@@ -36,6 +36,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -97,22 +100,43 @@ public class DeliveryService {
         Page<OrderItem> orderItems;
 
         if (status != null) {
+            // PENDING_PAYMENT은 배송 생성 전 상태라 판매자 목록 대상이 아님
+            if (status == OrderItemStatus.PENDING_PAYMENT) {
+                return Page.empty(pageable);
+            }
             orderItems = orderItemRepository.findBySeller_IdAndStatus(
                 seller.getId(),
                 status,
                 pageable
             );
         } else {
-            orderItems = orderItemRepository.findBySeller_Id(
+            // 결제 전(PENDING_PAYMENT) 주문 상품은 배송이 없으므로 제외
+            orderItems = orderItemRepository.findBySeller_IdAndStatusNot(
                 seller.getId(),
+                OrderItemStatus.PENDING_PAYMENT,
                 pageable
             );
         }
 
-        return orderItems.map(orderItem -> {
-            Delivery delivery = deliveryRepository.findByOrderItem(orderItem)
-                .orElseThrow(() -> new CustomException(ErrorCode.SHIPPING_005));
+        // 배송 일괄 조회로 N+1 제거 (orderItemId → Delivery)
+        List<Long> orderItemIds = orderItems.getContent().stream()
+            .map(OrderItem::getId)
+            .toList();
 
+        Map<Long, Delivery> deliveryMap =
+            deliveryRepository.findAllByOrderItemIdIn(orderItemIds)
+                .stream()
+                .collect(Collectors.toMap(
+                    d -> d.getOrderItem().getId(),
+                    Function.identity()
+                ));
+
+        return orderItems.map(orderItem -> {
+            Delivery delivery = deliveryMap.get(orderItem.getId());
+            if (delivery == null) {
+                // PENDING_PAYMENT 제외 후엔 발생하지 않아야 하는 방어 코드
+                throw new CustomException(ErrorCode.SHIPPING_005);
+            }
             return SellerOrderResponse.from(orderItem, delivery);
         });
     }
@@ -181,6 +205,12 @@ public class DeliveryService {
     }
 
     // 주문 거절 (ORDERED → REJECTED)
+    /**
+     * 주문 거절 — 판매자가 이행 불가한 주문을 거절 (발주 확인 전 단계)
+     * - OrderItem이 ORDERED(배송 ACCEPT) 상태일 때만 가능. confirm/ship 이전.
+     * - 결제 완료 이후 단계이므로 재고는 즉시 복구한다.
+     * - order_item: ORDERED → REJECTED
+     */
     @Transactional
     public RejectOrderResponse rejectOrder(Long orderItemId,
                                            Long userId,
@@ -251,6 +281,12 @@ public class DeliveryService {
                                                              UpdateDeliveryStatusRequest request) {
 
         Seller seller = findSellerByUserId(userId);
+
+        // 이 엔드포인트는 DEPARTURE 이후 진행(DELIVERING / FINAL_DELIVERY)만 허용
+        if (request.status() != DeliveryStatus.DELIVERING
+            && request.status() != DeliveryStatus.FINAL_DELIVERY) {
+            throw new CustomException(ErrorCode.SHIPPING_002);
+        }
 
         Delivery delivery = deliveryRepository.findById(deliveryId)
             .orElseThrow(() -> new CustomException(ErrorCode.SHIPPING_005));
