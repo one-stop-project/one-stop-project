@@ -168,6 +168,19 @@ public enum ErrorCode {
     OUTBOX_002(HttpStatus.NOT_FOUND, "OUTBOX_002", "Outbox 이벤트를 찾을 수 없습니다"),
     OUTBOX_003(HttpStatus.BAD_REQUEST, "OUTBOX_003", "처리할 수 없는 Outbox 이벤트 상태입니다"),
 
+    // ===== OUTBOX - 이벤트 엔티티 검증 =====
+    OUTBOX_020(HttpStatus.BAD_REQUEST, "OUTBOX_020", "이벤트 ID는 필수입니다"),
+    OUTBOX_021(HttpStatus.BAD_REQUEST, "OUTBOX_021", "이벤트 타입은 필수입니다"),
+    OUTBOX_022(HttpStatus.BAD_REQUEST, "OUTBOX_022", "Aggregate Type은 필수입니다"),
+    OUTBOX_023(HttpStatus.BAD_REQUEST, "OUTBOX_023", "Aggregate ID는 필수입니다"),
+    OUTBOX_024(HttpStatus.BAD_REQUEST, "OUTBOX_024", "Kafka Topic은 필수입니다"),
+    OUTBOX_025(HttpStatus.BAD_REQUEST, "OUTBOX_025", "Partition Key는 필수입니다"),
+    OUTBOX_026(HttpStatus.BAD_REQUEST, "OUTBOX_026", "이벤트 Payload는 필수입니다"),
+    OUTBOX_027(HttpStatus.BAD_REQUEST, "OUTBOX_027", "PENDING 상태의 이벤트만 PROCESSING 처리할 수 있습니다"),
+    OUTBOX_028(HttpStatus.BAD_REQUEST, "OUTBOX_028", "PROCESSING 상태의 이벤트만 PUBLISHED 처리할 수 있습니다"),
+    OUTBOX_029(HttpStatus.BAD_REQUEST, "OUTBOX_029", "PROCESSING 상태의 이벤트만 실패 처리할 수 있습니다"),
+    OUTBOX_030(HttpStatus.BAD_REQUEST, "OUTBOX_030", "최대 재시도 횟수는 0 이상이어야 합니다"),
+
     // ===== POINT - 포인트 =====
     POINT_001(HttpStatus.NOT_FOUND, "POINT_001", "포인트 계정을 찾을 수 없습니다"),
     POINT_002(HttpStatus.BAD_REQUEST, "POINT_002", "포인트가 부족합니다"),

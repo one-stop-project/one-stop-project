@@ -3,6 +3,8 @@ package com.sparta.one_stop.global.outbox.entity;
 import com.sparta.one_stop.global.entity.BaseEntity;
 import com.sparta.one_stop.global.enums.outbox.OutboxEventStatus;
 import com.sparta.one_stop.global.enums.outbox.OutboxEventType;
+import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -200,7 +202,7 @@ public class OutboxEvent extends BaseEntity {
     // Publisher가 이벤트 발행을 위해 선점 처리
     public void markProcessing() {
         if (this.status != OutboxEventStatus.PENDING) {
-            throw new IllegalStateException("PENDING 상태의 이벤트만 PROCESSING 처리할 수 있습니다.");
+            throw new CustomException(ErrorCode.OUTBOX_027);
         }
 
         this.status = OutboxEventStatus.PROCESSING;
@@ -210,7 +212,7 @@ public class OutboxEvent extends BaseEntity {
     // Kafka 발행 성공 처리
     public void markPublished() {
         if (this.status != OutboxEventStatus.PROCESSING) {
-            throw new IllegalStateException("PROCESSING 상태의 이벤트만 PUBLISHED 처리할 수 있습니다.");
+            throw new CustomException(ErrorCode.OUTBOX_028);
         }
 
         this.status = OutboxEventStatus.PUBLISHED;
@@ -220,11 +222,11 @@ public class OutboxEvent extends BaseEntity {
     // Kafka 발행 실패 처리 (재시도 한도에 따라 PENDING 또는 DEAD로 전이)
     public void markFailure(String errorMessage, int maxRetryCount) {
         if (this.status != OutboxEventStatus.PROCESSING) {
-            throw new IllegalStateException("PROCESSING 상태의 이벤트만 실패 처리할 수 있습니다.");
+            throw new CustomException(ErrorCode.OUTBOX_029);
         }
 
         if (maxRetryCount < 0) {
-            throw new IllegalArgumentException("최대 재시도 횟수는 0 이상이어야 합니다.");
+            throw new CustomException(ErrorCode.OUTBOX_030);
         }
 
         this.retryCount++;
@@ -250,31 +252,31 @@ public class OutboxEvent extends BaseEntity {
         String payload
     ) {
         if (eventId == null || eventId.isBlank()) {
-            throw new IllegalArgumentException("이벤트 ID는 필수입니다.");
+            throw new CustomException(ErrorCode.OUTBOX_020);
         }
 
         if (eventType == null) {
-            throw new IllegalArgumentException("이벤트 타입은 필수입니다.");
+            throw new CustomException(ErrorCode.OUTBOX_021);
         }
 
         if (aggregateType == null || aggregateType.isBlank()) {
-            throw new IllegalArgumentException("Aggregate Type은 필수입니다.");
+            throw new CustomException(ErrorCode.OUTBOX_022);
         }
 
         if (aggregateId == null) {
-            throw new IllegalArgumentException("Aggregate ID는 필수입니다.");
+            throw new CustomException(ErrorCode.OUTBOX_023);
         }
 
         if (topic == null || topic.isBlank()) {
-            throw new IllegalArgumentException("Kafka Topic은 필수입니다.");
+            throw new CustomException(ErrorCode.OUTBOX_024);
         }
 
         if (partitionKey == null || partitionKey.isBlank()) {
-            throw new IllegalArgumentException("Partition Key는 필수입니다.");
+            throw new CustomException(ErrorCode.OUTBOX_025);
         }
 
         if (payload == null || payload.isBlank()) {
-            throw new IllegalArgumentException("이벤트 Payload는 필수입니다.");
+            throw new CustomException(ErrorCode.OUTBOX_026);
         }
     }
 
