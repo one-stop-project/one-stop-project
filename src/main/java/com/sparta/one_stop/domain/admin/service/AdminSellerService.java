@@ -110,6 +110,7 @@ public class AdminSellerService {
         seller.getUser().increaseTokenVersion();
 
         // 캐시 무효화 — 정지 즉시 인증 차단 (캐시 ACTIVE 잔존 우회 방지)
+        // tokenVersion 캐시는 커밋 후 Listener가 evict
         Long userId = seller.getUser().getId();
         userStatusCacheService.evict(userId);
         userStatusCacheService.evictTokenVersion(userId);
