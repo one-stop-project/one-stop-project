@@ -181,7 +181,12 @@ public class AuthController {
         @Parameter(in = ParameterIn.COOKIE, name = "device_id", description = "로그아웃할 기기의 식별자")
         @CookieValue(value = "device_id", required = false) String deviceId,
         @Parameter(in = ParameterIn.HEADER, name = "Authorization", description = "Bearer {Access_Token} 형태의 인증 헤더")
-        @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authHeader) {
+        @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authHeader,
+        HttpServletRequest servletRequest) {
+
+        // 0. Rate Limit — permitAll 엔드포인트라 IP 기반으로 무제한 호출 방어
+        String clientIp = ClientIpExtractor.extract(servletRequest);
+        authService.checkLogoutRateLimit(clientIp);
 
         // 1. 토큰 추출 위임 (캡슐화)
         String accessToken = jwtTokenProvider.resolveToken(authHeader);
