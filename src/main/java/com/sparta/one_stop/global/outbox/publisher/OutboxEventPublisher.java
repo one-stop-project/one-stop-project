@@ -36,7 +36,24 @@ public class OutboxEventPublisher {
         log.info("Outbox 폴링 - PENDING 이벤트 {}건 조회", pendingEvents.size());
 
         for (OutboxEvent event : pendingEvents) {
+            publishSingleEvent(event);
+        }
+    }
+
+    private void publishSingleEvent(OutboxEvent event) {
+        try {
             outboxEventPublishExecutor.execute(event);
+        } catch (Exception e) {
+            log.error(
+                "Outbox 이벤트 처리 실패 - id: {}, eventId: {}, eventType: {}, aggregateType: {}, aggregateId: {}, topic: {}",
+                event.getId(),
+                event.getEventId(),
+                event.getEventType(),
+                event.getAggregateType(),
+                event.getAggregateId(),
+                event.getTopic(),
+                e
+            );
         }
     }
 
