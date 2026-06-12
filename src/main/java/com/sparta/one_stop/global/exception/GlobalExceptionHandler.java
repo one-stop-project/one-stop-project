@@ -82,6 +82,54 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * 잘못된 상태 예외 처리
+     * 상태 전이 위반 등 IllegalStateException 발생 시 400 반환
+     */
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<ErrorResponse> handleIllegalStateException(
+        IllegalStateException e,
+        HttpServletRequest request
+    ) {
+        log.warn(
+            "IllegalStateException: {} - {}",
+            request.getRequestURI(),
+            e.getMessage()
+        );
+
+        return ResponseEntity
+            .status(ErrorCode.COMMON_001.getStatus())
+            .body(ErrorResponse.of(
+                ErrorCode.COMMON_001,
+                e.getMessage(),
+                request.getRequestURI()
+            ));
+    }
+
+    /**
+     * 잘못된 인자 예외 처리
+     * 입력값 위반 등 IllegalArgumentException 발생 시 400 반환
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ErrorResponse> handleIllegalArgumentException(
+        IllegalArgumentException e,
+        HttpServletRequest request
+    ) {
+        log.warn(
+            "IllegalArgumentException: {} - {}",
+            request.getRequestURI(),
+            e.getMessage()
+        );
+
+        return ResponseEntity
+            .status(ErrorCode.COMMON_001.getStatus())
+            .body(ErrorResponse.of(
+                ErrorCode.COMMON_001,
+                e.getMessage(),
+                request.getRequestURI()
+            ));
+    }
+
+    /**
      * 낙관적 락 충돌 처리
      * 동시 요청으로 인한 상태 변경 충돌 시 ORDER_009 반환
      */
