@@ -3,6 +3,8 @@ package com.sparta.one_stop.domain.point.entity;
 import com.sparta.one_stop.domain.order.entity.Order;
 import com.sparta.one_stop.domain.point.util.PointIntegrityHasher;
 import com.sparta.one_stop.domain.user.entity.User;
+import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -11,7 +13,7 @@ import java.lang.reflect.Field;
 import java.time.LocalDate;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -143,14 +145,18 @@ class PointUsageDetailTest {
             1000
         );
 
-        // when & then
-        assertThatThrownBy(() -> new PointUsageDetail(
-            null,
-            sourceHistory,
-            300
-        ))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("포인트 사용 이력은 필수입니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new PointUsageDetail(
+                null,
+                sourceHistory,
+                300
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.POINT_035);
     }
 
     @Test
@@ -163,14 +169,18 @@ class PointUsageDetailTest {
             300
         );
 
-        // when & then
-        assertThatThrownBy(() -> new PointUsageDetail(
-            useHistory,
-            null,
-            300
-        ))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("차감 대상 포인트 이력은 필수입니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new PointUsageDetail(
+                useHistory,
+                null,
+                300
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.POINT_036);
     }
 
     @Test
@@ -187,14 +197,18 @@ class PointUsageDetailTest {
             1000
         );
 
-        // when & then
-        assertThatThrownBy(() -> new PointUsageDetail(
-            useHistory,
-            sourceHistory,
-            300
-        ))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("USE 이력만 사용 상세 이력과 연결할 수 있습니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new PointUsageDetail(
+                useHistory,
+                sourceHistory,
+                300
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.POINT_037);
     }
 
     @Test
@@ -211,14 +225,46 @@ class PointUsageDetailTest {
             1000
         );
 
-        // when & then
-        assertThatThrownBy(() -> new PointUsageDetail(
-            useHistory,
-            sourceHistory,
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new PointUsageDetail(
+                useHistory,
+                sourceHistory,
+                300
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.POINT_038);
+    }
+
+    @Test
+    @DisplayName("생성 실패 - EXPIRE 이력은 차감 대상이 아니므로 예외가 발생한다")
+    void create_fail_whenSourceHistoryIsExpireType() {
+        // given
+        Point point = createPoint(1L);
+        PointHistory useHistory = useHistory(
+            point,
             300
-        ))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("차감 대상은 CHARGE/EARN/REFUND 이력이어야 합니다.");
+        );
+        PointHistory sourceHistory = expireHistory(
+            point,
+            1000
+        );
+
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new PointUsageDetail(
+                useHistory,
+                sourceHistory,
+                300
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.POINT_038);
     }
 
     @Test
@@ -235,14 +281,18 @@ class PointUsageDetailTest {
             1000
         );
 
-        // when & then
-        assertThatThrownBy(() -> new PointUsageDetail(
-            useHistory,
-            sourceHistory,
-            null
-        ))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("차감 금액은 1 이상이어야 합니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new PointUsageDetail(
+                useHistory,
+                sourceHistory,
+                null
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.POINT_039);
     }
 
     @Test
@@ -259,14 +309,18 @@ class PointUsageDetailTest {
             1000
         );
 
-        // when & then
-        assertThatThrownBy(() -> new PointUsageDetail(
-            useHistory,
-            sourceHistory,
-            0
-        ))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("차감 금액은 1 이상이어야 합니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new PointUsageDetail(
+                useHistory,
+                sourceHistory,
+                0
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.POINT_039);
     }
 
     @Test
@@ -283,14 +337,47 @@ class PointUsageDetailTest {
             1000
         );
 
-        // when & then
-        assertThatThrownBy(() -> new PointUsageDetail(
-            useHistory,
-            sourceHistory,
-            -1
-        ))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("차감 금액은 1 이상이어야 합니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new PointUsageDetail(
+                useHistory,
+                sourceHistory,
+                -1
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.POINT_039);
+    }
+
+    @Test
+    @DisplayName("생성 실패 - sourceHistory의 remainingAmount가 null이면 예외가 발생한다")
+    void create_fail_whenSourceRemainingAmountIsNull() {
+        // given
+        Point point = createPoint(1L);
+        PointHistory useHistory = useHistory(
+            point,
+            300
+        );
+        PointHistory sourceHistory = mock(PointHistory.class);
+
+        when(sourceHistory.isDeductibleSource()).thenReturn(true);
+        when(sourceHistory.getRemainingAmount()).thenReturn(null);
+        when(sourceHistory.getExpireAt()).thenReturn(EXPIRE_AT);
+
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new PointUsageDetail(
+                useHistory,
+                sourceHistory,
+                300
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.POINT_040);
     }
 
     @Test
@@ -307,20 +394,23 @@ class PointUsageDetailTest {
             1000
         );
 
-        // when & then
-        assertThatThrownBy(() -> new PointUsageDetail(
-            useHistory,
-            sourceHistory,
-            1001
-        ))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("차감 금액은 원본 이력의 잔여 포인트를 초과할 수 없습니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new PointUsageDetail(
+                useHistory,
+                sourceHistory,
+                1001
+            )
+        );
 
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.POINT_040);
         assertThat(sourceHistory.getRemainingAmount()).isEqualTo(1000);
     }
 
     @Test
-    @DisplayName("생성 실패 - EXPIRE 이력은 차감 대상이 아니므로 예외가 발생한다")
+    @DisplayName("생성 실패 - sourceHistory의 expireAt이 null이면 예외가 발생한다")
     void create_fail_whenSourceExpireAtIsNull() {
         // given
         Point point = createPoint(1L);
@@ -328,19 +418,24 @@ class PointUsageDetailTest {
             point,
             300
         );
-        PointHistory sourceHistory = expireHistory(
-            point,
-            1000
+        PointHistory sourceHistory = mock(PointHistory.class);
+
+        when(sourceHistory.isDeductibleSource()).thenReturn(true);
+        when(sourceHistory.getRemainingAmount()).thenReturn(1000);
+        when(sourceHistory.getExpireAt()).thenReturn(null);
+
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new PointUsageDetail(
+                useHistory,
+                sourceHistory,
+                300
+            )
         );
 
-        // when & then
-        assertThatThrownBy(() -> new PointUsageDetail(
-            useHistory,
-            sourceHistory,
-            300
-        ))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("차감 대상은 CHARGE/EARN/REFUND 이력이어야 합니다.");
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.POINT_041);
     }
 
 }

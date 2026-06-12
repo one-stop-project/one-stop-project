@@ -200,6 +200,34 @@ public enum ErrorCode {
     POINT_009(HttpStatus.BAD_REQUEST, "POINT_009", "안전상한선 초과"),
     POINT_010(HttpStatus.BAD_REQUEST,"POINT_010","해시 입력값 오류"),
 
+    // ===== POINT - 포인트 엔티티 검증 =====
+    POINT_020(HttpStatus.BAD_REQUEST, "POINT_020", "포인트 소유자는 필수입니다"),
+    POINT_021(HttpStatus.BAD_REQUEST, "POINT_021", "포인트 소유자 ID는 필수입니다"),
+
+    // ===== POINT - 포인트 이력 엔티티 검증 =====
+    POINT_022(HttpStatus.BAD_REQUEST, "POINT_022", "포인트 계정은 필수입니다"),
+    POINT_023(HttpStatus.BAD_REQUEST, "POINT_023", "포인트 사용자는 필수입니다"),
+    POINT_024(HttpStatus.BAD_REQUEST, "POINT_024", "포인트 변동 금액은 0일 수 없습니다"),
+    POINT_025(HttpStatus.BAD_REQUEST, "POINT_025", "잔여 포인트는 0 이상이어야 합니다"),
+    POINT_026(HttpStatus.BAD_REQUEST, "POINT_026", "포인트 이력 유형은 필수입니다"),
+    POINT_027(HttpStatus.BAD_REQUEST, "POINT_027", "적립/충전/복구 금액은 양수여야 합니다"),
+    POINT_028(HttpStatus.BAD_REQUEST, "POINT_028", "생성 시 잔여 포인트는 변동 금액과 같아야 합니다"),
+    POINT_029(HttpStatus.BAD_REQUEST, "POINT_029", "포인트 만료일은 필수입니다"),
+    POINT_030(HttpStatus.BAD_REQUEST, "POINT_030", "사용/만료 금액은 음수여야 합니다"),
+    POINT_031(HttpStatus.BAD_REQUEST, "POINT_031", "사용/만료 이력의 잔여 포인트는 0이어야 합니다"),
+    POINT_032(HttpStatus.BAD_REQUEST, "POINT_032", "차감 가능한 포인트 이력이 아닙니다"),
+    POINT_033(HttpStatus.BAD_REQUEST, "POINT_033", "잔여 포인트가 부족합니다"),
+    POINT_034(HttpStatus.BAD_REQUEST, "POINT_034", "만료 가능한 포인트 이력이 아닙니다"),
+
+    // ===== POINT - 포인트 사용 상세 엔티티 검증 =====
+    POINT_035(HttpStatus.BAD_REQUEST, "POINT_035", "포인트 사용 이력은 필수입니다"),
+    POINT_036(HttpStatus.BAD_REQUEST, "POINT_036", "차감 대상 포인트 이력은 필수입니다"),
+    POINT_037(HttpStatus.BAD_REQUEST, "POINT_037", "USE 이력만 사용 상세 이력과 연결할 수 있습니다"),
+    POINT_038(HttpStatus.BAD_REQUEST, "POINT_038", "차감 대상은 CHARGE/EARN/REFUND 이력이어야 합니다"),
+    POINT_039(HttpStatus.BAD_REQUEST, "POINT_039", "차감 금액은 1 이상이어야 합니다"),
+    POINT_040(HttpStatus.BAD_REQUEST, "POINT_040", "차감 금액은 원본 이력의 잔여 포인트를 초과할 수 없습니다"),
+    POINT_041(HttpStatus.BAD_REQUEST, "POINT_041", "원본 포인트 만료일은 필수입니다"),
+
     // ===== SHIPPING - 배송 =====
     SHIPPING_001(HttpStatus.BAD_REQUEST, "SHIPPING_001", "주문 확인 전에는 배송을 시작할 수 없습니다"),
     SHIPPING_002(HttpStatus.BAD_REQUEST, "SHIPPING_002", "유효하지 않은 배송 상태 변경입니다"),

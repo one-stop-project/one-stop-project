@@ -4,6 +4,8 @@ import com.sparta.one_stop.domain.order.entity.Order;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.global.entity.BaseEntity;
 import com.sparta.one_stop.global.enums.point.PointHistoryType;
+import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -235,13 +237,13 @@ public class PointHistory extends BaseEntity {
         );
     }
 
-    // == 비즈니스 메서드 ==
+    // == 검증 메서드 ==
 
     // 포인트 금액 양수 검증
     // 외부에서 양수 amount를 받아 내부적으로 음수 이력을 만들 때 사용한다
     private static void validatePositiveAmount(Integer amount) {
         if (amount == null || amount <= 0) {
-            throw new IllegalArgumentException("포인트 금액은 1 이상이어야 합니다.");
+            throw new CustomException(ErrorCode.POINT_003);
         }
     }
 
@@ -249,50 +251,10 @@ public class PointHistory extends BaseEntity {
     // point null인 경우 point.getUser() NPE가 아니라 명확한 예외를 발생시키기 위해 사용한다
     private static User getPointUser(Point point) {
         if (point == null) {
-            throw new IllegalArgumentException("포인트 계정은 필수입니다.");
+            throw new CustomException(ErrorCode.POINT_022);
         }
 
         return point.getUser();
-    }
-
-    // 원본 포인트 이력의 잔여 포인트 차감
-    // 포인트 사용 시 FEFO + FIFO 기준으로 선택된 CHARGE / EARN / REFUND 이력에 대해 호출한다
-    public void decreaseRemainingAmount(Integer amount) {
-        validatePositiveAmount(amount);
-
-        if (!isDeductibleSource()) {
-            throw new IllegalStateException("차감 가능한 포인트 이력이 아닙니다.");
-        }
-
-        if (this.remainingAmount < amount) {
-            throw new IllegalArgumentException("잔여 포인트가 부족합니다.");
-        }
-
-        this.remainingAmount -= amount;
-    }
-
-
-    // == 검증 메서드 ==
-
-    // 잔여 포인트 만료 처리
-    // 만료 스케줄러 또는 배치에서 호출하며, 만료된 금액을 반환한다
-    public Integer expireRemainingAmount() {
-        if (!isDeductibleSource()) {
-            throw new IllegalStateException("만료 가능한 포인트 이력이 아닙니다.");
-        }
-
-        Integer expiredAmount = this.remainingAmount;
-        this.remainingAmount = 0;
-
-        return expiredAmount;
-    }
-
-    // 차감 가능한 원본 포인트 이력 여부
-    // CHARGE / EARN / REFUND 이력만 remainingAmount를 가지고 차감 대상이 될 수 있다
-    public boolean isDeductibleSource() {
-        return this.type == PointHistoryType.CHARGE
-            || this.type == PointHistoryType.EARN
-            || this.type == PointHistoryType.REFUND;
     }
 
     // 공통 필수값 검증
@@ -304,23 +266,23 @@ public class PointHistory extends BaseEntity {
         PointHistoryType type
     ) {
         if (point == null) {
-            throw new IllegalArgumentException("포인트 계정은 필수입니다.");
+            throw new CustomException(ErrorCode.POINT_022);
         }
 
         if (user == null) {
-            throw new IllegalArgumentException("포인트 사용자는 필수입니다.");
+            throw new CustomException(ErrorCode.POINT_023);
         }
 
         if (amount == null || amount == 0) {
-            throw new IllegalArgumentException("포인트 변동 금액은 0일 수 없습니다.");
+            throw new CustomException(ErrorCode.POINT_024);
         }
 
         if (remainingAmount == null || remainingAmount < 0) {
-            throw new IllegalArgumentException("잔여 포인트는 0 이상이어야 합니다.");
+            throw new CustomException(ErrorCode.POINT_025);
         }
 
         if (type == null) {
-            throw new IllegalArgumentException("포인트 이력 유형은 필수입니다.");
+            throw new CustomException(ErrorCode.POINT_026);
         }
     }
 
@@ -337,15 +299,15 @@ public class PointHistory extends BaseEntity {
             || type == PointHistoryType.EARN
             || type == PointHistoryType.REFUND) {
             if (amount <= 0) {
-                throw new IllegalArgumentException("적립/충전/복구 금액은 양수여야 합니다.");
+                throw new CustomException(ErrorCode.POINT_027);
             }
 
             if (!amount.equals(remainingAmount)) {
-                throw new IllegalArgumentException("생성 시 잔여 포인트는 변동 금액과 같아야 합니다.");
+                throw new CustomException(ErrorCode.POINT_028);
             }
 
             if (expireAt == null) {
-                throw new IllegalArgumentException("포인트 만료일은 필수입니다.");
+                throw new CustomException(ErrorCode.POINT_029);
             }
 
             return;
@@ -355,13 +317,52 @@ public class PointHistory extends BaseEntity {
         // amount는 음수, remainingAmount는 0이어야 한다
         if (type == PointHistoryType.USE || type == PointHistoryType.EXPIRE) {
             if (amount >= 0) {
-                throw new IllegalArgumentException("사용/만료 금액은 음수여야 합니다.");
+                throw new CustomException(ErrorCode.POINT_030);
             }
 
             if (remainingAmount != 0) {
-                throw new IllegalArgumentException("사용/만료 이력의 잔여 포인트는 0이어야 합니다.");
+                throw new CustomException(ErrorCode.POINT_031);
             }
         }
+    }
+
+    // == 비즈니스 메서드 ==
+
+    // 원본 포인트 이력의 잔여 포인트 차감
+    // 포인트 사용 시 FEFO + FIFO 기준으로 선택된 CHARGE / EARN / REFUND 이력에 대해 호출한다
+    public void decreaseRemainingAmount(Integer amount) {
+        validatePositiveAmount(amount);
+
+        if (!isDeductibleSource()) {
+            throw new CustomException(ErrorCode.POINT_032);
+        }
+
+        if (this.remainingAmount < amount) {
+            throw new CustomException(ErrorCode.POINT_033);
+        }
+
+        this.remainingAmount -= amount;
+    }
+
+    // 잔여 포인트 만료 처리
+    // 만료 스케줄러 또는 배치에서 호출하며, 만료된 금액을 반환한다
+    public Integer expireRemainingAmount() {
+        if (!isDeductibleSource()) {
+            throw new CustomException(ErrorCode.POINT_034);
+        }
+
+        Integer expiredAmount = this.remainingAmount;
+        this.remainingAmount = 0;
+
+        return expiredAmount;
+    }
+
+    // 차감 가능한 원본 포인트 이력 여부
+    // CHARGE / EARN / REFUND 이력만 remainingAmount를 가지고 차감 대상이 될 수 있다
+    public boolean isDeductibleSource() {
+        return this.type == PointHistoryType.CHARGE
+            || this.type == PointHistoryType.EARN
+            || this.type == PointHistoryType.REFUND;
     }
 
 }
