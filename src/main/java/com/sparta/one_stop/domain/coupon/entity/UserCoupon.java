@@ -4,6 +4,8 @@ import com.sparta.one_stop.domain.order.entity.Order;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.global.entity.BaseEntity;
 import com.sparta.one_stop.global.enums.coupon.UserCouponStatus;
+import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -82,17 +84,60 @@ public class UserCoupon extends BaseEntity {
         User user,
         Coupon coupon
     ) {
-        if (user == null) {
-            throw new IllegalArgumentException("쿠폰 소유자는 필수입니다.");
-        }
-
-        if (coupon == null) {
-            throw new IllegalArgumentException("쿠폰 정보는 필수입니다.");
-        }
+        validateConstructorArguments(user, coupon);
 
         this.user = user;
         this.coupon = coupon;
         this.status = UserCouponStatus.AVAILABLE;
+    }
+
+    // == 검증 메서드 ==
+
+    // 쿠폰 사용 가능 여부 검증
+    public void validateUsable(
+        Long userId,
+        LocalDateTime now
+    ) {
+        validateOwner(userId);
+        validateNow(now);
+
+        if (this.status != UserCouponStatus.AVAILABLE) {
+            throw new CustomException(ErrorCode.COUPON_038);
+        }
+
+        if (!this.coupon.isInPeriod(now)) {
+            throw new CustomException(ErrorCode.COUPON_003);
+        }
+    }
+
+    private void validateConstructorArguments(
+        User user,
+        Coupon coupon
+    ) {
+        if (user == null) {
+            throw new CustomException(ErrorCode.COUPON_034);
+        }
+
+        if (coupon == null) {
+            throw new CustomException(ErrorCode.COUPON_035);
+        }
+    }
+
+    private void validateNow(LocalDateTime now) {
+        if (now == null) {
+            throw new CustomException(ErrorCode.COUPON_032);
+        }
+    }
+
+    // 쿠폰 소유자 검증
+    private void validateOwner(Long userId) {
+        if (userId == null) {
+            throw new CustomException(ErrorCode.COUPON_042);
+        }
+
+        if (!this.user.getId().equals(userId)) {
+            throw new CustomException(ErrorCode.COUPON_043);
+        }
     }
 
     // == 비즈니스 메서드 ==
@@ -104,19 +149,19 @@ public class UserCoupon extends BaseEntity {
         LocalDateTime usedAt
     ) {
         if (order == null) {
-            throw new IllegalArgumentException("쿠폰을 사용할 주문 정보는 필수입니다.");
+            throw new CustomException(ErrorCode.COUPON_036);
         }
 
         if (usedAt == null) {
-            throw new IllegalArgumentException("쿠폰 사용 일시는 필수입니다.");
+            throw new CustomException(ErrorCode.COUPON_037);
         }
 
         if (this.status != UserCouponStatus.AVAILABLE) {
-            throw new IllegalStateException("사용 가능한 쿠폰이 아닙니다.");
+            throw new CustomException(ErrorCode.COUPON_038);
         }
 
         if (this.coupon.isExpired(usedAt)) {
-            throw new IllegalStateException("만료된 쿠폰은 사용할 수 없습니다.");
+            throw new CustomException(ErrorCode.COUPON_007);
         }
 
         this.status = UserCouponStatus.USED;
@@ -127,12 +172,10 @@ public class UserCoupon extends BaseEntity {
     // 쿠폰 복구
     // 주문 취소 시 호출한다
     public void restore(LocalDateTime now) {
-        if (now == null) {
-            throw new IllegalArgumentException("현재 시각은 필수입니다.");
-        }
+        validateNow(now);
 
         if (this.status != UserCouponStatus.USED) {
-            throw new IllegalStateException("사용 완료된 쿠폰만 복구할 수 있습니다.");
+            throw new CustomException(ErrorCode.COUPON_039);
         }
 
         this.usedOrder = null;
@@ -148,52 +191,21 @@ public class UserCoupon extends BaseEntity {
 
     // 쿠폰 만료 처리
     public void expire(LocalDateTime now) {
-        if (now == null) {
-            throw new IllegalArgumentException("현재 시각은 필수입니다.");
-        }
+        validateNow(now);
 
         if (this.status == UserCouponStatus.EXPIRED) {
             return;
         }
 
         if (this.status == UserCouponStatus.USED) {
-            throw new IllegalStateException("이미 사용된 쿠폰은 만료 처리할 수 없습니다.");
+            throw new CustomException(ErrorCode.COUPON_040);
         }
 
         if (!this.coupon.isExpired(now)) {
-            throw new IllegalStateException("아직 만료되지 않은 쿠폰입니다.");
+            throw new CustomException(ErrorCode.COUPON_041);
         }
 
         this.status = UserCouponStatus.EXPIRED;
-    }
-
-    // == 검증 메서드 ==
-
-    // 쿠폰 사용 가능 여부 검증
-    public void validateUsable(
-        Long userId,
-        LocalDateTime now
-    ) {
-        validateOwner(userId);
-
-        if (this.status != UserCouponStatus.AVAILABLE) {
-            throw new IllegalStateException("사용 가능한 쿠폰이 아닙니다.");
-        }
-
-        if (!this.coupon.isInPeriod(now)) {
-            throw new IllegalStateException("쿠폰 사용 가능 기간이 아닙니다.");
-        }
-    }
-
-    // 쿠폰 소유자 검증
-    private void validateOwner(Long userId) {
-        if (userId == null) {
-            throw new IllegalArgumentException("사용자 ID는 필수입니다.");
-        }
-
-        if (!this.user.getId().equals(userId)) {
-            throw new IllegalStateException("본인 쿠폰만 사용할 수 있습니다.");
-        }
     }
 
 }

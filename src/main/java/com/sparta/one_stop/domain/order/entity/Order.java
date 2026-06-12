@@ -6,6 +6,8 @@ import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.global.entity.BaseEntity;
 import com.sparta.one_stop.global.enums.order.OrderStatus;
 import com.sparta.one_stop.global.enums.order.OrderType;
+import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -122,6 +124,20 @@ public class Order extends BaseEntity {
         Long deliveryFee,
         OrderType orderType
     ) {
+        validateConstructorArguments(
+            user,
+            totalPrice,
+            discountPrice,
+            finalPrice,
+            usedPoint,
+            subscriptionDiscount,
+            receiverName,
+            receiverPhone,
+            receiverAddress,
+            deliveryFee,
+            orderType
+        );
+
         this.user = user;
         this.userCoupon = userCoupon;
         this.totalPrice = totalPrice;
@@ -138,12 +154,72 @@ public class Order extends BaseEntity {
         this.status = OrderStatus.PENDING_PAYMENT;
     }
 
+    // == 검증 메서드 ==
+
+    private void validateConstructorArguments(
+        User user,
+        Long totalPrice,
+        Long discountPrice,
+        Long finalPrice,
+        Integer usedPoint,
+        Long subscriptionDiscount,
+        String receiverName,
+        String receiverPhone,
+        String receiverAddress,
+        Long deliveryFee,
+        OrderType orderType
+    ) {
+        if (user == null) {
+            throw new CustomException(ErrorCode.ORDER_039);
+        }
+
+        if (totalPrice == null || totalPrice < 0) {
+            throw new CustomException(ErrorCode.ORDER_040);
+        }
+
+        if (discountPrice == null || discountPrice < 0) {
+            throw new CustomException(ErrorCode.ORDER_041);
+        }
+
+        if (finalPrice == null || finalPrice < 0) {
+            throw new CustomException(ErrorCode.ORDER_042);
+        }
+
+        if (usedPoint == null || usedPoint < 0) {
+            throw new CustomException(ErrorCode.ORDER_043);
+        }
+
+        if (subscriptionDiscount != null && subscriptionDiscount < 0) {
+            throw new CustomException(ErrorCode.ORDER_044);
+        }
+
+        if (receiverName == null || receiverName.isBlank()) {
+            throw new CustomException(ErrorCode.ORDER_045);
+        }
+
+        if (receiverPhone == null || receiverPhone.isBlank()) {
+            throw new CustomException(ErrorCode.ORDER_046);
+        }
+
+        if (receiverAddress == null || receiverAddress.isBlank()) {
+            throw new CustomException(ErrorCode.ORDER_047);
+        }
+
+        if (deliveryFee == null || deliveryFee < 0) {
+            throw new CustomException(ErrorCode.ORDER_048);
+        }
+
+        if (orderType == null) {
+            throw new CustomException(ErrorCode.ORDER_049);
+        }
+    }
+
     // == 비즈니스 메서드 ==
 
     // 결제 완료
     public void completePayment() {
         if (this.status != OrderStatus.PENDING_PAYMENT) {
-            throw new IllegalStateException("결제 대기 상태에서만 결제 완료 처리할 수 있습니다.");
+            throw new CustomException(ErrorCode.ORDER_050);
         }
 
         this.status = OrderStatus.PAID;
@@ -152,7 +228,7 @@ public class Order extends BaseEntity {
     // 주문 취소
     public void cancel() {
         if (this.status == OrderStatus.CANCELLED) {
-            throw new IllegalStateException("이미 취소된 주문입니다.");
+            throw new CustomException(ErrorCode.ORDER_051);
         }
 
         this.status = OrderStatus.CANCELLED;

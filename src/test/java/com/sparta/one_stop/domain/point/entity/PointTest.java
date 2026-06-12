@@ -11,7 +11,7 @@ import org.junit.jupiter.api.Test;
 import java.lang.reflect.Field;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
@@ -88,6 +88,35 @@ class PointTest {
     }
 
     @Test
+    @DisplayName("createInitial 실패 - 사용자가 null이면 예외가 발생한다")
+    void createInitial_fail_whenUserIsNull() {
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> Point.createInitial(null)
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.POINT_020);
+    }
+
+    @Test
+    @DisplayName("createInitial 실패 - 사용자 ID가 null이면 예외가 발생한다")
+    void createInitial_fail_whenUserIdIsNull() {
+        // given
+        User user = mockUser(null);
+
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> Point.createInitial(user)
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.POINT_021);
+    }
+
+    @Test
     @DisplayName("increaseBalance 성공 - balance가 증가한다")
     void increaseBalance_success() {
         // given
@@ -113,16 +142,14 @@ class PointTest {
             1000
         );
 
-        // when & then
-        assertThatThrownBy(() -> point.increaseBalance(null))
-            .isInstanceOf(CustomException.class)
-            .satisfies(exception -> {
-                CustomException customException = (CustomException) exception;
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> point.increaseBalance(null)
+        );
 
-                assertThat(customException.getErrorCode())
-                    .isEqualTo(ErrorCode.POINT_003);
-            });
-
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.POINT_003);
         assertThat(point.getBalance()).isEqualTo(1000);
     }
 
@@ -135,16 +162,14 @@ class PointTest {
             1000
         );
 
-        // when & then
-        assertThatThrownBy(() -> point.increaseBalance(0))
-            .isInstanceOf(CustomException.class)
-            .satisfies(exception -> {
-                CustomException customException = (CustomException) exception;
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> point.increaseBalance(0)
+        );
 
-                assertThat(customException.getErrorCode())
-                    .isEqualTo(ErrorCode.POINT_003);
-            });
-
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.POINT_003);
         assertThat(point.getBalance()).isEqualTo(1000);
     }
 
@@ -157,16 +182,14 @@ class PointTest {
             1000
         );
 
-        // when & then
-        assertThatThrownBy(() -> point.increaseBalance(-1))
-            .isInstanceOf(CustomException.class)
-            .satisfies(exception -> {
-                CustomException customException = (CustomException) exception;
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> point.increaseBalance(-1)
+        );
 
-                assertThat(customException.getErrorCode())
-                    .isEqualTo(ErrorCode.POINT_003);
-            });
-
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.POINT_003);
         assertThat(point.getBalance()).isEqualTo(1000);
     }
 
@@ -196,16 +219,14 @@ class PointTest {
             1000
         );
 
-        // when & then
-        assertThatThrownBy(() -> point.decreaseBalance(null))
-            .isInstanceOf(CustomException.class)
-            .satisfies(exception -> {
-                CustomException customException = (CustomException) exception;
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> point.decreaseBalance(null)
+        );
 
-                assertThat(customException.getErrorCode())
-                    .isEqualTo(ErrorCode.POINT_003);
-            });
-
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.POINT_003);
         assertThat(point.getBalance()).isEqualTo(1000);
     }
 
@@ -218,16 +239,14 @@ class PointTest {
             1000
         );
 
-        // when & then
-        assertThatThrownBy(() -> point.decreaseBalance(0))
-            .isInstanceOf(CustomException.class)
-            .satisfies(exception -> {
-                CustomException customException = (CustomException) exception;
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> point.decreaseBalance(0)
+        );
 
-                assertThat(customException.getErrorCode())
-                    .isEqualTo(ErrorCode.POINT_003);
-            });
-
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.POINT_003);
         assertThat(point.getBalance()).isEqualTo(1000);
     }
 
@@ -240,16 +259,14 @@ class PointTest {
             1000
         );
 
-        // when & then
-        assertThatThrownBy(() -> point.decreaseBalance(-1))
-            .isInstanceOf(CustomException.class)
-            .satisfies(exception -> {
-                CustomException customException = (CustomException) exception;
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> point.decreaseBalance(-1)
+        );
 
-                assertThat(customException.getErrorCode())
-                    .isEqualTo(ErrorCode.POINT_003);
-            });
-
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.POINT_003);
         assertThat(point.getBalance()).isEqualTo(1000);
     }
 
@@ -262,12 +279,28 @@ class PointTest {
             1000
         );
 
-        // when & then
-        assertThatThrownBy(() -> point.decreaseBalance(1001))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("보유 포인트가 부족합니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> point.decreaseBalance(1001)
+        );
 
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.POINT_002);
         assertThat(point.getBalance()).isEqualTo(1000);
+    }
+
+    @Test
+    @DisplayName("verifyIntegrity 성공 - 현재 balance, version, hash가 일치하면 예외가 발생하지 않는다")
+    void verifyIntegrity_success() {
+        // given
+        Point point = Point.createInitial(mockUser(1L));
+
+        // when
+        point.verifyIntegrity();
+
+        // then
+        assertThat(point.getIntegrityHash()).isNotNull();
     }
 
 }

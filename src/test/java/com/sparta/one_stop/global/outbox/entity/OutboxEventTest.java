@@ -2,13 +2,15 @@ package com.sparta.one_stop.global.outbox.entity;
 
 import com.sparta.one_stop.global.enums.outbox.OutboxEventStatus;
 import com.sparta.one_stop.global.enums.outbox.OutboxEventType;
+import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class OutboxEventTest {
 
@@ -28,6 +30,30 @@ class OutboxEventTest {
         assertThat(outboxEvent.getAggregateType()).isEqualTo("ORDER");
         assertThat(outboxEvent.getAggregateId()).isEqualTo(1L);
         assertThat(outboxEvent.getTopic()).isEqualTo("payment.approved");
+        assertThat(outboxEvent.getPartitionKey()).isEqualTo("1");
+        assertThat(outboxEvent.getPayload()).isEqualTo("{\"orderId\":1}");
+        assertThat(outboxEvent.getStatus()).isEqualTo(OutboxEventStatus.PENDING);
+        assertThat(outboxEvent.getRetryCount()).isEqualTo(0);
+        assertThat(outboxEvent.getLastErrorMessage()).isNull();
+        assertThat(outboxEvent.getProcessedAt()).isNull();
+    }
+
+    @Test
+    @DisplayName("deliveryCompleted 생성 성공 - 배송 완료 이벤트를 생성하면 PENDING 상태와 retryCount 0으로 초기화된다")
+    void deliveryCompleted_success() {
+        // when
+        OutboxEvent outboxEvent = OutboxEvent.deliveryCompleted(
+            "event-1",
+            1L,
+            "{\"orderId\":1}"
+        );
+
+        // then
+        assertThat(outboxEvent.getEventId()).isEqualTo("event-1");
+        assertThat(outboxEvent.getEventType()).isEqualTo(OutboxEventType.DELIVERY_COMPLETED);
+        assertThat(outboxEvent.getAggregateType()).isEqualTo("DELIVERY");
+        assertThat(outboxEvent.getAggregateId()).isEqualTo(1L);
+        assertThat(outboxEvent.getTopic()).isEqualTo("delivery.completed");
         assertThat(outboxEvent.getPartitionKey()).isEqualTo("1");
         assertThat(outboxEvent.getPayload()).isEqualTo("{\"orderId\":1}");
         assertThat(outboxEvent.getStatus()).isEqualTo(OutboxEventStatus.PENDING);
@@ -67,181 +93,253 @@ class OutboxEventTest {
     @Test
     @DisplayName("OutboxEvent 생성 실패 - eventId가 null이면 예외가 발생한다")
     void create_fail_whenEventIdIsNull() {
-        // when & then
-        assertThatThrownBy(() -> createOutboxEvent(
-            null,
-            OutboxEventType.PAYMENT_APPROVED,
-            "ORDER",
-            1L,
-            "payment.approved",
-            "1",
-            "{\"orderId\":1}"
-        )).isInstanceOf(IllegalArgumentException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> createOutboxEvent(
+                null,
+                OutboxEventType.PAYMENT_APPROVED,
+                "ORDER",
+                1L,
+                "payment.approved",
+                "1",
+                "{\"orderId\":1}"
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.OUTBOX_020);
     }
 
     @Test
     @DisplayName("OutboxEvent 생성 실패 - eventId가 공백이면 예외가 발생한다")
     void create_fail_whenEventIdIsBlank() {
-        // when & then
-        assertThatThrownBy(() -> createOutboxEvent(
-            " ",
-            OutboxEventType.PAYMENT_APPROVED,
-            "ORDER",
-            1L,
-            "payment.approved",
-            "1",
-            "{\"orderId\":1}"
-        )).isInstanceOf(IllegalArgumentException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> createOutboxEvent(
+                " ",
+                OutboxEventType.PAYMENT_APPROVED,
+                "ORDER",
+                1L,
+                "payment.approved",
+                "1",
+                "{\"orderId\":1}"
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.OUTBOX_020);
     }
 
     @Test
     @DisplayName("OutboxEvent 생성 실패 - eventType이 null이면 예외가 발생한다")
     void create_fail_whenEventTypeIsNull() {
-        // when & then
-        assertThatThrownBy(() -> createOutboxEvent(
-            "event-1",
-            null,
-            "ORDER",
-            1L,
-            "payment.approved",
-            "1",
-            "{\"orderId\":1}"
-        )).isInstanceOf(IllegalArgumentException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> createOutboxEvent(
+                "event-1",
+                null,
+                "ORDER",
+                1L,
+                "payment.approved",
+                "1",
+                "{\"orderId\":1}"
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.OUTBOX_021);
     }
 
     @Test
     @DisplayName("OutboxEvent 생성 실패 - aggregateType이 null이면 예외가 발생한다")
     void create_fail_whenAggregateTypeIsNull() {
-        // when & then
-        assertThatThrownBy(() -> createOutboxEvent(
-            "event-1",
-            OutboxEventType.PAYMENT_APPROVED,
-            null,
-            1L,
-            "payment.approved",
-            "1",
-            "{\"orderId\":1}"
-        )).isInstanceOf(IllegalArgumentException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> createOutboxEvent(
+                "event-1",
+                OutboxEventType.PAYMENT_APPROVED,
+                null,
+                1L,
+                "payment.approved",
+                "1",
+                "{\"orderId\":1}"
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.OUTBOX_022);
     }
 
     @Test
     @DisplayName("OutboxEvent 생성 실패 - aggregateType이 공백이면 예외가 발생한다")
     void create_fail_whenAggregateTypeIsBlank() {
-        // when & then
-        assertThatThrownBy(() -> createOutboxEvent(
-            "event-1",
-            OutboxEventType.PAYMENT_APPROVED,
-            " ",
-            1L,
-            "payment.approved",
-            "1",
-            "{\"orderId\":1}"
-        )).isInstanceOf(IllegalArgumentException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> createOutboxEvent(
+                "event-1",
+                OutboxEventType.PAYMENT_APPROVED,
+                " ",
+                1L,
+                "payment.approved",
+                "1",
+                "{\"orderId\":1}"
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.OUTBOX_022);
     }
 
     @Test
     @DisplayName("OutboxEvent 생성 실패 - aggregateId가 null이면 예외가 발생한다")
     void create_fail_whenAggregateIdIsNull() {
-        // when & then
-        assertThatThrownBy(() -> createOutboxEvent(
-            "event-1",
-            OutboxEventType.PAYMENT_APPROVED,
-            "ORDER",
-            null,
-            "payment.approved",
-            "1",
-            "{\"orderId\":1}"
-        )).isInstanceOf(IllegalArgumentException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> createOutboxEvent(
+                "event-1",
+                OutboxEventType.PAYMENT_APPROVED,
+                "ORDER",
+                null,
+                "payment.approved",
+                "1",
+                "{\"orderId\":1}"
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.OUTBOX_023);
     }
 
     @Test
     @DisplayName("OutboxEvent 생성 실패 - topic이 null이면 예외가 발생한다")
     void create_fail_whenTopicIsNull() {
-        // when & then
-        assertThatThrownBy(() -> createOutboxEvent(
-            "event-1",
-            OutboxEventType.PAYMENT_APPROVED,
-            "ORDER",
-            1L,
-            null,
-            "1",
-            "{\"orderId\":1}"
-        )).isInstanceOf(IllegalArgumentException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> createOutboxEvent(
+                "event-1",
+                OutboxEventType.PAYMENT_APPROVED,
+                "ORDER",
+                1L,
+                null,
+                "1",
+                "{\"orderId\":1}"
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.OUTBOX_024);
     }
 
     @Test
     @DisplayName("OutboxEvent 생성 실패 - topic이 공백이면 예외가 발생한다")
     void create_fail_whenTopicIsBlank() {
-        // when & then
-        assertThatThrownBy(() -> createOutboxEvent(
-            "event-1",
-            OutboxEventType.PAYMENT_APPROVED,
-            "ORDER",
-            1L,
-            " ",
-            "1",
-            "{\"orderId\":1}"
-        )).isInstanceOf(IllegalArgumentException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> createOutboxEvent(
+                "event-1",
+                OutboxEventType.PAYMENT_APPROVED,
+                "ORDER",
+                1L,
+                " ",
+                "1",
+                "{\"orderId\":1}"
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.OUTBOX_024);
     }
 
     @Test
     @DisplayName("OutboxEvent 생성 실패 - partitionKey가 null이면 예외가 발생한다")
     void create_fail_whenPartitionKeyIsNull() {
-        // when & then
-        assertThatThrownBy(() -> createOutboxEvent(
-            "event-1",
-            OutboxEventType.PAYMENT_APPROVED,
-            "ORDER",
-            1L,
-            "payment.approved",
-            null,
-            "{\"orderId\":1}"
-        )).isInstanceOf(IllegalArgumentException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> createOutboxEvent(
+                "event-1",
+                OutboxEventType.PAYMENT_APPROVED,
+                "ORDER",
+                1L,
+                "payment.approved",
+                null,
+                "{\"orderId\":1}"
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.OUTBOX_025);
     }
 
     @Test
     @DisplayName("OutboxEvent 생성 실패 - partitionKey가 공백이면 예외가 발생한다")
     void create_fail_whenPartitionKeyIsBlank() {
-        // when & then
-        assertThatThrownBy(() -> createOutboxEvent(
-            "event-1",
-            OutboxEventType.PAYMENT_APPROVED,
-            "ORDER",
-            1L,
-            "payment.approved",
-            " ",
-            "{\"orderId\":1}"
-        )).isInstanceOf(IllegalArgumentException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> createOutboxEvent(
+                "event-1",
+                OutboxEventType.PAYMENT_APPROVED,
+                "ORDER",
+                1L,
+                "payment.approved",
+                " ",
+                "{\"orderId\":1}"
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.OUTBOX_025);
     }
 
     @Test
     @DisplayName("OutboxEvent 생성 실패 - payload가 null이면 예외가 발생한다")
     void create_fail_whenPayloadIsNull() {
-        // when & then
-        assertThatThrownBy(() -> createOutboxEvent(
-            "event-1",
-            OutboxEventType.PAYMENT_APPROVED,
-            "ORDER",
-            1L,
-            "payment.approved",
-            "1",
-            null
-        )).isInstanceOf(IllegalArgumentException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> createOutboxEvent(
+                "event-1",
+                OutboxEventType.PAYMENT_APPROVED,
+                "ORDER",
+                1L,
+                "payment.approved",
+                "1",
+                null
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.OUTBOX_026);
     }
 
     @Test
     @DisplayName("OutboxEvent 생성 실패 - payload가 공백이면 예외가 발생한다")
     void create_fail_whenPayloadIsBlank() {
-        // when & then
-        assertThatThrownBy(() -> createOutboxEvent(
-            "event-1",
-            OutboxEventType.PAYMENT_APPROVED,
-            "ORDER",
-            1L,
-            "payment.approved",
-            "1",
-            " "
-        )).isInstanceOf(IllegalArgumentException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> createOutboxEvent(
+                "event-1",
+                OutboxEventType.PAYMENT_APPROVED,
+                "ORDER",
+                1L,
+                "payment.approved",
+                "1",
+                " "
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.OUTBOX_026);
     }
 
     @Test
@@ -261,11 +359,11 @@ class OutboxEventTest {
     @Test
     @DisplayName("markProcessing 성공 - markFailure로 PENDING이 된 후 markProcessing 호출 시 processedAt이 null로 유지된다")
     void markProcessing_success_afterMarkFailure() {
-        // given - markFailure(retry 한도 이내)로 PENDING 복귀
+        // given
         OutboxEvent outboxEvent = processingOutboxEvent();
-        outboxEvent.markFailure("temporary error", 3);  // PROCESSING → PENDING
+        outboxEvent.markFailure("temporary error", 3);
 
-        // when - 다시 PROCESSING으로 선점
+        // when
         outboxEvent.markProcessing();
 
         // then
@@ -279,10 +377,14 @@ class OutboxEventTest {
         // given
         OutboxEvent outboxEvent = processingOutboxEvent();
 
-        // when & then
-        assertThatThrownBy(outboxEvent::markProcessing)
-            .isInstanceOf(IllegalStateException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            outboxEvent::markProcessing
+        );
 
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.OUTBOX_027);
         assertThat(outboxEvent.getStatus()).isEqualTo(OutboxEventStatus.PROCESSING);
     }
 
@@ -293,10 +395,14 @@ class OutboxEventTest {
         OutboxEvent outboxEvent = publishedOutboxEvent();
         LocalDateTime processedAt = outboxEvent.getProcessedAt();
 
-        // when & then
-        assertThatThrownBy(outboxEvent::markProcessing)
-            .isInstanceOf(IllegalStateException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            outboxEvent::markProcessing
+        );
 
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.OUTBOX_027);
         assertThat(outboxEvent.getStatus()).isEqualTo(OutboxEventStatus.PUBLISHED);
         assertThat(outboxEvent.getProcessedAt()).isEqualTo(processedAt);
     }
@@ -308,10 +414,14 @@ class OutboxEventTest {
         OutboxEvent outboxEvent = deadOutboxEvent();
         LocalDateTime processedAt = outboxEvent.getProcessedAt();
 
-        // when & then
-        assertThatThrownBy(outboxEvent::markProcessing)
-            .isInstanceOf(IllegalStateException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            outboxEvent::markProcessing
+        );
 
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.OUTBOX_027);
         assertThat(outboxEvent.getStatus()).isEqualTo(OutboxEventStatus.DEAD);
         assertThat(outboxEvent.getProcessedAt()).isEqualTo(processedAt);
     }
@@ -336,10 +446,14 @@ class OutboxEventTest {
         // given
         OutboxEvent outboxEvent = pendingOutboxEvent();
 
-        // when & then
-        assertThatThrownBy(outboxEvent::markPublished)
-            .isInstanceOf(IllegalStateException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            outboxEvent::markPublished
+        );
 
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.OUTBOX_028);
         assertThat(outboxEvent.getStatus()).isEqualTo(OutboxEventStatus.PENDING);
         assertThat(outboxEvent.getProcessedAt()).isNull();
     }
@@ -351,10 +465,14 @@ class OutboxEventTest {
         OutboxEvent outboxEvent = publishedOutboxEvent();
         LocalDateTime processedAt = outboxEvent.getProcessedAt();
 
-        // when & then
-        assertThatThrownBy(outboxEvent::markPublished)
-            .isInstanceOf(IllegalStateException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            outboxEvent::markPublished
+        );
 
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.OUTBOX_028);
         assertThat(outboxEvent.getStatus()).isEqualTo(OutboxEventStatus.PUBLISHED);
         assertThat(outboxEvent.getProcessedAt()).isEqualTo(processedAt);
     }
@@ -366,10 +484,14 @@ class OutboxEventTest {
         OutboxEvent outboxEvent = deadOutboxEvent();
         LocalDateTime processedAt = outboxEvent.getProcessedAt();
 
-        // when & then
-        assertThatThrownBy(outboxEvent::markPublished)
-            .isInstanceOf(IllegalStateException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            outboxEvent::markPublished
+        );
 
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.OUTBOX_028);
         assertThat(outboxEvent.getStatus()).isEqualTo(OutboxEventStatus.DEAD);
         assertThat(outboxEvent.getProcessedAt()).isEqualTo(processedAt);
     }
@@ -480,10 +602,14 @@ class OutboxEventTest {
         // given
         OutboxEvent outboxEvent = processingOutboxEvent();
 
-        // when & then
-        assertThatThrownBy(() -> outboxEvent.markFailure("kafka error", -1))
-            .isInstanceOf(IllegalArgumentException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> outboxEvent.markFailure("kafka error", -1)
+        );
 
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.OUTBOX_030);
         assertThat(outboxEvent.getStatus()).isEqualTo(OutboxEventStatus.PROCESSING);
         assertThat(outboxEvent.getRetryCount()).isEqualTo(0);
         assertThat(outboxEvent.getLastErrorMessage()).isNull();
@@ -496,10 +622,14 @@ class OutboxEventTest {
         // given
         OutboxEvent outboxEvent = pendingOutboxEvent();
 
-        // when & then
-        assertThatThrownBy(() -> outboxEvent.markFailure("kafka error", 3))
-            .isInstanceOf(IllegalStateException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> outboxEvent.markFailure("kafka error", 3)
+        );
 
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.OUTBOX_029);
         assertThat(outboxEvent.getStatus()).isEqualTo(OutboxEventStatus.PENDING);
         assertThat(outboxEvent.getRetryCount()).isEqualTo(0);
         assertThat(outboxEvent.getLastErrorMessage()).isNull();
@@ -513,10 +643,14 @@ class OutboxEventTest {
         OutboxEvent outboxEvent = publishedOutboxEvent();
         LocalDateTime processedAt = outboxEvent.getProcessedAt();
 
-        // when & then
-        assertThatThrownBy(() -> outboxEvent.markFailure("kafka error", 3))
-            .isInstanceOf(IllegalStateException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> outboxEvent.markFailure("kafka error", 3)
+        );
 
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.OUTBOX_029);
         assertThat(outboxEvent.getStatus()).isEqualTo(OutboxEventStatus.PUBLISHED);
         assertThat(outboxEvent.getRetryCount()).isEqualTo(0);
         assertThat(outboxEvent.getLastErrorMessage()).isNull();
@@ -530,10 +664,14 @@ class OutboxEventTest {
         OutboxEvent outboxEvent = deadOutboxEvent();
         LocalDateTime processedAt = outboxEvent.getProcessedAt();
 
-        // when & then
-        assertThatThrownBy(() -> outboxEvent.markFailure("kafka error", 3))
-            .isInstanceOf(IllegalStateException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> outboxEvent.markFailure("kafka error", 3)
+        );
 
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.OUTBOX_029);
         assertThat(outboxEvent.getStatus()).isEqualTo(OutboxEventStatus.DEAD);
         assertThat(outboxEvent.getRetryCount()).isEqualTo(1);
         assertThat(outboxEvent.getLastErrorMessage()).isEqualTo("kafka error");

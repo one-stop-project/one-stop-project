@@ -3,6 +3,8 @@ package com.sparta.one_stop.domain.coupon.entity;
 import com.sparta.one_stop.domain.order.entity.Order;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.global.enums.coupon.UserCouponStatus;
+import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -10,7 +12,7 @@ import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatNoException;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -44,11 +46,17 @@ class UserCouponTest {
         // given
         Coupon coupon = mock(Coupon.class);
 
-        // when & then
-        assertThatThrownBy(() -> new UserCoupon(
-            null,
-            coupon
-        )).isInstanceOf(IllegalArgumentException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new UserCoupon(
+                null,
+                coupon
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_034);
     }
 
     @Test
@@ -57,11 +65,17 @@ class UserCouponTest {
         // given
         User user = mock(User.class);
 
-        // when & then
-        assertThatThrownBy(() -> new UserCoupon(
-            user,
-            null
-        )).isInstanceOf(IllegalArgumentException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new UserCoupon(
+                user,
+                null
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_035);
     }
 
     @Test
@@ -108,11 +122,17 @@ class UserCouponTest {
             coupon
         );
 
-        // when & then
-        assertThatThrownBy(() -> userCoupon.use(
-            null,
-            usedAt
-        )).isInstanceOf(IllegalArgumentException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> userCoupon.use(
+                null,
+                usedAt
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_036);
     }
 
     @Test
@@ -128,11 +148,17 @@ class UserCouponTest {
             coupon
         );
 
-        // when & then
-        assertThatThrownBy(() -> userCoupon.use(
-            order,
-            null
-        )).isInstanceOf(IllegalArgumentException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> userCoupon.use(
+                order,
+                null
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_037);
     }
 
     @Test
@@ -159,11 +185,17 @@ class UserCouponTest {
             firstUsedAt
         );
 
-        // when & then
-        assertThatThrownBy(() -> userCoupon.use(
-            secondOrder,
-            secondUsedAt
-        )).isInstanceOf(IllegalStateException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> userCoupon.use(
+                secondOrder,
+                secondUsedAt
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_038);
     }
 
     @Test
@@ -183,15 +215,22 @@ class UserCouponTest {
         when(coupon.isExpired(usedAt))
             .thenReturn(true);
 
-        // when & then
-        assertThatThrownBy(() -> userCoupon.use(
-            order,
-            usedAt
-        )).isInstanceOf(IllegalStateException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> userCoupon.use(
+                order,
+                usedAt
+            )
+        );
 
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_007);
         assertThat(userCoupon.getStatus()).isEqualTo(UserCouponStatus.AVAILABLE);
         assertThat(userCoupon.getUsedOrder()).isNull();
         assertThat(userCoupon.getUsedAt()).isNull();
+
+        verify(coupon).isExpired(usedAt);
     }
 
     @Test
@@ -272,9 +311,14 @@ class UserCouponTest {
             usedAt
         );
 
-        // when & then
-        assertThatThrownBy(() -> userCoupon.restore(null))
-            .isInstanceOf(IllegalArgumentException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> userCoupon.restore(null)
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_032);
     }
 
     @Test
@@ -290,9 +334,14 @@ class UserCouponTest {
             coupon
         );
 
-        // when & then
-        assertThatThrownBy(() -> userCoupon.restore(now))
-            .isInstanceOf(IllegalStateException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> userCoupon.restore(now)
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_039);
     }
 
     @Test
@@ -357,9 +406,14 @@ class UserCouponTest {
             coupon
         );
 
-        // when & then
-        assertThatThrownBy(() -> userCoupon.expire(null))
-            .isInstanceOf(IllegalArgumentException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> userCoupon.expire(null)
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_032);
     }
 
     @Test
@@ -379,9 +433,14 @@ class UserCouponTest {
             usedAt
         );
 
-        // when & then
-        assertThatThrownBy(() -> userCoupon.expire(now))
-            .isInstanceOf(IllegalStateException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> userCoupon.expire(now)
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_040);
     }
 
     @Test
@@ -400,10 +459,14 @@ class UserCouponTest {
         when(coupon.isExpired(now))
             .thenReturn(false);
 
-        // when & then
-        assertThatThrownBy(() -> userCoupon.expire(now))
-            .isInstanceOf(IllegalStateException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> userCoupon.expire(now)
+        );
 
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_041);
         assertThat(userCoupon.getStatus()).isEqualTo(UserCouponStatus.AVAILABLE);
     }
 
@@ -450,11 +513,47 @@ class UserCouponTest {
             coupon
         );
 
-        // when & then
-        assertThatThrownBy(() -> userCoupon.validateUsable(
-            null,
-            now
-        )).isInstanceOf(IllegalArgumentException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> userCoupon.validateUsable(
+                null,
+                now
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_042);
+    }
+
+    @Test
+    @DisplayName("validateUsable 실패 - 현재 시각이 없으면 예외가 발생한다")
+    void validateUsable_fail_whenNowIsNull() {
+        // given
+        Long userId = 1L;
+
+        User user = mock(User.class);
+        Coupon coupon = mock(Coupon.class);
+
+        UserCoupon userCoupon = new UserCoupon(
+            user,
+            coupon
+        );
+
+        when(user.getId())
+            .thenReturn(userId);
+
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> userCoupon.validateUsable(
+                userId,
+                null
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_032);
     }
 
     @Test
@@ -476,11 +575,17 @@ class UserCouponTest {
         when(user.getId())
             .thenReturn(ownerId);
 
-        // when & then
-        assertThatThrownBy(() -> userCoupon.validateUsable(
-            otherUserId,
-            now
-        )).isInstanceOf(IllegalStateException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> userCoupon.validateUsable(
+                otherUserId,
+                now
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_043);
     }
 
     @Test
@@ -505,11 +610,17 @@ class UserCouponTest {
         when(user.getId())
             .thenReturn(userId);
 
-        // when & then
-        assertThatThrownBy(() -> userCoupon.validateUsable(
-            userId,
-            now
-        )).isInstanceOf(IllegalStateException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> userCoupon.validateUsable(
+                userId,
+                now
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_038);
     }
 
     @Test
@@ -532,11 +643,17 @@ class UserCouponTest {
         when(coupon.isInPeriod(now))
             .thenReturn(false);
 
-        // when & then
-        assertThatThrownBy(() -> userCoupon.validateUsable(
-            userId,
-            now
-        )).isInstanceOf(IllegalStateException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> userCoupon.validateUsable(
+                userId,
+                now
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_003);
     }
 
     private UserCoupon usedUserCoupon(

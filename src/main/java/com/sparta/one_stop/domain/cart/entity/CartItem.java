@@ -2,6 +2,8 @@ package com.sparta.one_stop.domain.cart.entity;
 
 import com.sparta.one_stop.domain.product.entity.ProductItem;
 import com.sparta.one_stop.global.entity.BaseEntity;
+import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -30,6 +32,8 @@ import lombok.NoArgsConstructor;
 )
 public class CartItem extends BaseEntity {
 
+    private static final int MAX_QUANTITY = 99;
+
     // 카트 아이템 ID
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -52,39 +56,52 @@ public class CartItem extends BaseEntity {
 
     // == 생성자 ==
     public CartItem(Cart cart, ProductItem productItem, int quantity) {
-
-        if (cart == null) {
-            throw new IllegalArgumentException("장바구니 정보는 필수입니다.");
-        }
-
-        if (productItem == null) {
-            throw new IllegalArgumentException("상품 옵션 정보는 필수입니다.");
-        }
-
-        if (quantity <= 0) {
-            throw new IllegalArgumentException("수량은 1 이상이어야 합니다.");
-        }
-
-        if (quantity > 99) {
-            throw new IllegalArgumentException("장바구니 최대 수량은 99개입니다.");
-        }
+        validateConstructorArguments(cart, productItem, quantity);
 
         this.cart = cart;
         this.productItem = productItem;
         this.quantity = quantity;
     }
 
+    // == 검증 메서드 ==
 
-    // == 비즈니스 메서드 ==
-    // 수량 증가
-    public void increaseQuantity(int quantity) {
-
-        if (quantity <= 0) {
-            throw new IllegalArgumentException("수량은 1 이상이어야 합니다.");
+    private void validateConstructorArguments(
+        Cart cart,
+        ProductItem productItem,
+        int quantity
+    ) {
+        if (cart == null) {
+            throw new CustomException(ErrorCode.CART_021);
         }
 
-        if (this.quantity + quantity > 99) {
-            throw new IllegalArgumentException("장바구니 최대 수량은 99개입니다.");
+        if (productItem == null) {
+            throw new CustomException(ErrorCode.CART_022);
+        }
+
+        validatePositiveQuantity(quantity);
+        validateMaxQuantity(quantity);
+    }
+
+    private void validatePositiveQuantity(int quantity) {
+        if (quantity <= 0) {
+            throw new CustomException(ErrorCode.CART_023);
+        }
+    }
+
+    private void validateMaxQuantity(int quantity) {
+        if (quantity > MAX_QUANTITY) {
+            throw new CustomException(ErrorCode.CART_024);
+        }
+    }
+
+    // == 비즈니스 메서드 ==
+
+    // 수량 증가
+    public void increaseQuantity(int quantity) {
+        validatePositiveQuantity(quantity);
+
+        if (quantity > MAX_QUANTITY - this.quantity) {
+            throw new CustomException(ErrorCode.CART_024);
         }
 
         this.quantity += quantity;
@@ -92,13 +109,10 @@ public class CartItem extends BaseEntity {
 
     // 수량 감소
     public void decreaseQuantity(int quantity) {
-
-        if (quantity <= 0) {
-            throw new IllegalArgumentException("수량은 1 이상이어야 합니다.");
-        }
+        validatePositiveQuantity(quantity);
 
         if (quantity >= this.quantity) {
-            throw new IllegalArgumentException("수량은 1 미만이 될 수 없습니다.");
+            throw new CustomException(ErrorCode.CART_025);
         }
 
         this.quantity -= quantity;
@@ -107,14 +121,8 @@ public class CartItem extends BaseEntity {
     // 장바구니 상품의 최종 수량 변경
     // Redis 비로그인 장바구니 merge처럼 최종 수량을 계산한 뒤 반영할 때 사용
     public void changeQuantity(int quantity) {
-
-        if (quantity <= 0) {
-            throw new IllegalArgumentException("수량은 1 이상이어야 합니다.");
-        }
-
-        if (quantity > 99) {
-            throw new IllegalArgumentException("장바구니 최대 수량은 99개입니다.");
-        }
+        validatePositiveQuantity(quantity);
+        validateMaxQuantity(quantity);
 
         this.quantity = quantity;
     }

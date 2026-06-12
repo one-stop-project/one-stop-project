@@ -2,6 +2,8 @@ package com.sparta.one_stop.domain.cart.entity;
 
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.global.entity.BaseEntity;
+import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -34,12 +36,17 @@ public class Cart  extends BaseEntity {
 
     // == 생성자 ==
     public Cart(User user) {
-
-        if (user == null) {
-            throw new IllegalArgumentException("장바구니 소유자는 필수입니다.");
-        }
+        validateConstructorArguments(user);
 
         this.user = user;
+    }
+
+    // == 검증 메서드 ==
+
+    private void validateConstructorArguments(User user) {
+        if (user == null) {
+            throw new CustomException(ErrorCode.CART_020);
+        }
     }
 
 }
