@@ -104,11 +104,6 @@ public class SecurityConfig {
                     "/vite.svg"
                 ).permitAll()
 
-                // 로컬 저장 상품 이미지 서빙 (app.image.url-prefix)
-                //    local 프로필의 LocalImageStorage가 저장한 파일을 ResourceHandler로 공개
-                //    배포(!local)는 S3 직접 서빙이라 이 경로를 타지 않는다
-                .requestMatchers(HttpMethod.GET, "/images/**").permitAll()
-
                 // SPA 라우트 경로 허용 (점이 없는 경로 = 화면 라우트)[FE]
                 //    /products, /cart, /login 등 React Router 경로
                 //    이 경로들은 SpaForwardController가 index.html로 forward
@@ -119,8 +114,10 @@ public class SecurityConfig {
                     "/mypage/**", "/seller/**", "/admin/**"
                 ).permitAll()
 
-                // logout 별도 구성 / 인증 반드시 필요
-                .requestMatchers(HttpMethod.POST,"/api/auth/logout").authenticated()
+                // logout — permitAll (만료된 AT로도 로그아웃 가능해야 함)
+                //   인증 필터에서 막으면 AT 만료 시 RT/기기 정리 경로가 영원히 차단됨(데드락)
+                //   컨트롤러가 getUserIdAllowExpired로 만료 토큰도 파싱해 best-effort 정리
+                .requestMatchers(HttpMethod.POST,"/api/auth/logout").permitAll()
 
                 // 인증 없이 접근 가능
                 // AUTH부분은 정책 변경 소요 대비 분리 작성
@@ -168,4 +165,3 @@ public class SecurityConfig {
         return config.getAuthenticationManager();
     }
 }
-

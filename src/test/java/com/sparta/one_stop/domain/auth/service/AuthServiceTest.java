@@ -38,19 +38,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
-/**
- * AuthService (퍼사드) 테스트
- *
- * <p><b>검증 목적</b>
- * <ul>
- *   <li>로그인 흐름 — Rate Limit → 인증 → 토큰 발급 → 기기 등록 → RT 저장 → 로그인 기록 순서 보장</li>
- *   <li>토큰 재발급 — deviceId 이중 검증, RTR + CAS 원자적 갱신</li>
- *   <li>로그아웃 — 부분 실패(Best-effort) 정책 — 한 단계 실패해도 다음 단계 진행</li>
- *   <li>회원가입 — Rate Limit 통과 후 Command 서비스 위임</li>
- * </ul>
- *
- * <p><b>전략</b>: 외부 의존성은 모두 Mock. 흐름과 협업 객체 호출 순서를 검증.
- */
 @ExtendWith(MockitoExtension.class)
 @DisplayName("AuthService (퍼사드) 테스트")
 class AuthServiceTest {
@@ -65,6 +52,7 @@ class AuthServiceTest {
     private static final String ACCESS_TOKEN = "access-token-xyz";
     private static final String REFRESH_TOKEN = "refresh-token-xyz";
     private static final String NEW_REFRESH_TOKEN = "new-refresh-token-xyz";
+
     @InjectMocks
     private AuthService authService;
     @Mock private AuthQueryService authQueryService;
@@ -79,14 +67,12 @@ class AuthServiceTest {
     @Mock private DeviceContextService deviceContextService;
     private User testUser;
 
-    /** registerDevice 기본 반환 — 새 기기, 추방 없음, 현재 1대, 정상 */
     private DeviceLimitService.DeviceRegistrationResult normalRegistration() {
         return new DeviceLimitService.DeviceRegistrationResult(true, null, 1, false);
     }
 
     @BeforeEach
     void setUp() {
-        // init() 메서드가 dummyHash를 미리 생성하므로 같이 모킹
         given(passwordEncoder.encode(anyString())).willReturn(DUMMY_HASH);
         authService.init();
 
@@ -98,6 +84,7 @@ class AuthServiceTest {
             .role(UserRole.BUYER)
             .build();
         ReflectionTestUtils.setField(testUser, "id", USER_ID);
+        // 기본 tokenVersion은 0입니다.
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -113,8 +100,7 @@ class AuthServiceTest {
             // given
             SignUpRequest request = new SignUpRequest(
                 EMAIL, PASSWORD, "테스트", "010-1234-5678", "서울시",
-                UserRole.BUYER,
-                null, null, null  // SELLER 필드 (BUYER엔 불필요)
+                UserRole.BUYER, null, null, null
             );
             given(authCommandService.signup(request)).willReturn(testUser);
 
@@ -133,8 +119,7 @@ class AuthServiceTest {
             // given
             SignUpRequest request = new SignUpRequest(
                 EMAIL, PASSWORD, "테스트", "010-1234-5678", "서울시",
-                UserRole.BUYER,
-                null, null, null
+                UserRole.BUYER, null, null, null
             );
             doThrow(new CustomException(ErrorCode.AUTH_013))
                 .when(rateLimitService).tryConsume(RateLimitPolicy.SIGNUP_PER_IP, CLIENT_IP);
@@ -143,7 +128,6 @@ class AuthServiceTest {
             assertThatThrownBy(() -> authService.signup(request, CLIENT_IP))
                 .isInstanceOf(CustomException.class);
 
-            // Rate Limit에서 막혔으니 가입 로직은 호출되지 않아야 함
             verify(authCommandService, never()).signup(any());
         }
     }
@@ -161,31 +145,30 @@ class AuthServiceTest {
             // given
             LoginRequest request = new LoginRequest(EMAIL, PASSWORD);
             given(authQueryService.authenticate(request, DUMMY_HASH)).willReturn(testUser);
+
+            // [수정됨] createAccessToken 파라미터 3개로 변경 (userId, role, tokenVersion)
             given(jwtTokenProvider.createAccessToken(USER_ID, UserRole.BUYER, 0)).willReturn(ACCESS_TOKEN);
             given(jwtTokenProvider.createRefreshToken(USER_ID, DEVICE_ID)).willReturn(REFRESH_TOKEN);
             given(deviceLimitService.registerDevice(USER_ID, DEVICE_ID)).willReturn(normalRegistration());
-            given(jwtTokenProvider.getRefreshTokenExpirySeconds()).willReturn(604_800L); // 7d
-            given(jwtTokenProvider.getAccessTokenExpirySeconds()).willReturn(900L); // 15m
+            given(jwtTokenProvider.getRefreshTokenExpirySeconds()).willReturn(604_800L);
+            given(jwtTokenProvider.getAccessTokenExpirySeconds()).willReturn(900L);
 
             // when
             LoginResult result = authService.login(request, DEVICE_ID, USER_AGENT, CLIENT_IP);
 
-            // then — Rate Limit 3계층이 모두 호출되었는지
-            verify(rateLimitService).tryConsume(RateLimitPolicy.LOGIN_PER_GLOBAL, "all");
-            verify(rateLimitService).tryConsume(RateLimitPolicy.LOGIN_PER_IP, CLIENT_IP);
+            // then
             verify(rateLimitService).tryConsume(RateLimitPolicy.LOGIN_PER_ACCOUNT, EMAIL);
+            verify(rateLimitService).tryConsume(RateLimitPolicy.LOGIN_PER_IP, CLIENT_IP);
+            verify(rateLimitService).tryConsume(RateLimitPolicy.LOGIN_PER_GLOBAL, "all");
 
-            // 토큰 발급 + 저장
+            // [수정됨] verify에도 3번째 파라미터 0 추가
             verify(jwtTokenProvider).createAccessToken(USER_ID, UserRole.BUYER, 0);
             verify(jwtTokenProvider).createRefreshToken(USER_ID, DEVICE_ID);
             verify(deviceLimitService).registerDevice(USER_ID, DEVICE_ID);
             verify(redisTokenService).saveRefreshToken(USER_ID, DEVICE_ID, REFRESH_TOKEN, 604_800L);
             verify(authQueryService).recordLogin(USER_ID);
-
-            // 컨텍스트 각인 (Level 2 보안)
             verify(deviceContextService).bindContext(USER_ID, DEVICE_ID, USER_AGENT, CLIENT_IP);
 
-            // 응답에 RT가 담겨 컨트롤러로 전달되는지
             assertThat(result.refreshToken()).isEqualTo(REFRESH_TOKEN);
             assertThat(result.response().accessToken()).isEqualTo(ACCESS_TOKEN);
         }
@@ -196,14 +179,15 @@ class AuthServiceTest {
             // given
             LoginRequest request = new LoginRequest(EMAIL, PASSWORD);
             doThrow(new CustomException(ErrorCode.AUTH_013))
-                .when(rateLimitService).tryConsume(RateLimitPolicy.LOGIN_PER_GLOBAL, "all");
+                .when(rateLimitService).tryConsume(RateLimitPolicy.LOGIN_PER_ACCOUNT, EMAIL);
 
             // when & then
             assertThatThrownBy(() -> authService.login(request, DEVICE_ID, USER_AGENT, CLIENT_IP))
                 .isInstanceOf(CustomException.class);
 
-            // 핵심: BCrypt 검증이나 토큰 발급이 호출되지 않아야 함
             verify(authQueryService, never()).authenticate(any(), anyString());
+
+            // [수정됨] never() 검증 시 파라미터 3개(anyInt())로 매칭
             verify(jwtTokenProvider, never()).createAccessToken(anyLong(), any(), anyInt());
         }
 
@@ -213,9 +197,10 @@ class AuthServiceTest {
             // given
             LoginRequest request = new LoginRequest(EMAIL, PASSWORD);
             given(authQueryService.authenticate(request, DUMMY_HASH)).willReturn(testUser);
+
+            // [수정됨] createAccessToken 파라미터 3개 (0)
             given(jwtTokenProvider.createAccessToken(USER_ID, UserRole.BUYER, 0)).willReturn(ACCESS_TOKEN);
             given(jwtTokenProvider.createRefreshToken(USER_ID, DEVICE_ID)).willReturn(REFRESH_TOKEN);
-            // 5대 한도 초과 → 가장 오래된 기기 "old-device" 추방
             given(deviceLimitService.registerDevice(USER_ID, DEVICE_ID))
                 .willReturn(new DeviceLimitService.DeviceRegistrationResult(true, "old-device", 5, false));
             given(jwtTokenProvider.getRefreshTokenExpirySeconds()).willReturn(604_800L);
@@ -224,7 +209,7 @@ class AuthServiceTest {
             // when
             LoginResult result = authService.login(request, DEVICE_ID, USER_AGENT, CLIENT_IP);
 
-            // then — 추방이 일어나도 RT 저장은 정상적으로 진행되어야 함
+            // then
             assertThat(result.refreshToken()).isEqualTo(REFRESH_TOKEN);
             verify(redisTokenService).saveRefreshToken(USER_ID, DEVICE_ID, REFRESH_TOKEN, 604_800L);
             verify(redisTokenService).deleteRefreshToken(USER_ID, "old-device");
@@ -244,21 +229,21 @@ class AuthServiceTest {
             // given
             String oldRt = "old-rt";
             TokenRefreshRequest request = new TokenRefreshRequest(oldRt);
-
             Claims claims = mock(Claims.class);
-            given(claims.get("deviceId", String.class)).willReturn(DEVICE_ID);
 
+            given(claims.get("deviceId", String.class)).willReturn(DEVICE_ID);
             given(jwtTokenProvider.parseClaims(oldRt)).willReturn(claims);
             given(jwtTokenProvider.getUserId(claims)).willReturn(USER_ID);
             given(deviceLimitService.isNewDevice(USER_ID, DEVICE_ID)).willReturn(false);
             given(authQueryService.findActiveUser(USER_ID)).willReturn(testUser);
+
+            // [수정됨] createAccessToken 파라미터 3개 (0)
             given(jwtTokenProvider.createAccessToken(USER_ID, UserRole.BUYER, 0)).willReturn(ACCESS_TOKEN);
             given(jwtTokenProvider.createRefreshToken(USER_ID, DEVICE_ID)).willReturn(NEW_REFRESH_TOKEN);
             given(jwtTokenProvider.getRefreshTokenExpirySeconds()).willReturn(604_800L);
             given(jwtTokenProvider.getAccessTokenExpirySeconds()).willReturn(900L);
             given(deviceContextService.verifyContext(USER_ID, DEVICE_ID, USER_AGENT, CLIENT_IP))
                 .willReturn(DeviceContextService.ContextVerifyResult.MATCH);
-            // CAS 성공
             given(redisTokenService.rotateRefreshTokenCAS(
                 USER_ID, DEVICE_ID, oldRt, NEW_REFRESH_TOKEN, 604_800L
             )).willReturn(true);
@@ -280,17 +265,15 @@ class AuthServiceTest {
             // given
             String oldRt = "old-rt";
             TokenRefreshRequest request = new TokenRefreshRequest(oldRt);
-
             Claims claims = mock(Claims.class);
-            given(claims.get("deviceId", String.class)).willReturn("other-device-zzz"); // 불일치
 
+            given(claims.get("deviceId", String.class)).willReturn("other-device-zzz");
             given(jwtTokenProvider.parseClaims(oldRt)).willReturn(claims);
 
             // when & then
             assertThatThrownBy(() -> authService.refresh(request, DEVICE_ID, USER_AGENT, CLIENT_IP))
                 .isInstanceOf(CustomException.class);
 
-            // CAS 호출 자체가 일어나지 않아야 함
             verify(redisTokenService, never()).rotateRefreshTokenCAS(
                 anyLong(), anyString(), anyString(), anyString(), anyLong());
         }
@@ -301,12 +284,11 @@ class AuthServiceTest {
             // given
             String oldRt = "old-rt";
             TokenRefreshRequest request = new TokenRefreshRequest(oldRt);
-
             Claims claims = mock(Claims.class);
+
             given(claims.get("deviceId", String.class)).willReturn(DEVICE_ID);
             given(jwtTokenProvider.parseClaims(oldRt)).willReturn(claims);
             given(jwtTokenProvider.getUserId(claims)).willReturn(USER_ID);
-            // 미등록 기기 → 거부
             given(deviceLimitService.isNewDevice(USER_ID, DEVICE_ID)).willReturn(true);
 
             // when & then
@@ -323,18 +305,18 @@ class AuthServiceTest {
             // given
             String oldRt = "old-rt";
             TokenRefreshRequest request = new TokenRefreshRequest(oldRt);
-
             Claims claims = mock(Claims.class);
-            given(claims.get("deviceId", String.class)).willReturn(DEVICE_ID);
 
+            given(claims.get("deviceId", String.class)).willReturn(DEVICE_ID);
             given(jwtTokenProvider.parseClaims(oldRt)).willReturn(claims);
             given(jwtTokenProvider.getUserId(claims)).willReturn(USER_ID);
             given(deviceLimitService.isNewDevice(USER_ID, DEVICE_ID)).willReturn(false);
             given(authQueryService.findActiveUser(USER_ID)).willReturn(testUser);
+
+            // [수정됨] createAccessToken 파라미터 3개 (0)
             given(jwtTokenProvider.createAccessToken(USER_ID, UserRole.BUYER, 0)).willReturn(ACCESS_TOKEN);
             given(jwtTokenProvider.createRefreshToken(USER_ID, DEVICE_ID)).willReturn(NEW_REFRESH_TOKEN);
             given(jwtTokenProvider.getRefreshTokenExpirySeconds()).willReturn(604_800L);
-            // CAS 실패 (저장된 RT와 불일치 — 동시성 충돌 or 탈취)
             given(redisTokenService.rotateRefreshTokenCAS(
                 anyLong(), anyString(), anyString(), anyString(), anyLong()
             )).willReturn(false);
@@ -381,7 +363,7 @@ class AuthServiceTest {
             // when
             authService.logout(USER_ID, DEVICE_ID, ACCESS_TOKEN);
 
-            // then — RT 삭제 실패해도 나머지 두 단계는 실행되어야 함 (best-effort)
+            // then
             verify(deviceLimitService).removeDevice(USER_ID, DEVICE_ID);
             verify(redisTokenService).addToBlacklist("jti-123", 900L);
         }

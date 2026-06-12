@@ -30,6 +30,19 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final RedisTokenService redisTokenService;
     private final AuthQueryService authQueryService;
 
+    /**
+     * logout은 필터를 타지 않는다 — 만료된 AT로도 로그아웃(RT/기기 정리)이 가능해야 함.
+     *
+     * 필터를 타면 parseClaims가 만료 AT에 ExpiredJwtException을 던져
+     * JwtExceptionFilter가 401로 끊으므로, 컨트롤러의 getUserIdAllowExpired가
+     * 영원히 호출되지 못하는 데드락이 발생한다.
+     */
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        return "POST".equalsIgnoreCase(request.getMethod())
+            && "/api/auth/logout".equals(request.getRequestURI());
+    }
+
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
         throws ServletException, IOException {
