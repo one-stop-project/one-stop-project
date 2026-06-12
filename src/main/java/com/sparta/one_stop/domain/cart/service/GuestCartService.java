@@ -33,7 +33,6 @@ import java.util.stream.Collectors;
 @Slf4j
 @Service
 @RequiredArgsConstructor
-@Transactional(readOnly = true)
 public class GuestCartService {
 
     private static final Duration GUEST_CART_TTL = Duration.ofDays(7);
@@ -162,6 +161,7 @@ public class GuestCartService {
      * - totalPrice/itemCount는 전체 비로그인 장바구니 기준으로 계산
      * - 조회 시 Redis Hash/ZSet TTL과 guest_cart_id 쿠키 만료 시간을 갱신
      */
+    @Transactional(readOnly = true)
     public CartPageResponse getCart(
         String guestCartId,
         HttpServletResponse response,
