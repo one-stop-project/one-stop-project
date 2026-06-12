@@ -19,7 +19,7 @@ import static org.mockito.Mockito.when;
 class NaverVariantGrouperTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final DummyPromptProperties prompts = new DummyPromptProperties(null, "변형을 묶어 옵션을 만들어라");
+    private final DummyPromptProperties prompts = new DummyPromptProperties("변형을 묶어 옵션을 만들어라");
 
     // 같은 모델의 변형 2개(256GB/128GB)는 규칙으로 한 cluster(c0), 다른 모델(아이폰)은 c1
     private final NaverShopItem galaxy256 = item("삼성전자 갤럭시 S24 256GB", "삼성전자", "1100000", "g256", "img-g");
