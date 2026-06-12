@@ -38,6 +38,7 @@ public class PointAuditAspect {
     private static final int MAX_USER_AGENT_LENGTH = 255;
     private static final int MAX_METHOD_NAME_LENGTH = 200;
     private static final int MAX_CLIENT_IP_LENGTH = 45;  // ★ 추가 — IPv6 호환
+    private final ClientIpExtractor clientIpExtractor;
     private final PointAuditWriter pointAuditWriter;
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -83,7 +84,7 @@ public class PointAuditAspect {
     private void record(String action, JoinPoint jp, String result, String errorDetail) {
         try {
             HttpServletRequest req = getCurrentRequest();
-            String clientIp = req != null ? ClientIpExtractor.extract(req) : "SYSTEM";
+            String clientIp = req != null ? clientIpExtractor.extract(req) : "SYSTEM";
             String userAgent = req != null ? req.getHeader("User-Agent") : "SCHEDULER";
 
             ActorInfo actor = resolveActor();

@@ -49,12 +49,13 @@ public class AuthController {
     private final CookieUtil cookieUtil;
     private final CartMergeService cartMergeService;
     private final GuestCartCookieProvider guestCartCookieProvider;
+    private final ClientIpExtractor clientIpExtractor;
 
     @Operation(summary = "회원가입", description = "일반 구매자(BUYER) 및 판매자(SELLER) 회원가입을 처리합니다. 판매자 가입 시 상호명과 사업자번호가 필수입니다.")
     @PostMapping("/signup")
     public ResponseEntity<ApiResponse<SignUpResponse>> signup(
         @Valid @RequestBody SignUpRequest request, HttpServletRequest servletRequest) {
-        String clientIp = ClientIpExtractor.extract(servletRequest);
+        String clientIp = clientIpExtractor.extract(servletRequest);
         return ResponseEntity.status(HttpStatus.CREATED)
             .body(ApiResponse.success(authService.signup(request, clientIp)));
     }
@@ -72,7 +73,7 @@ public class AuthController {
         @Parameter(in = ParameterIn.COOKIE, name = GuestCartCookieProvider.GUEST_CART_COOKIE_NAME, description = "비로그인 장바구니 식별자")
         @CookieValue(value = GuestCartCookieProvider.GUEST_CART_COOKIE_NAME, required = false) String guestCartId
     ) {
-        String clientIp = ClientIpExtractor.extract(servletRequest);
+        String clientIp = clientIpExtractor.extract(servletRequest);
         String userAgent = servletRequest.getHeader("User-Agent");
 
         // 1. 서버 기반 Device ID 발급 (최초 로그인 시)
@@ -157,7 +158,7 @@ public class AuthController {
 
         TokenRefreshRequest request = new TokenRefreshRequest(refreshToken);
         String userAgent = servletRequest.getHeader("User-Agent");
-        String clientIp = ClientIpExtractor.extract(servletRequest);
+        String clientIp = clientIpExtractor.extract(servletRequest);
         RefreshResult result = authService.refresh(request, deviceId, userAgent, clientIp);
 
         String newRtCookie = cookieUtil.createHttpOnlyCookie(
@@ -181,11 +182,9 @@ public class AuthController {
         @Parameter(in = ParameterIn.COOKIE, name = "device_id", description = "로그아웃할 기기의 식별자")
         @CookieValue(value = "device_id", required = false) String deviceId,
         @Parameter(in = ParameterIn.HEADER, name = "Authorization", description = "Bearer {Access_Token} 형태의 인증 헤더")
-        @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authHeader,
-        HttpServletRequest servletRequest) {
+        @RequestHeader(value = HttpHeaders.AUTHORIZATION, required = false) String authHeader, HttpServletRequest servletRequest) {
 
-        // 0. Rate Limit — permitAll 엔드포인트라 IP 기반으로 무제한 호출 방어
-        String clientIp = ClientIpExtractor.extract(servletRequest);
+        String clientIp = clientIpExtractor.extract(servletRequest);
         authService.checkLogoutRateLimit(clientIp);
 
         // 1. 토큰 추출 위임 (캡슐화)
