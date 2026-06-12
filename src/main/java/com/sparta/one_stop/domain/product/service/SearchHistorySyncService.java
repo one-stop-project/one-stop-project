@@ -16,9 +16,7 @@ import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 // Redis 큐에 쌓인 검색 로그를 모아서 DB에 한 번에 저장
 // 저장(커밋) 성공 후에만 호출자가 큐를 비운다.
@@ -35,21 +33,25 @@ public class SearchHistorySyncService {
     public void syncBatch(List<SearchHistoryEvent> events) {
         if (events.isEmpty()) return;
 
-        // 1) 같은 batch 안의 eventId 중복 제거 (재처리로 동일 이벤트가 섞여도 1건만 남긴다)
-        List<SearchHistoryEvent> deduped = dedupByEventId(events);
+        // 1) eventId 기준으로 batch 내부 중복 제거.
+        //    eventId가 없는 건 배포 직전 큐에 남아있던 레거시 payload뿐인데(새 적재는 항상 eventId 부여),
+        //    멱등키가 없어 재처리 시 중복을 막을 수 없으므로 여기서 버린다(검색기록 부가데이터라 유실 무해).
+        Map<String, SearchHistoryEvent> deduped = new LinkedHashMap<>();
+        for (SearchHistoryEvent e : events) {
+            if (e.eventId() == null) {
+                log.warn("[SearchHistory] eventId 없는 레거시 이벤트 드롭 (keyword={})", e.keyword());
+                continue;
+            }
+            deduped.putIfAbsent(e.eventId(), e);
+        }
+        if (deduped.isEmpty()) return;
 
         // 2) 이미 저장된 eventId 제외 (ack 실패로 같은 batch가 재처리될 때 중복 INSERT 방지)
-        Set<String> eventIds = deduped.stream()
-            .map(SearchHistoryEvent::eventId)
-            .filter(Objects::nonNull)
-            .collect(Collectors.toSet());
-        Set<String> persisted = eventIds.isEmpty()
-            ? Set.of()
-            : new HashSet<>(searchHistoryRepository.findExistingEventIds(eventIds));
+        Set<String> persisted = new HashSet<>(searchHistoryRepository.findExistingEventIds(deduped.keySet()));
 
         List<SearchHistory> rows = new ArrayList<>(deduped.size());
-        for (SearchHistoryEvent e : deduped) {
-            if (e.eventId() != null && persisted.contains(e.eventId())) {
+        for (SearchHistoryEvent e : deduped.values()) {
+            if (persisted.contains(e.eventId())) {
                 continue; // 이미 저장된 이벤트는 건너뛴다
             }
             rows.add(SearchHistory.builder()
@@ -63,22 +65,6 @@ public class SearchHistorySyncService {
         if (!rows.isEmpty()) {
             searchHistoryRepository.saveAll(rows);
         }
-    }
-
-    // eventId 첫 등장만 유지(입력 순서 보존). eventId가 없는 레거시 이벤트는 dedup하지 않고 그대로 둔다.
-    private List<SearchHistoryEvent> dedupByEventId(List<SearchHistoryEvent> events) {
-        Map<String, SearchHistoryEvent> byId = new LinkedHashMap<>();
-        List<SearchHistoryEvent> legacyNoId = new ArrayList<>();
-        for (SearchHistoryEvent e : events) {
-            if (e.eventId() == null) {
-                legacyNoId.add(e);
-            } else {
-                byId.putIfAbsent(e.eventId(), e);
-            }
-        }
-        List<SearchHistoryEvent> result = new ArrayList<>(byId.values());
-        result.addAll(legacyNoId);
-        return result;
     }
 
     // 탈퇴 유저는 user=null로 저장 (로그 유실 방지) — 기존 정책 유지

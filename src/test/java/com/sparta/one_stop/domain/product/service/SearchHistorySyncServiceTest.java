@@ -171,6 +171,30 @@ class SearchHistorySyncServiceTest {
         assertThat(saved.get(0).getEventId()).isEqualTo("e-same");
     }
 
+    @Test
+    @DisplayName("eventId 없는 레거시(배포 전 잔류) 이벤트만 있는 batch → 모두 드롭, repository 조회/저장 0")
+    void syncBatch_legacyNullEventId_dropped() {
+        syncService.syncBatch(List.of(
+            new SearchHistoryEvent(null, "legacy", null, LocalDateTime.now())));
+
+        verifyNoInteractions(searchHistoryRepository);
+    }
+
+    @Test
+    @DisplayName("정상 + 레거시(null eventId) 섞인 batch → 정상만 저장, 레거시는 드롭")
+    void syncBatch_mixedLegacyAndValid_savesOnlyValid() {
+        noneAlreadyPersisted();
+
+        syncService.syncBatch(List.of(
+            new SearchHistoryEvent(null, "legacy", null, LocalDateTime.now()),
+            new SearchHistoryEvent("e-new", "fresh", null, LocalDateTime.now())));
+
+        List<SearchHistory> saved = captureSaved();
+        assertThat(saved).hasSize(1);
+        assertThat(saved.get(0).getEventId()).isEqualTo("e-new");
+        assertThat(saved.get(0).getKeyword()).isEqualTo("fresh");
+    }
+
     // ===== 헬퍼 =====
 
     private void noneAlreadyPersisted() {
