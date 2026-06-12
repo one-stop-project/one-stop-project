@@ -431,9 +431,9 @@ class PopularKeywordServiceTest {
         @DisplayName("정상 N개 → rawCount=N, events=N")
         void allValid() throws Exception {
             String j1 = objectMapper.writeValueAsString(
-                new SearchHistoryEvent("macbook", 1L, java.time.LocalDateTime.now()));
+                new SearchHistoryEvent(java.util.UUID.randomUUID().toString(), "macbook", 1L, java.time.LocalDateTime.now()));
             String j2 = objectMapper.writeValueAsString(
-                new SearchHistoryEvent("airpods", null, java.time.LocalDateTime.now()));
+                new SearchHistoryEvent(java.util.UUID.randomUUID().toString(), "airpods", null, java.time.LocalDateTime.now()));
             given(redisTemplate.opsForList()).willReturn(listOperations);
             given(listOperations.range("search:history:queue", 0, 499L))
                 .willReturn(List.of(j1, j2));
@@ -447,7 +447,7 @@ class PopularKeywordServiceTest {
         @DisplayName("일부 파싱 실패 → rawCount=raw 전체, events는 성공분만 (ack은 rawCount 기준이라 깨진 것도 제거됨)")
         void partialFail() throws Exception {
             String valid = objectMapper.writeValueAsString(
-                new SearchHistoryEvent("macbook", 1L, java.time.LocalDateTime.now()));
+                new SearchHistoryEvent(java.util.UUID.randomUUID().toString(), "macbook", 1L, java.time.LocalDateTime.now()));
             String invalid = "{this-is-not-valid-json";
             given(redisTemplate.opsForList()).willReturn(listOperations);
             given(listOperations.range("search:history:queue", 0, 499L))

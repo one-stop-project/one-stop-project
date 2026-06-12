@@ -12,10 +12,17 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 // Redis 큐에 쌓인 검색 로그를 모아서 DB에 한 번에 저장
-// 저장(커밋) 성공 후에만 호출자가 큐를 비운다
+// 저장(커밋) 성공 후에만 호출자가 큐를 비운다.
+// ack(LTRIM) 실패로 같은 batch가 재처리돼도 eventId로 중복 INSERT를 거른다(멱등).
 @Slf4j
 @Service
 @RequiredArgsConstructor
@@ -28,23 +35,60 @@ public class SearchHistorySyncService {
     public void syncBatch(List<SearchHistoryEvent> events) {
         if (events.isEmpty()) return;
 
-        List<SearchHistory> rows = new ArrayList<>(events.size());
-        for (SearchHistoryEvent e : events) {
-            User userRef = null;
-            if (e.userId() != null) {
-                try {
-                    userRef = userRepository.getReferenceById(e.userId());
-                } catch (EntityNotFoundException ex) {
-                    // 탈퇴 유저는 user_id=null로 저장 (로그 유실 방지)
-                    log.warn("[SearchHistory] missing user (userId={}), saving as anonymous", e.userId());
-                }
+        // 1) 같은 batch 안의 eventId 중복 제거 (재처리로 동일 이벤트가 섞여도 1건만 남긴다)
+        List<SearchHistoryEvent> deduped = dedupByEventId(events);
+
+        // 2) 이미 저장된 eventId 제외 (ack 실패로 같은 batch가 재처리될 때 중복 INSERT 방지)
+        Set<String> eventIds = deduped.stream()
+            .map(SearchHistoryEvent::eventId)
+            .filter(Objects::nonNull)
+            .collect(Collectors.toSet());
+        Set<String> persisted = eventIds.isEmpty()
+            ? Set.of()
+            : new HashSet<>(searchHistoryRepository.findExistingEventIds(eventIds));
+
+        List<SearchHistory> rows = new ArrayList<>(deduped.size());
+        for (SearchHistoryEvent e : deduped) {
+            if (e.eventId() != null && persisted.contains(e.eventId())) {
+                continue; // 이미 저장된 이벤트는 건너뛴다
             }
             rows.add(SearchHistory.builder()
+                .eventId(e.eventId())
                 .keyword(e.keyword())
-                .user(userRef)
+                .user(resolveUserRef(e.userId()))
                 .searchedAt(e.searchedAt())
                 .build());
         }
-        searchHistoryRepository.saveAll(rows);
+
+        if (!rows.isEmpty()) {
+            searchHistoryRepository.saveAll(rows);
+        }
+    }
+
+    // eventId 첫 등장만 유지(입력 순서 보존). eventId가 없는 레거시 이벤트는 dedup하지 않고 그대로 둔다.
+    private List<SearchHistoryEvent> dedupByEventId(List<SearchHistoryEvent> events) {
+        Map<String, SearchHistoryEvent> byId = new LinkedHashMap<>();
+        List<SearchHistoryEvent> legacyNoId = new ArrayList<>();
+        for (SearchHistoryEvent e : events) {
+            if (e.eventId() == null) {
+                legacyNoId.add(e);
+            } else {
+                byId.putIfAbsent(e.eventId(), e);
+            }
+        }
+        List<SearchHistoryEvent> result = new ArrayList<>(byId.values());
+        result.addAll(legacyNoId);
+        return result;
+    }
+
+    // 탈퇴 유저는 user=null로 저장 (로그 유실 방지) — 기존 정책 유지
+    private User resolveUserRef(Long userId) {
+        if (userId == null) return null;
+        try {
+            return userRepository.getReferenceById(userId);
+        } catch (EntityNotFoundException ex) {
+            log.warn("[SearchHistory] missing user (userId={}), saving as anonymous", userId);
+            return null;
+        }
     }
 }

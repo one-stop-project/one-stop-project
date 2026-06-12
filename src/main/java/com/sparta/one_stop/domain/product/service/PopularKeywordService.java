@@ -21,6 +21,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.regex.Pattern;
 
@@ -76,7 +77,10 @@ public class PopularKeywordService {
         }
         try {
             LocalDateTime now = LocalDateTime.now(KST);
-            SearchHistoryEvent event = new SearchHistoryEvent(normalized, userId, now);
+            // eventId는 적재 시점 1회 생성 — Redis execute 실패는 catch로 skip(재시도 없음)이라 ID가 안정적이다.
+            // 같은 물리 이벤트가 ack 실패로 재peek돼도 이 ID가 그대로라 소비측에서 중복을 거를 수 있다.
+            SearchHistoryEvent event = new SearchHistoryEvent(
+                UUID.randomUUID().toString(), normalized, userId, now);
             String payload = objectMapper.writeValueAsString(event);
 
             redisTemplate.execute(
