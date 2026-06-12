@@ -55,6 +55,7 @@ public class PaymentRetryFacade {
         Long userId, ApprovePaymentRequest request) {
 
         log.error("[PAYMENT] 결제 트랜잭션 낙관적 락 재시도 3회 모두 실패 — userId={}", userId, e);
-        throw new CustomException(ErrorCode.POINT_005);
+        throw new CustomException(ErrorCode.PAYMENT_010);
     }
+
 }
