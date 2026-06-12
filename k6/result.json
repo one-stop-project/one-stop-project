@@ -1,0 +1,324 @@
+{
+    "root_group": {
+        "name": "",
+        "path": "",
+        "id": "d41d8cd98f00b204e9800998ecf8427e",
+        "groups": {
+            "setup": {
+                "groups": {},
+                "checks": {
+                        "login: status 200": {
+                            "name": "login: status 200",
+                            "path": "::setup::login: status 200",
+                            "id": "638c85000baaeede3d6e857733f783df",
+                            "passes": 8,
+                            "fails": 0
+                        },
+                        "login: accessToken 존재": {
+                            "name": "login: accessToken 존재",
+                            "path": "::setup::login: accessToken 존재",
+                            "id": "30f96397dd161897e820b5bdc4d1662c",
+                            "passes": 8,
+                            "fails": 0
+                        }
+                    },
+                "name": "setup",
+                "path": "::setup",
+                "id": "5c0f8025f7e0b6654089e5b00e950f1a"
+            },
+            "1. 상품 목록 조회": {
+                "checks": {
+                    "products: status 200": {
+                        "passes": 828,
+                        "fails": 0,
+                        "name": "products: status 200",
+                        "path": "::1. 상품 목록 조회::products: status 200",
+                        "id": "66977621a54fd4d5ecb431c4000394f1"
+                    }
+                },
+                "name": "1. 상품 목록 조회",
+                "path": "::1. 상품 목록 조회",
+                "id": "4f597b8843906e1686bc853d7f2421d9",
+                "groups": {}
+            },
+            "2. 주문 생성": {
+                "path": "::2. 주문 생성",
+                "id": "30f65af516094935dde04e0bc93ef175",
+                "groups": {},
+                "checks": {
+                        "order: status 200 또는 201": {
+                            "id": "9f847c63217ae9c7db3c95ec9865b98c",
+                            "passes": 235,
+                            "fails": 91,
+                            "name": "order: status 200 또는 201",
+                            "path": "::2. 주문 생성::order: status 200 또는 201"
+                        }
+                    },
+                "name": "2. 주문 생성"
+            },
+            "4. AI 리뷰 요약 조회": {
+                "name": "4. AI 리뷰 요약 조회",
+                "path": "::4. AI 리뷰 요약 조회",
+                "id": "ffd6d91eecf9fee23b966ef948e93994",
+                "groups": {},
+                "checks": {
+                        "ai-summary: status 200": {
+                            "path": "::4. AI 리뷰 요약 조회::ai-summary: status 200",
+                            "id": "c58abae9c1c5ea65f556148e04174e94",
+                            "passes": 410,
+                            "fails": 0,
+                            "name": "ai-summary: status 200"
+                        }
+                    }
+            },
+            "6. AI 연관 상품 조회": {
+                "groups": {},
+                "checks": {
+                        "ai-related: status 200": {
+                            "name": "ai-related: status 200",
+                            "path": "::6. AI 연관 상품 조회::ai-related: status 200",
+                            "id": "ca7803f1423c042cdb52de02c2f2b89f",
+                            "passes": 327,
+                            "fails": 0
+                        }
+                    },
+                "name": "6. AI 연관 상품 조회",
+                "path": "::6. AI 연관 상품 조회",
+                "id": "2c0570aad3a40f8d191a96fd718cb0af"
+            },
+            "5. AI 쇼핑 어시스턴트": {
+                "name": "5. AI 쇼핑 어시스턴트",
+                "path": "::5. AI 쇼핑 어시스턴트",
+                "id": "3af0b9f1b5cd9ca417d4045a1af1b3c5",
+                "groups": {},
+                "checks": {
+                        "ai-assist: status 200": {
+                            "name": "ai-assist: status 200",
+                            "path": "::5. AI 쇼핑 어시스턴트::ai-assist: status 200",
+                            "id": "fef81bded7a91556c81fe4c9cec850ae",
+                            "passes": 253,
+                            "fails": 0
+                        }
+                    }
+            },
+            "3. 관리자 - 판매자 강제 비활성화": {
+                "name": "3. 관리자 - 판매자 강제 비활성화",
+                "path": "::3. 관리자 - 판매자 강제 비활성화",
+                "id": "7a010c8346bccc9e62d0c6333261c0a6",
+                "groups": {},
+                "checks": {}
+            }
+        },
+        "checks": {}
+    },
+    "metrics": {
+        "data_received": {
+            "count": 4951191,
+            "rate": 14959.447039845982
+        },
+        "http_req_duration": {
+            "med": 33.578649999999996,
+            "max": 1176.1335,
+            "p(90)": 72.62898,
+            "p(95)": 94.0434499999999,
+            "avg": 51.514040566914424,
+            "min": 10.9943,
+            "thresholds": {
+                "p(95)<500": false
+            }
+        },
+        "products_duration": {
+            "avg": 67.05662862318842,
+            "min": 44.5415,
+            "med": 56.4414,
+            "max": 357.6573,
+            "p(90)": 88.77160000000008,
+            "p(95)": 106.57490999999999,
+            "thresholds": {
+                "p(95)<500": false
+            }
+        },
+        "order_duration": {
+            "avg": 36.471435889570564,
+            "min": 13.5385,
+            "med": 34.58945,
+            "max": 318.7212,
+            "p(90)": 51.13835,
+            "p(95)": 60.006150000000005,
+            "thresholds": {
+                "p(95)<500": false
+            }
+        },
+        "ai_related_duration": {
+            "max": 101.9939,
+            "p(90)": 28.409140000000008,
+            "p(95)": 34.18173,
+            "avg": 21.963879204892958,
+            "min": 14.6988,
+            "med": 19.6962,
+            "thresholds": {
+                "p(95)<3000": false
+            }
+        },
+        "http_req_blocked": {
+            "max": 14.759,
+            "p(90)": 0,
+            "p(95)": 0,
+            "avg": 0.04894065985130112,
+            "min": 0,
+            "med": 0
+        },
+        "data_sent": {
+            "rate": 2109.907667488579,
+            "count": 698325
+        },
+        "vus": {
+            "value": 7,
+            "min": 0,
+            "max": 8
+        },
+        "error_rate": {
+            "fails": 2061,
+            "passes": 91,
+            "thresholds": {
+                "rate<0.01": true
+            },
+            "value": 0.04228624535315985
+        },
+        "http_req_waiting": {
+            "avg": 51.016914126394,
+            "min": 10.3513,
+            "med": 33.02735,
+            "max": 1175.2886,
+            "p(90)": 72.12888000000001,
+            "p(95)": 93.83716999999999
+        },
+        "suspend_duration": {
+            "max": 0,
+            "p(90)": 0,
+            "p(95)": 0,
+            "avg": 0,
+            "min": 0,
+            "med": 0,
+            "thresholds": {
+                "p(95)<500": false
+            }
+        },
+        "ai_assist_duration": {
+            "p(95)": 893.48298,
+            "avg": 112.71608458498021,
+            "min": 11.7509,
+            "med": 15.6355,
+            "max": 1176.1335,
+            "p(90)": 823.2135000000005,
+            "thresholds": {
+                "p(95)<5000": false
+            }
+        },
+        "http_reqs": {
+            "count": 2152,
+            "rate": 6.502017399399166
+        },
+        "http_req_connecting": {
+            "avg": 0.048873420074349444,
+            "min": 0,
+            "med": 0,
+            "max": 14.759,
+            "p(90)": 0,
+            "p(95)": 0
+        },
+        "http_req_tls_handshaking": {
+            "avg": 0,
+            "min": 0,
+            "med": 0,
+            "max": 0,
+            "p(90)": 0,
+            "p(95)": 0
+        },
+        "http_req_sending": {
+            "avg": 0.0007798791821561337,
+            "min": 0,
+            "med": 0,
+            "max": 1.0028,
+            "p(90)": 0,
+            "p(95)": 0
+        },
+        "checks": {
+            "passes": 2069,
+            "fails": 91,
+            "value": 0.9578703703703704
+        },
+        "http_req_receiving": {
+            "p(90)": 0.94545,
+            "p(95)": 1.0011349999999999,
+            "avg": 0.49634656133828964,
+            "min": 0,
+            "med": 0.3805,
+            "max": 27.001
+        },
+        "vus_max": {
+            "max": 8,
+            "value": 8,
+            "min": 8
+        },
+        "ai_summary_duration": {
+            "med": 14.72545,
+            "max": 104.3231,
+            "p(90)": 20.486230000000006,
+            "p(95)": 25.281204999999993,
+            "avg": 16.100620975609754,
+            "min": 10.9943,
+            "thresholds": {
+                "p(95)<3000": false
+            }
+        },
+        "http_req_duration{expected_response:true}": {
+            "p(90)": 73.9494,
+            "p(95)": 95.863,
+            "avg": 52.814453178068845,
+            "min": 10.9943,
+            "med": 35.2519,
+            "max": 1176.1335
+        },
+        "http_req_failed": {
+            "passes": 91,
+            "fails": 2061,
+            "value": 0.04228624535315985
+        },
+        "group_duration": {
+            "avg": 701.9669625666103,
+            "min": 511.5383,
+            "med": 556.1904999999999,
+            "max": 2176.3983,
+            "p(90)": 1033.83786,
+            "p(95)": 1041.883925
+        },
+        "iteration_duration": {
+            "p(90)": 4122.22066,
+            "p(95)": 4599.9312899999995,
+            "avg": 2909.8573491545894,
+            "min": 1546.96,
+            "med": 2678.51535,
+            "max": 6421.874
+        },
+        "login_duration": {
+            "min": 119.9371,
+            "med": 125.51795,
+            "max": 262.5081,
+            "p(90)": 178.93159999999997,
+            "p(95)": 220.71984999999995,
+            "avg": 143.12827500000003,
+            "thresholds": {
+                "p(95)<500": false
+            }
+        },
+        "iterations": {
+            "count": 828,
+            "rate": 2.5017055793227274
+        }
+    },
+    "setup_data": {
+        "adminTokens": [],
+        "buyerTokens": ["<redacted>"]
+    }
+}
