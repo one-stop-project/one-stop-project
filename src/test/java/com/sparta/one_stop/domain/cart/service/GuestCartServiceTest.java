@@ -440,6 +440,112 @@ class GuestCartServiceTest {
         assertThat(result.totalPages()).isEqualTo(1);
     }
 
+    @Test
+    @DisplayName("getCart 성공 - Redis 수량 파싱 실패 항목은 제외하고 조회한다")
+    void getCart_success_skipInvalidQuantityValues() {
+        // given
+        Pageable pageable = PageRequest.of(
+            0,
+            20
+        );
+
+        Map<Object, Object> entries = new LinkedHashMap<>();
+        entries.put("101", "abc"); // 파싱 실패
+        entries.put("102", "0");   // 범위 오류
+        entries.put("103", "-1");  // 범위 오류
+        entries.put("104", "2");   // 정상
+
+        Set<String> orderedItemFields = new LinkedHashSet<>();
+        orderedItemFields.add("101");
+        orderedItemFields.add("102");
+        orderedItemFields.add("103");
+        orderedItemFields.add("104");
+
+        ProductItem productItem104 = productItemForCartDetail(
+            104L,
+            1L,
+            "상품 104",
+            "옵션 104",
+            2000L,
+            10L,
+            true,
+            "thumbnail-104.jpg"
+        );
+
+        when(hashOperations.entries(REDIS_KEY))
+            .thenReturn(entries);
+        when(redisTemplate.hasKey(anyString()))
+            .thenReturn(true);
+        when(zSetOperations.range(ORDER_KEY, 0, -1))
+            .thenReturn(orderedItemFields);
+        when(productItemRepository.findAllByIdInWithProduct(
+            List.of(104L)
+        )).thenReturn(List.of(productItem104));
+
+        // when
+        CartPageResponse result = guestCartService.getCart(
+            GUEST_CART_ID,
+            response,
+            pageable
+        );
+
+        // then
+        assertThat(result.content()).hasSize(1);
+
+        CartItemDetailResponse item = result.content().get(0);
+
+        assertThat(item.itemId()).isEqualTo(104L);
+        assertThat(item.quantity()).isEqualTo(2);
+        assertThat(result.totalPrice()).isEqualTo(4000L);
+        assertThat(result.itemCount()).isEqualTo(2);
+        assertThat(result.totalElements()).isEqualTo(1);
+        assertThat(result.totalPages()).isEqualTo(1);
+
+        verify(productItemRepository).findAllByIdInWithProduct(
+            List.of(104L)
+        );
+    }
+
+    @Test
+    @DisplayName("addCartItem 성공 - 기존 Redis 수량이 파싱 불가능하면 0으로 간주하고 요청 수량으로 저장한다")
+    void addCartItem_success_recoverQuantity_whenStoredQuantityIsInvalid() {
+        // given
+        AddCartItemRequest request = new AddCartItemRequest(101L, 3);
+        ProductItem productItem = productItem(101L, true, 10L);
+
+        when(productItemRepository.findById(101L))
+            .thenReturn(Optional.of(productItem));
+        when(hashOperations.get(REDIS_KEY, "101"))
+            .thenReturn("abc");
+        when(zSetOperations.score(ORDER_KEY, "101"))
+            .thenReturn(12345.0);
+        when(redisTemplate.hasKey(anyString()))
+            .thenReturn(true);
+
+        // when
+        CartItemResponse result = guestCartService.addCartItem(
+            GUEST_CART_ID,
+            response,
+            request
+        );
+
+        // then
+        verify(hashOperations).put(REDIS_KEY, "101", "3");
+
+        // 기존 상품이고 ZSet score가 이미 있으므로 최초 담기 순서는 변경하지 않는다
+        verify(zSetOperations, never()).add(any(), any(), anyDouble());
+
+        // 기존 상품 재담기에서는 50종 제한 검증이 필요 없으므로 size 조회를 하지 않는다
+        verify(hashOperations, never()).size(REDIS_KEY);
+
+        verify(redisTemplate).expire(eq(REDIS_KEY), any());
+        verify(redisTemplate).expire(eq(ORDER_KEY), any());
+        verify(guestCartCookieProvider).refreshCookie(GUEST_CART_ID, response);
+
+        assertThat(result.itemId()).isEqualTo(101L);
+        assertThat(result.quantity()).isEqualTo(3);
+    }
+
     private ProductItem productItem(Long itemId, boolean onSale, Long stock) {
         ProductItem productItem = org.mockito.Mockito.mock(ProductItem.class);
 

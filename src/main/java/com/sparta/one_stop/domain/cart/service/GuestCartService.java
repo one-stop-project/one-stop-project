@@ -14,6 +14,7 @@ import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
@@ -22,12 +23,14 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
@@ -118,8 +121,14 @@ public class GuestCartService {
             );
         }
 
-        int currentQuantity = Integer.parseInt(currentQuantityValue.toString());
-        int nextQuantity = currentQuantity + request.quantity();
+        Integer currentQuantity = parseQuantityOrNull(
+            itemIdField,
+            currentQuantityValue
+        );
+
+        // Redis에 저장된 기존 수량이 오염된 경우 기존 수량을 0으로 간주하고 요청 수량부터 다시 계산한다.
+        // add 요청 자체는 유효성 검증을 통과한 수량이므로 기존 오염 데이터 때문에 500이 발생하지 않도록 방어한다.
+        int nextQuantity = (currentQuantity == null ? 0 : currentQuantity) + request.quantity();
 
         validateQuantityLimit(
             productItem,
@@ -185,12 +194,14 @@ public class GuestCartService {
             );
         }
 
-        Map<Long, Integer> quantityMap = entries.entrySet()
-            .stream()
-            .collect(Collectors.toMap(
-                entry -> Long.valueOf(entry.getKey().toString()),
-                entry -> Integer.valueOf(entry.getValue().toString())
-            ));
+        Map<Long, Integer> quantityMap = buildValidQuantityMap(entries);
+
+        if (quantityMap.isEmpty()) {
+            return CartPageResponse.empty(
+                pageable.getPageNumber(),
+                pageable.getPageSize()
+            );
+        }
 
         List<Long> orderedItemIds = getOrderedItemIds(
             orderKey,
@@ -255,6 +266,40 @@ public class GuestCartService {
             totalElements,
             totalPages
         );
+    }
+
+    /**
+     * Redis Hash entries에서 유효한 itemId/quantity만 추출한다.
+     * itemId 또는 quantity 파싱에 실패한 항목은 오염된 Redis 데이터로 보고 조회 대상에서 제외한다.
+     */
+    private Map<Long, Integer> buildValidQuantityMap(
+        Map<Object, Object> entries
+    ) {
+        Map<Long, Integer> quantityMap = new HashMap<>();
+
+        for (Map.Entry<Object, Object> entry : entries.entrySet()) {
+            String itemIdField = entry.getKey().toString();
+
+            Long itemId = parseItemIdOrNull(itemIdField);
+            if (itemId == null) {
+                continue;
+            }
+
+            Integer quantity = parseQuantityOrNull(
+                itemIdField,
+                entry.getValue()
+            );
+            if (quantity == null) {
+                continue;
+            }
+
+            quantityMap.put(
+                itemId,
+                quantity
+            );
+        }
+
+        return quantityMap;
     }
 
     /**
@@ -563,10 +608,58 @@ public class GuestCartService {
             .toList();
     }
 
+    /**
+     * Redis Hash field itemId 파싱
+     * 파싱 실패 시 해당 항목은 조회/계산 대상에서 제외한다.
+     */
     private Long parseItemIdOrNull(String itemIdField) {
         try {
             return Long.valueOf(itemIdField);
         } catch (NumberFormatException e) {
+            log.warn(
+                "Redis 장바구니 itemId 파싱 실패 - itemIdField: {}",
+                itemIdField
+            );
+            return null;
+        }
+    }
+
+    /**
+     * Redis Hash value quantity 파싱
+     * 수량은 1 이상 99 이하만 유효한 장바구니 수량으로 인정한다.
+     * 파싱 실패 또는 범위 오류 시 해당 항목은 조회/계산 대상에서 제외한다.
+     */
+    private Integer parseQuantityOrNull(
+        String itemIdField,
+        Object quantityValue
+    ) {
+        if (quantityValue == null) {
+            log.warn(
+                "Redis 장바구니 수량 값 없음 - itemId: {}",
+                itemIdField
+            );
+            return null;
+        }
+
+        try {
+            int quantity = Integer.parseInt(quantityValue.toString());
+
+            if (quantity <= 0 || quantity > MAX_CART_ITEM_QUANTITY) {
+                log.warn(
+                    "Redis 장바구니 수량 범위 오류 - itemId: {}, quantity: {}",
+                    itemIdField,
+                    quantity
+                );
+                return null;
+            }
+
+            return quantity;
+        } catch (NumberFormatException e) {
+            log.warn(
+                "Redis 장바구니 수량 파싱 실패 - itemId: {}, value: {}",
+                itemIdField,
+                quantityValue
+            );
             return null;
         }
     }
