@@ -126,9 +126,13 @@ public class AuthService {
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     public LoginResult login(LoginRequest request, String deviceId, String userAgent, String clientIp) {
         // 1. Rate Limit 계층 (BCrypt 도달 전 차단)
-        rateLimitService.tryConsume(RateLimitPolicy.LOGIN_PER_GLOBAL, "all");
-        rateLimitService.tryConsume(RateLimitPolicy.LOGIN_PER_IP, clientIp);
+        //    ★ 좁은 범위(Account)부터 검사 — 한 계정 타겟 공격이 Global/IP 풀을
+        //      고갈시켜 정상 유저까지 막는 셀프-DoS 방지.
+        //      tryConsume은 실패 시 예외를 던지므로, Account에서 걸리면
+        //      뒤의 IP/Global 토큰은 차감되지 않는다.
         rateLimitService.tryConsume(RateLimitPolicy.LOGIN_PER_ACCOUNT, request.email());
+        rateLimitService.tryConsume(RateLimitPolicy.LOGIN_PER_IP, clientIp);
+        rateLimitService.tryConsume(RateLimitPolicy.LOGIN_PER_GLOBAL, "all");
 
         // 2. 사용자 인증 (AuthQueryService — 트랜잭션 프록시 경유)
         User user = authQueryService.authenticate(request, dummyHash);
@@ -218,8 +222,8 @@ public class AuthService {
 
         String oldRefreshToken = request.refreshToken();
 
-        // 2. 토큰 파싱 + 검증
-        Claims claims = jwtTokenProvider.parseClaims(oldRefreshToken);
+        // 2. 토큰 파싱 + 검증 — 만료/변조 RT는 AUTH_010(401)로 변환
+        Claims claims;
         try {
             claims = jwtTokenProvider.parseClaims(oldRefreshToken);
         } catch (JwtException | IllegalArgumentException e) {

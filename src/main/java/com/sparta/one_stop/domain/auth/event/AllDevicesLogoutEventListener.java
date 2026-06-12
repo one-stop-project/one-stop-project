@@ -39,6 +39,7 @@ public class AllDevicesLogoutEventListener {
     private final DeviceLimitService deviceLimitService;
     private final RedisTokenService redisTokenService;
     private final JwtTokenProvider jwtTokenProvider;
+    private final com.sparta.one_stop.domain.user.service.UserStatusCacheService userStatusCacheService;
 
     @Async
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
@@ -51,6 +52,11 @@ public class AllDevicesLogoutEventListener {
             //    RT만 지우면 살아있는 AT가 15분간 유효하므로, AT cutoff도 함께 등록
             redisTokenService.invalidateUserTokens(
                 event.userId(), jwtTokenProvider.getAccessTokenExpirySeconds());
+
+            // tokenVersion 캐시 evict — 커밋 후(AFTER_COMMIT) 실행이라
+            //    DB version++ 가 이미 영속된 상태 → 캐시미스 시 최신 version 조회 보장
+            //    (트랜잭션 안에서 evict하면 커밋 전 옛 version이 재캐싱되는 race 발생)
+            userStatusCacheService.evictTokenVersion(event.userId());
 
             log.info("[AllDevicesLogoutEvent] 처리 완료: userId={}, reason={}, deletedCount={}",
                 event.userId(), event.reason(), deletedCount);
