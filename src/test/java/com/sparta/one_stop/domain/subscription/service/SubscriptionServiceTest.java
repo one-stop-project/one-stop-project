@@ -69,7 +69,7 @@ class SubscriptionServiceTest {
     @DisplayName("구독 신청 성공 - ACTIVE 구독 생성")
     void subscribe_success() {
 
-        when(userRepository.findById(USER_ID))
+        when(userRepository.findByIdForUpdate(USER_ID))
             .thenReturn(Optional.of(user()));
 
         when(subscriptionRepository.existsByUserIdAndStatusIn(eq(USER_ID), anyList()))
@@ -91,7 +91,7 @@ class SubscriptionServiceTest {
     @DisplayName("구독 신청 실패 - 사용자 없음")
     void subscribe_fail_userNotFound() {
 
-        when(userRepository.findById(USER_ID))
+        when(userRepository.findByIdForUpdate(USER_ID))
             .thenReturn(Optional.empty());
 
         assertThatThrownBy(() ->
@@ -109,7 +109,7 @@ class SubscriptionServiceTest {
     @DisplayName("구독 신청 실패 - 이미 유효 구독 존재")
     void subscribe_fail_alreadyExists() {
 
-        when(userRepository.findById(USER_ID))
+        when(userRepository.findByIdForUpdate(USER_ID))
             .thenReturn(Optional.of(user()));
 
         when(subscriptionRepository.existsByUserIdAndStatusIn(eq(USER_ID), anyList()))
