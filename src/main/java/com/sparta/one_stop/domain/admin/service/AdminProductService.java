@@ -10,6 +10,8 @@ import com.sparta.one_stop.global.enums.product.ProductStatus;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -30,6 +32,10 @@ public class AdminProductService {
 
     // 상품 승인
     @Transactional
+    @Caching(evict = {
+        @CacheEvict(value = "productDetail", key = "#productId", cacheManager = "redisCacheManager"),
+        @CacheEvict(value = "productList", allEntries = true, cacheManager = "redisCacheManager")
+    })
     public void approveProduct(Long productId, Long actorId) {
         Product product = findProductOrThrow(productId);
 
@@ -50,6 +56,10 @@ public class AdminProductService {
 
     // 상품 반려
     @Transactional
+    @Caching(evict = {
+        @CacheEvict(value = "productDetail", key = "#productId", cacheManager = "redisCacheManager"),
+        @CacheEvict(value = "productList", allEntries = true, cacheManager = "redisCacheManager")
+    })
     public void rejectProduct(Long productId, Long actorId, String reason) {
         Product product = findProductOrThrow(productId);
 
@@ -71,6 +81,10 @@ public class AdminProductService {
 
     // 상품 강제 비활성화
     @Transactional
+    @Caching(evict = {
+        @CacheEvict(value = "productDetail", key = "#productId", cacheManager = "redisCacheManager"),
+        @CacheEvict(value = "productList", allEntries = true, cacheManager = "redisCacheManager")
+    })
     public void forceInactiveProduct(Long productId, Long actorId, String reason) {
         Product product = findProductOrThrow(productId);
 
