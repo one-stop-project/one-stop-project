@@ -243,7 +243,7 @@ class ReviewServiceTest {
             lenient().when(user.getId()).thenReturn(userId);
             lenient().when(rv.getProduct()).thenReturn(product);
             lenient().when(product.getId()).thenReturn(10L);
-            lenient().when(rv.getImages()).thenReturn(List.of());
+            lenient().when(rv.getImages()).thenReturn(new java.util.ArrayList<>());
             lenient().when(rv.getCreatedAt()).thenReturn(LocalDateTime.now());
             // soft delete 되지 않은 상태
             lenient().when(rv.getStatus()).thenReturn(ReviewStatus.ACTIVE);
@@ -267,7 +267,7 @@ class ReviewServiceTest {
             reviewService.updateReview(authUser(userId), reviewId, req);
 
             verify(rv).update(4, "수정된 리뷰 내용입니다");
-            verify(reviewImageRepository).deleteAll(anyList());
+            assertThat(rv.getImages()).isEmpty();
         }
 
         @Test
@@ -286,8 +286,10 @@ class ReviewServiceTest {
 
             reviewService.updateReview(authUser(userId), reviewId, req);
 
-            verify(reviewImageRepository).deleteAll(anyList());
-            verify(reviewImageRepository, times(2)).save(any(ReviewImage.class));
+            assertThat(rv.getImages()).hasSize(2);
+            assertThat(rv.getImages())
+                .extracting(ReviewImage::getImageUrl)
+                .containsExactly("new1.jpg", "new2.jpg");
         }
 
         @Test
