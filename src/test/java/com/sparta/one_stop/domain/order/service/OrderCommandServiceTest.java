@@ -4,6 +4,8 @@ import com.sparta.one_stop.domain.cart.entity.Cart;
 import com.sparta.one_stop.domain.cart.entity.CartItem;
 import com.sparta.one_stop.domain.cart.repository.CartItemRepository;
 import com.sparta.one_stop.domain.coupon.dto.CouponDiscountResult;
+import com.sparta.one_stop.domain.coupon.dto.CouponRestoreResult;
+import com.sparta.one_stop.domain.coupon.entity.UserCoupon;
 import com.sparta.one_stop.domain.coupon.service.CouponCommandService;
 import com.sparta.one_stop.domain.coupon.service.CouponQueryService;
 import com.sparta.one_stop.domain.delivery.entity.Delivery;
@@ -31,6 +33,7 @@ import com.sparta.one_stop.domain.subscription.service.SubscriptionBenefitServic
 import com.sparta.one_stop.domain.user.entity.Seller;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.UserRepository;
+import com.sparta.one_stop.global.enums.coupon.UserCouponStatus;
 import com.sparta.one_stop.global.enums.order.OrderStatus;
 import com.sparta.one_stop.global.enums.order.OrderType;
 import com.sparta.one_stop.global.exception.CustomException;
@@ -417,6 +420,196 @@ class OrderCommandServiceTest {
 
         verify(productItem).decreaseStock(1);
         verify(orderItemRepository).saveAll(any());
+    }
+
+    @Test
+    @DisplayName("createOrder 성공 - 쿠폰 할인이 최종 결제 금액에 반영된다")
+    void createOrder_success_whenCouponDiscountApplied() {
+        // given
+        Long userId = 1L;
+        Long itemId = 101L;
+        Long userCouponId = 100L;
+
+        User user = mock(User.class);
+        UserCoupon userCoupon = mock(UserCoupon.class);
+
+        ProductItem productItem = orderableProductItem(
+            itemId,
+            10000L,
+            10L
+        );
+
+        CreateOrderRequest request = new CreateOrderRequest(
+            OrderType.DIRECT,
+            List.of(new CreateOrderItemRequest(
+                itemId,
+                2
+            )),
+            null,
+            "홍길동",
+            "010-1234-5678",
+            "서울시 강남구",
+            "문 앞",
+            userCouponId,
+            0
+        );
+
+        CouponDiscountResult couponDiscountResult = mock(CouponDiscountResult.class);
+
+        when(couponDiscountResult.discountPrice())
+            .thenReturn(5000L);
+        when(couponDiscountResult.userCoupon())
+            .thenReturn(userCoupon);
+
+        when(userRepository.findById(userId))
+            .thenReturn(Optional.of(user));
+
+        mockProductItemsWithLock(
+            List.of(itemId),
+            List.of(productItem)
+        );
+
+        given(couponQueryService.validateAndCalculateDiscount(
+            userId,
+            userCouponId,
+            20000L
+        )).willReturn(couponDiscountResult);
+
+        when(orderRepository.save(any(Order.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+
+        // when
+        CreateOrderResponse result = orderCommandService.createOrder(
+            userId,
+            request
+        );
+
+        // then
+        // 20,000(상품) - 5,000(쿠폰) - 0(포인트) - 0(구독할인) + 3,000(배송비) = 18,000
+        assertThat(result).isNotNull();
+        assertThat(result.deliveryFee()).isEqualTo(3000L);
+        assertThat(result.finalPrice()).isEqualTo(18000L);
+
+        ArgumentCaptor<Order> orderCaptor = ArgumentCaptor.forClass(Order.class);
+        verify(orderRepository).save(orderCaptor.capture());
+
+        Order savedOrder = orderCaptor.getValue();
+
+        assertThat(savedOrder.getUser()).isSameAs(user);
+        assertThat(savedOrder.getUserCoupon()).isSameAs(userCoupon);
+        assertThat(savedOrder.getTotalPrice()).isEqualTo(20000L);
+        assertThat(savedOrder.getDiscountPrice()).isEqualTo(5000L);
+        assertThat(savedOrder.getUsedPoint()).isEqualTo(0);
+        assertThat(savedOrder.getDeliveryFee()).isEqualTo(3000L);
+        assertThat(savedOrder.getFinalPrice()).isEqualTo(18000L);
+        assertThat(savedOrder.getStatus()).isEqualTo(OrderStatus.PENDING_PAYMENT);
+
+        verify(couponQueryService).validateAndCalculateDiscount(
+            userId,
+            userCouponId,
+            20000L
+        );
+
+        verify(productItem).decreaseStock(2);
+        verify(orderItemRepository).saveAll(any());
+    }
+
+    @Test
+    @DisplayName("cancelOrder 성공 - 쿠폰 복구 결과가 있으면 응답에 복구 쿠폰 정보를 포함한다")
+    void cancelOrder_success_whenCouponRestoreResultExists() {
+        // given
+        Long userId = 1L;
+        Long orderId = 10L;
+        Long userCouponId = 100L;
+
+        AtomicReference<OrderStatus> orderStatus =
+            new AtomicReference<>(OrderStatus.PAID);
+
+        Order order = cancelableOrder(
+            orderId,
+            userId,
+            18000L,
+            orderStatus
+        );
+
+        ProductItem productItem = mock(ProductItem.class);
+        when(productItem.getId()).thenReturn(101L);
+
+        OrderItem orderItem = cancelableOrderItem(
+            101L,
+            productItem,
+            2
+        );
+
+        Delivery delivery = mock(Delivery.class);
+        Payment payment = mock(Payment.class);
+
+        CouponRestoreResult couponRestoreResult = mock(CouponRestoreResult.class);
+
+        when(couponRestoreResult.userCouponId())
+            .thenReturn(userCouponId);
+        when(couponRestoreResult.couponName())
+            .thenReturn("테스트 쿠폰");
+        when(couponRestoreResult.status())
+            .thenReturn(UserCouponStatus.AVAILABLE);
+
+        CancelOrderRequest request = new CancelOrderRequest("단순 변심");
+
+        mockOrderWithLock(orderId, order);
+
+        when(orderItemRepository.findAllByOrderIdWithProductItem(orderId))
+            .thenReturn(List.of(orderItem));
+
+        when(deliveryRepository.findAllByOrderItemIdIn(List.of(101L)))
+            .thenReturn(List.of(delivery));
+
+        when(delivery.isCancelable())
+            .thenReturn(true);
+
+        when(paymentRepository.findByOrderId(orderId))
+            .thenReturn(Optional.of(payment));
+
+        when(couponCommandService.restoreCouponByOrder(order))
+            .thenReturn(couponRestoreResult);
+
+        when(pointService.refundPointByOrder(order))
+            .thenReturn(0);
+
+        // when
+        CancelOrderResponse result = orderCommandService.cancelOrder(
+            userId,
+            orderId,
+            request
+        );
+
+        // then
+        assertThat(result.orderId()).isEqualTo(orderId);
+        assertThat(result.status()).isEqualTo(OrderStatus.CANCELLED);
+        assertThat(result.refundAmount()).isEqualTo(18000L);
+        assertThat(result.restoredPoint()).isEqualTo(0);
+        assertThat(result.restoredCoupon()).isNotNull();
+
+        assertThat(result.restoredCoupon().userCouponId()).isEqualTo(userCouponId);
+        assertThat(result.restoredCoupon().couponName()).isEqualTo("테스트 쿠폰");
+        assertThat(result.restoredCoupon().status()).isEqualTo(UserCouponStatus.AVAILABLE);
+
+        verify(productItemRepository).increaseStockById(
+            101L,
+            2
+        );
+        verify(productItem, never()).increaseStock(anyLong());
+
+        verify(couponCommandService).restoreCouponByOrder(order);
+
+        verify(paymentRepository).findByOrderId(orderId);
+        verify(payment).cancel();
+
+        verify(orderItem).cancel();
+        verify(delivery).cancelOrder();
+        verify(order).cancel();
+        verify(pointService).refundPointByOrder(order);
+        verify(orderCancelHistoryRepository).save(any(OrderCancelHistory.class));
+        verify(deliveryHistoryRepository).saveAll(any());
     }
 
     @Test
