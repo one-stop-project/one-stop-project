@@ -86,14 +86,12 @@ public class Subscription extends BaseEntity {
     /**
      * 자동 결제 성공
      */
-    public void renew() {
-
+    public void renew(LocalDateTime now) {
         if (this.status != SubscriptionStatus.ACTIVE) {
             throw new CustomException(ErrorCode.SUBSCRIPTION_004);
         }
-
-        this.endAt = this.endAt.plusDays(30);
-        this.nextPaymentDate = this.nextPaymentDate.plusDays(30);
+        this.endAt = now.plusDays(30);
+        this.nextPaymentDate = now.plusDays(30);
     }
 
     /**
