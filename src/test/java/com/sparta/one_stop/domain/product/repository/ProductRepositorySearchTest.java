@@ -82,13 +82,14 @@ class ProductRepositorySearchTest {
     }
 
     @Test
-    @DisplayName("LATEST: 승인 상품 전체를 최신순(createdAt desc, id tie-break)으로 (ON_SALE 옵션 없어도 포함)")
-    void latest_allApproved_orderByCreatedAtDesc() {
+    @DisplayName("LATEST: ON_SALE 옵션 있는 승인 상품만 최신순(createdAt desc, id tie-break) — 모든 옵션 STOP인 상품 제외 (#406)")
+    void latest_onSaleOnly_orderByCreatedAtDesc() {
         Page<Product> page = productRepository.search(
             cond(SortType.LATEST, null, null, null), PageRequest.of(0, 10));
 
-        assertThat(ids(page)).containsExactly(pD.getId(), pC.getId(), pB.getId(), pA.getId());
-        assertThat(page.getTotalElements()).isEqualTo(4);
+        // 상품C(STOP만 보유)는 판매중 옵션이 없어 0원으로 노출되던 것을 방지하려 제외
+        assertThat(ids(page)).containsExactly(pD.getId(), pB.getId(), pA.getId());
+        assertThat(page.getTotalElements()).isEqualTo(3);
     }
 
     @Test
@@ -122,14 +123,33 @@ class ProductRepositorySearchTest {
     }
 
     @Test
-    @DisplayName("LATEST 가격필터: 상태 무관 어떤 옵션이든 범위에 들면 노출 (STOP 옵션 포함)")
-    void latestPriceFilter_anyItemInRange() {
-        // [2000,4000]: 상품A(ON_SALE 3000), 상품C(STOP 2000) 포함 / 상품B(1000·5000)·상품D(10000) 제외
+    @DisplayName("LATEST 가격필터: ON_SALE 옵션이 범위에 든 상품만 — STOP 옵션 가격은 필터 대상 아님 (#406)")
+    void latestPriceFilter_onSaleInRangeOnly() {
+        // [2000,4000]: 상품A(ON_SALE 3000)만. 상품C(STOP 2000)는 판매중 옵션이 아니라 제외,
+        // 상품B(1000·5000)·상품D(10000)는 ON_SALE이지만 범위 밖
         Page<Product> page = productRepository.search(
             cond(SortType.LATEST, null, 2000L, 4000L), PageRequest.of(0, 10));
 
-        assertThat(ids(page)).containsExactly(pC.getId(), pA.getId());
-        assertThat(page.getTotalElements()).isEqualTo(2);
+        assertThat(ids(page)).containsExactly(pA.getId());
+        assertThat(page.getTotalElements()).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("LATEST 가격필터: STOP 옵션만 범위에 들고 ON_SALE 옵션은 범위 밖이면 제외 — STOP가격으로 필터 통과 방지 (#406)")
+    void latestPriceFilter_excludesProductWhenOnlyStopOptionInRange() {
+        // STOP 1000(범위 내) + ON_SALE 10000(범위 밖) → maxPrice=2000 검색 시 제외돼야 함
+        Product mixed = persistProduct("혼합상품", cat1, new long[]{10000}, new long[]{1000});
+        em.flush();
+        em.clear();
+
+        Page<Product> page = productRepository.search(
+            cond(SortType.LATEST, null, null, 2000L), PageRequest.of(0, 10));
+
+        // mixed는 STOP 1000만 범위에 들 뿐 ON_SALE(10000)은 범위 밖 → 제외.
+        // 상품B(ON_SALE 1000)만 범위에 들어 노출
+        assertThat(ids(page)).containsExactly(pB.getId());
+        assertThat(ids(page)).doesNotContain(mixed.getId());
+        assertThat(page.getTotalElements()).isEqualTo(1);
     }
 
     @Test
@@ -144,26 +164,27 @@ class ProductRepositorySearchTest {
     }
 
     @Test
-    @DisplayName("페이징: 첫 페이지 size=2 → 2건 반환, total은 전체 건수")
+    @DisplayName("페이징: 첫 페이지 size=2 → 2건 반환, total은 ON_SALE 노출 대상 전체 건수")
     void pagination_returnsPageSlice_withFullTotal() {
         Page<Product> page = productRepository.search(
             cond(SortType.LATEST, null, null, null), PageRequest.of(0, 2));
 
-        assertThat(ids(page)).containsExactly(pD.getId(), pC.getId());
-        assertThat(page.getTotalElements()).isEqualTo(4);
+        // ON_SALE 노출 대상 = [D, B, A] (C는 STOP만이라 제외)
+        assertThat(ids(page)).containsExactly(pD.getId(), pB.getId());
+        assertThat(page.getTotalElements()).isEqualTo(3);
         assertThat(page.getTotalPages()).isEqualTo(2);
     }
 
     @Test
-    @DisplayName("페이징: 2페이지(page=1) → 다음 슬라이스(B,A) 반환")
+    @DisplayName("페이징: 2페이지(page=1) → 다음 슬라이스(A) 반환")
     void pagination_secondPage_returnsNextSlice() {
-        // 전체 LATEST = [D, C, B, A], size 2 → page 1 = [B, A]
+        // ON_SALE 노출 대상 = [D, B, A], size 2 → page 1 = [A]
         Page<Product> page = productRepository.search(
             cond(SortType.LATEST, null, null, null), PageRequest.of(1, 2));
 
-        assertThat(ids(page)).containsExactly(pB.getId(), pA.getId());
+        assertThat(ids(page)).containsExactly(pA.getId());
         assertThat(page.getNumber()).isEqualTo(1);
-        assertThat(page.getTotalElements()).isEqualTo(4);
+        assertThat(page.getTotalElements()).isEqualTo(3);
     }
 
     @Test
