@@ -3,6 +3,7 @@ package com.sparta.one_stop.integration.product;
 import com.sparta.one_stop.domain.product.entity.Category;
 import com.sparta.one_stop.domain.product.entity.Product;
 import com.sparta.one_stop.domain.product.entity.ProductCategoryMapping;
+import com.sparta.one_stop.domain.product.entity.ProductItem;
 import com.sparta.one_stop.domain.product.repository.CategoryRepository;
 import com.sparta.one_stop.domain.product.repository.ProductRepository;
 import com.sparta.one_stop.domain.product.repository.ProductSearchCond;
@@ -273,6 +274,8 @@ class ProductSearchFulltextIntegrationTest extends IntegrationTestSupport {
         if (status == ProductStatus.APPROVED) {
             product.approve();
         }
+        // 검색 노출은 ON_SALE 옵션이 1개 이상 있어야 하므로(#406) 판매중 옵션을 붙인다
+        product.getProductItems().add(onSaleItem(product));
         return productRepository.save(product);
     }
 
@@ -285,8 +288,19 @@ class ProductSearchFulltextIntegrationTest extends IntegrationTestSupport {
             .thumbnailUrl("http://img/" + name)
             .build();
         product.approve();
+        product.getProductItems().add(onSaleItem(product));
         product.getCategoryMappings().add(
             ProductCategoryMapping.builder().product(product).category(category).build());
         return productRepository.save(product);
+    }
+
+    // 판매중(ON_SALE) 옵션 1건 — 가격필터 검증이 없는 키워드 테스트라 가격은 고정값 사용
+    private ProductItem onSaleItem(Product product) {
+        return ProductItem.builder()
+            .product(product)
+            .optionValue1("기본").optionValue2("기본").optionValue3("기본")
+            .optionValue4("기본").optionValue5("기본")
+            .price(10000L).stock(10L)              // 생성자 기본 상태 = ON_SALE
+            .build();
     }
 }
