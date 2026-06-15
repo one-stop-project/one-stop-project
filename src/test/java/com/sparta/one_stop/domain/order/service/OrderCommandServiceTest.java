@@ -1124,6 +1124,8 @@ class OrderCommandServiceTest {
         );
 
         ProductItem productItem = mock(ProductItem.class);
+        when(productItem.getId()).thenReturn(101L);
+
         OrderItem orderItem = cancelableOrderItem(
             101L,
             productItem,
@@ -1159,7 +1161,11 @@ class OrderCommandServiceTest {
         assertThat(result.refundAmount()).isEqualTo(23000L);
         assertThat(result.restoredPoint()).isEqualTo(5000);
 
-        verify(productItem).increaseStock(2);
+        verify(productItemRepository).increaseStockById(
+            101L,
+            2
+        );
+        verify(productItem, never()).increaseStock(anyLong());
         verify(orderItem).cancel();
         verify(order).cancel();
         verify(pointService).refundPointByOrder(order);
