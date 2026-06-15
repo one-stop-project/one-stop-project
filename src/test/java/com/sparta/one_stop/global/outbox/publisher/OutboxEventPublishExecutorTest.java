@@ -3,6 +3,8 @@ package com.sparta.one_stop.global.outbox.publisher;
 import com.sparta.one_stop.global.alert.slack.SlackAlertService;
 import com.sparta.one_stop.global.enums.outbox.OutboxEventStatus;
 import com.sparta.one_stop.global.enums.outbox.OutboxEventType;
+import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import com.sparta.one_stop.global.outbox.entity.OutboxEvent;
 import com.sparta.one_stop.global.outbox.kafka.OutboxKafkaProducer;
 import com.sparta.one_stop.global.outbox.repository.OutboxEventRepository;
@@ -18,6 +20,7 @@ import java.lang.reflect.Field;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -117,6 +120,37 @@ class OutboxEventPublishExecutorTest {
             any()
         );
         verify(outboxEventRepository, never()).save(any(OutboxEvent.class));
+    }
+
+    @Test
+    @DisplayName("execute 실패 - 선점 성공 후 이벤트 재조회 결과가 없으면 예외 발생")
+    void execute_fail_whenClaimedEventNotFoundAfterStatusUpdate() {
+        // given
+        OutboxEvent pendingEvent = pendingOutboxEvent(1L);
+
+        when(outboxEventRepository.updateStatusByIdAndStatus(
+            1L,
+            OutboxEventStatus.PENDING,
+            OutboxEventStatus.PROCESSING
+        )).thenReturn(1);
+
+        when(outboxEventRepository.findById(1L))
+            .thenReturn(Optional.empty());
+
+        // when & then
+        assertThatThrownBy(() -> outboxEventPublishExecutor.execute(pendingEvent))
+            .isInstanceOf(CustomException.class)
+            .extracting("errorCode")
+            .isEqualTo(ErrorCode.OUTBOX_002);
+
+        verify(outboxEventRepository).findById(1L);
+        verify(outboxKafkaProducer, never()).send(
+            any(),
+            any(),
+            any()
+        );
+        verify(outboxEventRepository, never()).save(any(OutboxEvent.class));
+        verify(slackAlertService, never()).sendOutboxDeadAlert(any(OutboxEvent.class));
     }
 
     @Test
