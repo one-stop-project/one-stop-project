@@ -26,6 +26,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -123,17 +124,28 @@ public class ReviewService {
         Long productId = review.getProduct().getId();
         review.update(request.getRating(), request.getContent());
 
-        reviewImageRepository.deleteAll(review.getImages());
+        List<String> requestedUrls = request.getImageUrls();
+        Set<String> requestedUrlSet = new HashSet<>(requestedUrls);
 
-        List<String> newImageUrls = request.getImageUrls();
-        for (int idx = 0; idx < newImageUrls.size(); idx++) {
-            reviewImageRepository.save(
-                ReviewImage.builder()
-                    .review(review)
-                    .imageUrl(newImageUrls.get(idx))
-                    .displayOrder(idx)
-                    .build()
-            );
+        Set<String> existingUrls = review.getImages().stream()
+            .map(ReviewImage::getImageUrl)
+            .collect(Collectors.toSet());
+
+        // 요청에 없는 기존 이미지 제거 (orphanRemoval로 자동 삭제)
+        review.getImages().removeIf(img -> !requestedUrlSet.contains(img.getImageUrl()));
+
+        // 기존에 없던 새 URL만 추가
+        for (int idx = 0; idx < requestedUrls.size(); idx++) {
+            String url = requestedUrls.get(idx);
+            if (!existingUrls.contains(url)) {
+                review.getImages().add(
+                    ReviewImage.builder()
+                        .review(review)
+                        .imageUrl(url)
+                        .displayOrder(idx)
+                        .build()
+                );
+            }
         }
 
         try {
