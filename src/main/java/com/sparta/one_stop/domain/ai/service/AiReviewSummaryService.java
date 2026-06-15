@@ -14,12 +14,15 @@ import com.sparta.one_stop.domain.review.entity.Review;
 import com.sparta.one_stop.domain.review.repository.ReviewRepository;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -43,6 +46,10 @@ import java.util.stream.Collectors;
  *
  * [조회] DB 요약 있으면 캐시된 count/avg 사용 (1 query), 없으면 PENDING 반환
  *   - AI 직접 호출 없음
+ *
+ * [커넥션 풀 보호] AI HTTP 호출(2~10초) 중 DB 커넥션을 점유하지 않도록
+ *   비동기 메서드는 NOT_SUPPORTED로 TX를 배제하고, TransactionTemplate으로
+ *   DB 읽기/쓰기 구간만 짧게 TX를 엽니다.
  */
 @Slf4j
 @Service
@@ -53,7 +60,6 @@ public class AiReviewSummaryService {
     private static final int MAX_REVIEW_FOR_FULL = 50;
     private static final int MAX_REVIEW_FOR_INCREMENTAL = 20;
     private static final int MIN_REVIEW_COUNT = 5;
-    // 마지막 업데이트 이후 새 리뷰가 이 수 이상 누적돼야 증분 업데이트 실행
     private static final int MIN_REVIEWS_FOR_INCREMENTAL = 5;
 
     private final ReviewRepository reviewRepository;
@@ -61,10 +67,21 @@ public class AiReviewSummaryService {
     private final ReviewSummaryService reviewSummaryService;
     private final ProductReviewSummaryRepository summaryRepository;
     private final ObjectMapper objectMapper;
+    private final PlatformTransactionManager txManager;
+
+    private TransactionTemplate readTx;
+    private TransactionTemplate writeTx;
+
+    @PostConstruct
+    void initTx() {
+        TransactionTemplate rt = new TransactionTemplate(txManager);
+        rt.setReadOnly(true);
+        this.readTx = rt;
+        this.writeTx = new TransactionTemplate(txManager);
+    }
 
     /**
      * 요약 조회 — DB 요약이 없으면 AI를 호출하지 않고 PENDING을 반환합니다.
-     * entity가 있을 때는 캐시된 reviewCount/averageRating을 사용하므로 DB 쿼리 1회입니다.
      */
     public AiReviewSummaryResponse getSummary(Long productId) {
         return summaryRepository.findByProduct_Id(productId)
@@ -81,71 +98,147 @@ public class AiReviewSummaryService {
 
     /**
      * 관리자 강제 갱신 (동기).
-     * 기존 요약을 덮어써서 빈 상태 노출을 방지합니다.
-     * 리뷰 부족 → INSUFFICIENT 반환.
-     * AI 장애 + 기존 요약 없음 → AI_001 예외 반환.
-     * AI 장애 + 기존 요약 있음 → 기존(stale) 요약 반환.
+     * AI 호출 중 DB 커넥션을 점유하지 않도록 NOT_SUPPORTED + TransactionTemplate 사용.
      */
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public AiReviewSummaryResponse refreshSummary(Long productId) {
-        Product product = productRepository.findById(productId)
-            .orElseThrow(() -> new CustomException(ErrorCode.PRODUCT_001));
+        long[] counts = new long[1];
+        readTx.executeWithoutResult(status -> {
+            productRepository.findById(productId)
+                .orElseThrow(() -> new CustomException(ErrorCode.PRODUCT_001));
+            counts[0] = reviewRepository.countByProduct_Id(productId);
+        });
 
-        long reviewCount = reviewRepository.countByProduct_Id(productId);
-        if (reviewCount < MIN_REVIEW_COUNT) {
-            return AiReviewSummaryResponse.insufficient(reviewCount, getAverageRating(productId));
+        if (counts[0] < MIN_REVIEW_COUNT) {
+            double avg = getAverageRatingDirect(productId);
+            return AiReviewSummaryResponse.insufficient(counts[0], avg);
         }
 
-        generateAndSaveFullSummary(product);
+        doFullSummary(productId);
 
-        return summaryRepository.findByProduct_Id(productId)
-            .map(e -> AiReviewSummaryResponse.ready(e.getReviewCount(), e.getAverageRating(), toReviewSummary(e)))
-            .orElseThrow(() -> new CustomException(ErrorCode.AI_001));
+        return readTx.execute(status ->
+            summaryRepository.findByProduct_Id(productId)
+                .map(e -> AiReviewSummaryResponse.ready(e.getReviewCount(), e.getAverageRating(), toReviewSummary(e)))
+                .orElseThrow(() -> new CustomException(ErrorCode.AI_001))
+        );
     }
 
     /**
      * 리뷰 작성 이벤트 수신 후 증분 업데이트.
      * ReviewSummaryUpdateListener가 @Async("eventExecutor") + AFTER_COMMIT으로 호출합니다.
-     *
-     * - 요약 없음 + MIN_REVIEW_COUNT 충족 → 전체 요약 최초 생성
-     * - 요약 있음 + 새 리뷰 ≤ 20건 → 증분 AI 호출
-     * - 요약 있음 + 새 리뷰 > 20건 → 전체 재요약으로 폴백
+     * AI 호출 중 DB 커넥션을 점유하지 않도록 NOT_SUPPORTED + TransactionTemplate 사용.
      */
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void updateIncrementalSummary(Long productId, Long newReviewId) {
-        long reviewCount = reviewRepository.countByProduct_Id(productId);
-        if (reviewCount < MIN_REVIEW_COUNT) return;
+        IncrementalPayload payload = readTx.execute(status -> loadIncrementalPayload(productId, newReviewId));
+        if (payload == null) return;
 
-        ProductReviewSummary current = summaryRepository.findByProduct_Id(productId).orElse(null);
-
-        if (current == null) {
-            Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new CustomException(ErrorCode.PRODUCT_001));
-            generateAndSaveFullSummary(product);
+        if (payload.needsFullSummary()) {
+            doFullSummary(productId);
             return;
         }
+
+        // 내용 없는 리뷰만 있는 경우: AI 스킵, 경계값·집계값만 갱신
+        if (payload.newReviewsText().isBlank()) {
+            writeTx.executeWithoutResult(status ->
+                summaryRepository.findByProduct_Id(productId).ifPresent(current ->
+                    current.update(current.getPros(), current.getCons(), current.getKeywords(),
+                        current.getSentiment(), payload.latestId(), payload.reviewCount(), payload.averageRating())
+                )
+            );
+            return;
+        }
+
+        // AI 호출 — TX 없음, DB 커넥션 미점유
+        ReviewSummary updated = reviewSummaryService.summarizeIncremental(payload.existingSummaryJson(), payload.newReviewsText());
+        if (updated.isUnavailable()) return;
+
+        writeTx.executeWithoutResult(status ->
+            summaryRepository.findByProduct_Id(productId).ifPresent(current ->
+                current.update(toJson(updated.pros()), toJson(updated.cons()),
+                    toJson(updated.keywords()), updated.sentiment(),
+                    payload.latestId(), payload.reviewCount(), payload.averageRating())
+            )
+        );
+    }
+
+    /**
+     * 리뷰 수정/삭제 이벤트 수신 후 전체 재요약.
+     * ReviewSummaryUpdateListener가 @Async("eventExecutor") + AFTER_COMMIT으로 호출합니다.
+     */
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public void refreshSummaryAsync(Long productId) {
+        boolean hasEnough = Boolean.TRUE.equals(
+            readTx.execute(status -> reviewRepository.countByProduct_Id(productId) >= MIN_REVIEW_COUNT)
+        );
+
+        if (!hasEnough) {
+            writeTx.executeWithoutResult(status ->
+                summaryRepository.findByProduct_Id(productId).ifPresent(summaryRepository::delete)
+            );
+            return;
+        }
+
+        doFullSummary(productId);
+    }
+
+    // ─────────────────────────────────────────────────────────────
+
+    /**
+     * 전체 요약: DB 읽기 → AI 호출 → DB 저장 을 분리해 커넥션 점유 최소화.
+     */
+    private void doFullSummary(Long productId) {
+        FullSummaryPayload payload = readTx.execute(status -> loadFullSummaryPayload(productId));
+        if (payload == null) return;
+
+        // AI 호출 — TX 없음
+        ReviewSummary summary = reviewSummaryService.summarize(payload.category(), payload.reviewsText());
+        if (summary.isUnavailable()) return;
+
+        writeTx.executeWithoutResult(status -> {
+            Product product = productRepository.findById(productId).orElse(null);
+            if (product == null) return;
+            summaryRepository.findByProduct_Id(productId).ifPresentOrElse(
+                existing -> existing.update(
+                    toJson(summary.pros()), toJson(summary.cons()),
+                    toJson(summary.keywords()), summary.sentiment(),
+                    payload.latestId(), payload.reviewCount(), payload.averageRating()),
+                () -> summaryRepository.save(ProductReviewSummary.builder()
+                    .product(product)
+                    .pros(toJson(summary.pros()))
+                    .cons(toJson(summary.cons()))
+                    .keywords(toJson(summary.keywords()))
+                    .sentiment(summary.sentiment())
+                    .lastIncludedReviewId(payload.latestId())
+                    .reviewCount(payload.reviewCount())
+                    .averageRating(payload.averageRating())
+                    .build())
+            );
+        });
+    }
+
+    private IncrementalPayload loadIncrementalPayload(Long productId, Long newReviewId) {
+        long reviewCount = reviewRepository.countByProduct_Id(productId);
+        if (reviewCount < MIN_REVIEW_COUNT) return null;
+
+        ProductReviewSummary current = summaryRepository.findByProduct_Id(productId).orElse(null);
+        if (current == null) return IncrementalPayload.fullSummary(reviewCount, getAverageRating(productId));
 
         long afterId = current.getLastIncludedReviewId() != null ? current.getLastIncludedReviewId() : 0L;
         List<Review> newReviews = reviewRepository.findNewReviewsBetween(productId, afterId, newReviewId);
-        if (newReviews.isEmpty()) return;
+        if (newReviews.isEmpty()) return null;
 
-        // 새 리뷰가 임계값 미만이면 다음 이벤트까지 대기 (AI 호출 비용 절감)
         if (newReviews.size() < MIN_REVIEWS_FOR_INCREMENTAL) {
-            log.debug("[AI Summary] 새 리뷰 {}건 — 임계값({}) 미달, 업데이트 스킵: productId={}",
+            log.debug("[AI Summary] 새 리뷰 {}건 — 임계값({}) 미달, 스킵: productId={}",
                 newReviews.size(), MIN_REVIEWS_FOR_INCREMENTAL, productId);
-            return;
+            return null;
         }
 
-        // 누적 과다 시 전체 재요약으로 폴백
         if (newReviews.size() > MAX_REVIEW_FOR_INCREMENTAL) {
-            log.info("[AI Summary] 증분 한도 초과({}건), 전체 재요약으로 폴백: productId={}", newReviews.size(), productId);
-            Product product = productRepository.findById(productId)
-                .orElseThrow(() -> new CustomException(ErrorCode.PRODUCT_001));
-            generateAndSaveFullSummary(product);
-            return;
+            log.info("[AI Summary] 증분 한도 초과({}건), 전체 재요약 폴백: productId={}", newReviews.size(), productId);
+            return IncrementalPayload.fullSummary(reviewCount, getAverageRating(productId));
         }
 
-        // id ASC 정렬이므로 max(id)는 마지막 원소가 맞지만, 안전하게 stream으로 보장
         long latestId = newReviews.stream().mapToLong(Review::getId).max().getAsLong();
         double averageRating = getAverageRating(productId);
 
@@ -154,47 +247,13 @@ public class AiReviewSummaryService {
             .filter(c -> !c.isBlank())
             .collect(Collectors.joining("\n"));
 
-        if (newReviewsText.isBlank()) {
-            // 내용 없는 리뷰만 있는 경우: AI 호출 스킵, 경계값과 집계값만 갱신
-            current.update(current.getPros(), current.getCons(), current.getKeywords(),
-                current.getSentiment(), latestId, reviewCount, averageRating);
-            return;
-        }
-
-        String existingSummaryJson = buildSummaryJson(current);
-        ReviewSummary updated = reviewSummaryService.summarizeIncremental(existingSummaryJson, newReviewsText);
-        if (updated.isUnavailable()) return;
-
-        current.update(toJson(updated.pros()), toJson(updated.cons()),
-            toJson(updated.keywords()), updated.sentiment(), latestId, reviewCount, averageRating);
+        return IncrementalPayload.incremental(buildSummaryJson(current), newReviewsText, latestId, reviewCount, averageRating);
     }
 
-    /**
-     * 리뷰 수정/삭제 이벤트 수신 후 전체 재요약.
-     * ReviewSummaryUpdateListener가 @Async("eventExecutor") + AFTER_COMMIT으로 호출합니다.
-     */
-    @Transactional
-    public void refreshSummaryAsync(Long productId) {
-        long reviewCount = reviewRepository.countByProduct_Id(productId);
-        if (reviewCount < MIN_REVIEW_COUNT) {
-            // 리뷰가 최소 기준 아래로 떨어진 경우 요약 삭제
-            summaryRepository.findByProduct_Id(productId).ifPresent(summaryRepository::delete);
-            return;
-        }
-        Product product = productRepository.findById(productId)
-            .orElseThrow(() -> new CustomException(ErrorCode.PRODUCT_001));
-        generateAndSaveFullSummary(product);
-    }
+    private FullSummaryPayload loadFullSummaryPayload(Long productId) {
+        Product product = productRepository.findById(productId).orElse(null);
+        if (product == null) return null;
 
-    // ─────────────────────────────────────────────────────────────
-
-    /**
-     * 전체 요약을 생성하고 DB에 저장합니다. 반드시 쓰기 트랜잭션 컨텍스트에서 호출하세요.
-     * AI UNAVAILABLE이면 아무것도 저장하지 않고 반환합니다.
-     * 최초 생성 경쟁 조건(unique 제약 위반)은 호출자(리스너)가 DataIntegrityViolationException으로 처리합니다.
-     */
-    private void generateAndSaveFullSummary(Product product) {
-        Long productId = product.getId();
         long reviewCount = reviewRepository.countByProduct_Id(productId);
         double averageRating = getAverageRating(productId);
 
@@ -206,28 +265,10 @@ public class AiReviewSummaryService {
             .filter(c -> !c.isBlank())
             .collect(Collectors.joining("\n"));
 
-        if (reviewsText.isBlank()) return;
+        if (reviewsText.isBlank()) return null;
 
-        ReviewSummary summary = reviewSummaryService.summarize(mapToReviewCategory(product), reviewsText);
-        if (summary.isUnavailable()) return;
-
-        // createdAt DESC 정렬이지만 ID 경계값은 max(id)로 계산
         Long latestId = reviews.stream().mapToLong(Review::getId).max().stream().boxed().findFirst().orElse(null);
-
-        summaryRepository.findByProduct_Id(productId).ifPresentOrElse(
-            existing -> existing.update(toJson(summary.pros()), toJson(summary.cons()),
-                toJson(summary.keywords()), summary.sentiment(), latestId, reviewCount, averageRating),
-            () -> summaryRepository.save(ProductReviewSummary.builder()
-                .product(product)
-                .pros(toJson(summary.pros()))
-                .cons(toJson(summary.cons()))
-                .keywords(toJson(summary.keywords()))
-                .sentiment(summary.sentiment())
-                .lastIncludedReviewId(latestId)
-                .reviewCount(reviewCount)
-                .averageRating(averageRating)
-                .build())
-        );
+        return new FullSummaryPayload(mapToReviewCategory(product), reviewsText, latestId, reviewCount, averageRating);
     }
 
     private ReviewSummary toReviewSummary(ProductReviewSummary entity) {
@@ -271,8 +312,15 @@ public class AiReviewSummaryService {
 
     private double getAverageRating(Long productId) {
         Double avg = reviewRepository.findAverageRatingByProductId(productId);
-        if (avg == null) return 0.0;
-        return Math.round(avg * 10.0) / 10.0;
+        return avg == null ? 0.0 : Math.round(avg * 10.0) / 10.0;
+    }
+
+    // TX 없이 직접 호출용 (NOT_SUPPORTED 컨텍스트에서 단순 조회)
+    private double getAverageRatingDirect(Long productId) {
+        return readTx.execute(status -> {
+            Double avg = reviewRepository.findAverageRatingByProductId(productId);
+            return avg == null ? 0.0 : Math.round(avg * 10.0) / 10.0;
+        });
     }
 
     private ReviewCategoryType mapToReviewCategory(Product product) {
@@ -294,4 +342,30 @@ public class AiReviewSummaryService {
         }
         return ReviewCategoryType.GENERAL;
     }
+
+    private record IncrementalPayload(
+        boolean needsFullSummary,
+        String existingSummaryJson,
+        String newReviewsText,
+        long latestId,
+        long reviewCount,
+        double averageRating
+    ) {
+        static IncrementalPayload fullSummary(long reviewCount, double averageRating) {
+            return new IncrementalPayload(true, null, null, 0, reviewCount, averageRating);
+        }
+
+        static IncrementalPayload incremental(String summaryJson, String reviewsText,
+                                              long latestId, long reviewCount, double averageRating) {
+            return new IncrementalPayload(false, summaryJson, reviewsText, latestId, reviewCount, averageRating);
+        }
+    }
+
+    private record FullSummaryPayload(
+        ReviewCategoryType category,
+        String reviewsText,
+        Long latestId,
+        long reviewCount,
+        double averageRating
+    ) {}
 }
