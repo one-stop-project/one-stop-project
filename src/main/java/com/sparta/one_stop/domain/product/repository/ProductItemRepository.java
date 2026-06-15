@@ -4,6 +4,7 @@ import com.sparta.one_stop.domain.product.entity.ProductItem;
 import jakarta.persistence.LockModeType;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -45,6 +46,31 @@ public interface ProductItemRepository extends JpaRepository<ProductItem, Long> 
     """)
     List<ProductItem> findAllByIdInWithProduct(
         @Param("itemIds") List<Long> itemIds
+    );
+
+    /**
+     * 주문 취소 시 상품 옵션 재고를 DB 레벨에서 원자적으로 복구한다.
+     *
+     * 주의:
+     * - JPA dirty checking 기반 increaseStock()은 엔티티를 읽은 시점의 stock 값에 수량을 더한 뒤
+     *   커밋 시 절대값 SET update를 실행할 수 있다.
+     * - 그 사이 다른 주문 생성 트랜잭션이 같은 ProductItem의 stock을 변경하면
+     *   변경분이 덮어씌워질 수 있다.
+     * - 따라서 주문 취소 재고 복구는 bulk update로 stock = stock + qty 형태의
+     *   DB 원자 연산을 사용한다.
+     *
+     * 반환값:
+     * - update된 row 수
+     */
+    @Modifying(flushAutomatically = true)
+    @Query("""
+        update ProductItem pi
+        set pi.stock = pi.stock + :qty
+        where pi.id = :id
+    """)
+    int increaseStockById(
+        @Param("id") Long id,
+        @Param("qty") int qty
     );
 
 }
