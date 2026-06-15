@@ -330,6 +330,75 @@ class CartServiceTest {
     }
 
     @Test
+    @DisplayName("로그인 장바구니 담기 성공 - 장바구니가 없으면 새 Cart를 자동 생성한다")
+    void addCartItem_success_createCartAutomatically_whenCartDoesNotExist() {
+        // given
+        Long userId = 1L;
+        Long sellerUserId = 2L;
+        Long itemId = 101L;
+
+        AddCartItemRequest request = new AddCartItemRequest(
+            itemId,
+            2
+        );
+
+        User user = user();
+        Cart savedCart = cart(10L);
+
+        ProductItem productItem = productItem(
+            itemId,
+            true,
+            10L,
+            sellerUserId
+        );
+
+        when(userRepository.findById(userId))
+            .thenReturn(Optional.of(user));
+        when(productItemRepository.findById(itemId))
+            .thenReturn(Optional.of(productItem));
+        when(cartRepository.findByUserId(userId))
+            .thenReturn(Optional.empty());
+        when(cartRepository.save(any(Cart.class)))
+            .thenReturn(savedCart);
+        when(cartItemRepository.findByCartIdAndProductItemId(
+            savedCart.getId(),
+            itemId
+        )).thenReturn(Optional.empty());
+        when(cartItemRepository.countByCartId(savedCart.getId()))
+            .thenReturn(0L);
+
+        // when
+        CartItemResponse result = cartService.addCartItem(
+            userId,
+            request
+        );
+
+        // then
+        ArgumentCaptor<Cart> cartCaptor =
+            ArgumentCaptor.forClass(Cart.class);
+
+        verify(cartRepository).save(cartCaptor.capture());
+
+        Cart newCart = cartCaptor.getValue();
+
+        assertThat(newCart.getUser()).isSameAs(user);
+
+        ArgumentCaptor<CartItem> cartItemCaptor =
+            ArgumentCaptor.forClass(CartItem.class);
+
+        verify(cartItemRepository).save(cartItemCaptor.capture());
+
+        CartItem savedCartItem = cartItemCaptor.getValue();
+
+        assertThat(savedCartItem.getCart()).isSameAs(savedCart);
+        assertThat(savedCartItem.getProductItem()).isSameAs(productItem);
+        assertThat(savedCartItem.getQuantity()).isEqualTo(2);
+
+        assertThat(result.itemId()).isEqualTo(itemId);
+        assertThat(result.quantity()).isEqualTo(2);
+    }
+
+    @Test
     @DisplayName("로그인 장바구니 담기 실패 - 본인 상품은 담을 수 없다")
     void addCartItem_fail_whenOwnProduct() {
         // given
@@ -741,6 +810,43 @@ class CartServiceTest {
     }
 
     @Test
+    @DisplayName("로그인 장바구니 수량 변경 성공 - 최종 수량이 감소하면 감소분만큼 decreaseQuantity를 호출한다")
+    void updateCartItemQuantityByItemId_success_decreaseQuantity() {
+        // given
+        Long userId = 1L;
+        Long itemId = 101L;
+
+        UpdateCartItemRequest request = new UpdateCartItemRequest(2);
+
+        Cart cart = cart(10L);
+        CartItem cartItem = org.mockito.Mockito.mock(CartItem.class);
+
+        when(cartItem.getQuantity())
+            .thenReturn(5);
+
+        when(cartRepository.findByUserId(userId))
+            .thenReturn(Optional.of(cart));
+        when(cartItemRepository.findByCartIdAndProductItemId(
+            cart.getId(),
+            itemId
+        )).thenReturn(Optional.of(cartItem));
+
+        // when
+        UpdateCartItemResponse result = cartService.updateCartItemQuantityByItemId(
+            userId,
+            itemId,
+            request
+        );
+
+        // then
+        verify(cartItem).decreaseQuantity(3);
+        verify(cartItem, never()).increaseQuantity(anyInt());
+
+        assertThat(result.itemId()).isEqualTo(itemId);
+        assertThat(result.quantity()).isEqualTo(2);
+    }
+
+    @Test
     @DisplayName("로그인 장바구니 수량 변경 실패 - 최종 수량이 99개를 초과하면 변경할 수 없다")
     void updateCartItemQuantityByItemId_fail_whenRequestQuantityExceedsMaxLimit() {
         // given
@@ -779,6 +885,59 @@ class CartServiceTest {
 
         verify(cartItem, never()).increaseQuantity(anyInt());
         verify(cartItem, never()).decreaseQuantity(anyInt());
+    }
+
+    @Test
+    @DisplayName("로그인 장바구니 수량 변경 실패 - 장바구니가 없으면 예외 발생")
+    void updateCartItemQuantityByItemId_fail_whenCartDoesNotExist() {
+        // given
+        Long userId = 1L;
+        Long itemId = 101L;
+
+        UpdateCartItemRequest request = new UpdateCartItemRequest(2);
+
+        when(cartRepository.findByUserId(userId))
+            .thenReturn(Optional.empty());
+
+        // when & then
+        assertThatThrownBy(() -> cartService.updateCartItemQuantityByItemId(
+            userId,
+            itemId,
+            request
+        ))
+            .isInstanceOf(CustomException.class);
+
+        verify(cartItemRepository, never()).findByCartIdAndProductItemId(
+            any(),
+            any()
+        );
+    }
+
+    @Test
+    @DisplayName("로그인 장바구니 수량 변경 실패 - 장바구니 상품이 없으면 예외 발생")
+    void updateCartItemQuantityByItemId_fail_whenCartItemDoesNotExist() {
+        // given
+        Long userId = 1L;
+        Long itemId = 101L;
+
+        UpdateCartItemRequest request = new UpdateCartItemRequest(2);
+
+        Cart cart = cart(10L);
+
+        when(cartRepository.findByUserId(userId))
+            .thenReturn(Optional.of(cart));
+        when(cartItemRepository.findByCartIdAndProductItemId(
+            cart.getId(),
+            itemId
+        )).thenReturn(Optional.empty());
+
+        // when & then
+        assertThatThrownBy(() -> cartService.updateCartItemQuantityByItemId(
+            userId,
+            itemId,
+            request
+        ))
+            .isInstanceOf(CustomException.class);
     }
 
     @Test
