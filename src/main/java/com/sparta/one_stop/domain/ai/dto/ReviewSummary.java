@@ -26,6 +26,6 @@ public record ReviewSummary(
     }
 
     public boolean isUnavailable() {
-        return "UNAVAILABLE".equals(sentiment);
+        return sentiment == null || "UNAVAILABLE".equals(sentiment);
     }
 }
