@@ -109,7 +109,7 @@ class SubscriptionTest {
     }
 
     @Test
-    @DisplayName("구독 갱신 성공 - endAt/nextPaymentDate 30일 연장")
+    @DisplayName("구독 갱신 성공 - endAt/nextPaymentDate를 현재 기준 30일로 설정")
     void renew_success() {
 
         // given
@@ -117,14 +117,14 @@ class SubscriptionTest {
         Subscription subscription = activeSubscription(now);
 
         // when
-        subscription.renew();
+        subscription.renew(now);
 
         // then
         assertThat(subscription.getEndAt())
-            .isEqualTo(now.plusDays(60));
+            .isEqualTo(now.plusDays(30));
 
         assertThat(subscription.getNextPaymentDate())
-            .isEqualTo(now.plusDays(60));
+            .isEqualTo(now.plusDays(30));
 
         assertThat(subscription.getStatus())
             .isEqualTo(SubscriptionStatus.ACTIVE);
@@ -139,7 +139,7 @@ class SubscriptionTest {
         subscription.cancel("x");
 
         // when & then
-        assertThatThrownBy(subscription::renew)
+        assertThatThrownBy(() -> subscription.renew(LocalDateTime.now()))
             .isInstanceOf(CustomException.class)
             .extracting(e -> ((CustomException) e).getErrorCode())
             .isEqualTo(ErrorCode.SUBSCRIPTION_004);
@@ -154,7 +154,7 @@ class SubscriptionTest {
         subscription.expire();
 
         // when & then
-        assertThatThrownBy(subscription::renew)
+        assertThatThrownBy(() -> subscription.renew(LocalDateTime.now()))
             .isInstanceOf(CustomException.class)
             .extracting(e -> ((CustomException) e).getErrorCode())
             .isEqualTo(ErrorCode.SUBSCRIPTION_004);

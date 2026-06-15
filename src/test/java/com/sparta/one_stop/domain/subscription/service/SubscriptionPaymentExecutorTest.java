@@ -94,7 +94,7 @@ class SubscriptionPaymentExecutorTest {
         LocalDateTime now = LocalDateTime.now();
         Subscription subscription = active(now, 1L);
         // 이미 갱신된 상태 시뮬레이션
-        subscription.renew();
+        subscription.renew(LocalDateTime.now());
 
         when(subscriptionRepository.findAllById(List.of(1L)))
             .thenReturn(List.of(subscription));
@@ -104,5 +104,28 @@ class SubscriptionPaymentExecutorTest {
         // renew가 또 호출되지 않으므로 60일이 아닌 30일 연장 상태 유지
         assertThat(subscription.getNextPaymentDate())
             .isEqualTo(now.plusDays(30));
+    }
+
+    @Test
+    @DisplayName("다중결제 회귀 - 장기 연체 구독은 같은 실행에서 1회만 처리")
+    void processChunk_overdueRegression_noDoubleProcess() {
+
+        LocalDateTime now = LocalDateTime.now();
+        Subscription subscription = Subscription.builder()
+            .user(user())
+            .startAt(now.minusDays(70))
+            .endAt(now.minusDays(40))
+            .nextPaymentDate(now.minusDays(40))
+            .build();
+        ReflectionTestUtils.setField(subscription, "id", 1L);
+
+        when(subscriptionRepository.findAllById(List.of(1L)))
+            .thenReturn(List.of(subscription));
+
+        paymentExecutor.processChunk(List.of(1L), now);
+        LocalDateTime afterFirstRun = subscription.getNextPaymentDate();
+
+        paymentExecutor.processChunk(List.of(1L), now);
+        assertThat(subscription.getNextPaymentDate()).isEqualTo(afterFirstRun);
     }
 }

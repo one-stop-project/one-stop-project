@@ -26,14 +26,8 @@ public class SubscriptionPaymentExecutor {
             subscriptionRepository.findAllById(subscriptionIds);
 
         for (Subscription subscription : subscriptions) {
-            // 같은 실행에서 이미 갱신된 구독 스킵 (다중 결제 방지)
-            if (subscription.getNextPaymentDate().isAfter(now)) {
-                log.info("이미 갱신된 구독 스킵 subscriptionId={}", subscription.getId());
-                continue;
-            }
-
             try {
-                subscription.renew();
+                subscription.renew(now);
                 log.info("자동결제 성공 subscriptionId={}", subscription.getId());
             } catch (Exception e) {
                 subscription.expire();
