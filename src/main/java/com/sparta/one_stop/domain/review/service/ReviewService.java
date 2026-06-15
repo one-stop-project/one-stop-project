@@ -130,7 +130,7 @@ public class ReviewService {
 
         // 기존 이미지 URL → entity 맵
         Map<String, ReviewImage> existingByUrl = review.getImages().stream()
-            .collect(Collectors.toMap(ReviewImage::getImageUrl, img -> img));
+            .collect(Collectors.toMap(ReviewImage::getImageUrl, img -> img, (a, b) -> a));
 
         // 요청에 없는 기존 이미지 제거 (orphanRemoval로 자동 삭제)
         review.getImages().removeIf(img -> !requestedUrlSet.contains(img.getImageUrl()));
