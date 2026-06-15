@@ -208,6 +208,149 @@ class PaymentServiceTest {
     }
 
     @Test
+    @DisplayName("approvePayment 성공 - OutboxEvent 저장 실패해도 결제는 성공한다")
+    void approvePayment_success_whenOutboxEventSaveFails() throws Exception {
+        // given
+        Long userId = 1L;
+        Long orderId = 10L;
+        Long amount = 30000L;
+
+        ApprovePaymentRequest request = new ApprovePaymentRequest(
+            orderId,
+            amount
+        );
+
+        willDoNothing()
+            .given(couponCommandService)
+            .useCouponByOrder(any(Order.class));
+
+        AtomicReference<OrderStatus> orderStatus =
+            new AtomicReference<>(OrderStatus.PENDING_PAYMENT);
+
+        Order order = payableOrder(
+            orderId,
+            userId,
+            amount,
+            orderStatus
+        );
+
+        when(orderRepository.findByIdWithLock(orderId))
+            .thenReturn(Optional.of(order));
+
+        when(paymentRepository.existsByOrderId(orderId))
+            .thenReturn(false);
+
+        when(paymentRepository.save(any(Payment.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+
+        when(objectMapper.writeValueAsString(any(PaymentApprovedEventPayload.class)))
+            .thenReturn("{\"orderId\":10}");
+
+        doThrow(new CustomException(ErrorCode.OUTBOX_001))
+            .when(outboxEventService)
+            .savePaymentApprovedEvent(
+                anyString(),
+                eq(orderId),
+                anyString()
+            );
+
+        // when
+        ApprovePaymentResponse result = paymentService.approvePayment(
+            userId,
+            request
+        );
+
+        // then
+        assertThat(result).isNotNull();
+        assertThat(result.orderId()).isEqualTo(orderId);
+        assertThat(result.finalPrice()).isEqualTo(amount);
+        assertThat(result.status()).isEqualTo(OrderStatus.PAID);
+
+        verify(paymentRepository).save(any(Payment.class));
+        verify(order).completePayment();
+        assertThat(orderStatus.get()).isEqualTo(OrderStatus.PAID);
+
+        verify(couponCommandService).useCouponByOrder(order);
+        verify(deliveryService).createDeliveriesForPayment(order);
+
+        verify(outboxEventService).savePaymentApprovedEvent(
+            anyString(),
+            eq(orderId),
+            anyString()
+        );
+    }
+
+    @Test
+    @DisplayName("approvePayment 실패 - 포인트 차감 실패 시 결제 승인 흐름을 중단한다")
+    void approvePayment_fail_whenPointUseFails() {
+        // given
+        Long userId = 1L;
+        Long orderId = 10L;
+        Long amount = 30000L;
+        Integer usedPoint = 5000;
+
+        ApprovePaymentRequest request = new ApprovePaymentRequest(
+            orderId,
+            amount
+        );
+
+        Order order = orderWithStatus(
+            orderId,
+            userId,
+            amount,
+            OrderStatus.PENDING_PAYMENT
+        );
+
+        when(order.getUsedPoint())
+            .thenReturn(usedPoint);
+
+        when(orderRepository.findByIdWithLock(orderId))
+            .thenReturn(Optional.of(order));
+
+        when(paymentRepository.existsByOrderId(orderId))
+            .thenReturn(false);
+
+        CustomException pointException = new CustomException(ErrorCode.POINT_002);
+
+        doThrow(pointException)
+            .when(pointService)
+            .usePoint(
+                userId,
+                order,
+                usedPoint
+            );
+
+        // when & then
+        assertThatThrownBy(() -> paymentService.approvePayment(
+            userId,
+            request
+        ))
+            .isSameAs(pointException);
+
+        verify(paymentPointGuard).validateBeforePaymentApproval(
+            userId,
+            usedPoint,
+            orderId
+        );
+
+        verify(pointService).usePoint(
+            userId,
+            order,
+            usedPoint
+        );
+
+        verify(paymentRepository, never()).save(any(Payment.class));
+        verify(order, never()).completePayment();
+        verify(couponCommandService, never()).useCouponByOrder(any(Order.class));
+        verify(deliveryService, never()).createDeliveriesForPayment(any(Order.class));
+        verify(outboxEventService, never()).savePaymentApprovedEvent(
+            anyString(),
+            any(),
+            anyString()
+        );
+    }
+
+    @Test
     @DisplayName("approvePayment 실패 - 존재하지 않는 주문이면 예외 발생")
     void approvePayment_fail_whenOrderDoesNotExist() {
         // given
