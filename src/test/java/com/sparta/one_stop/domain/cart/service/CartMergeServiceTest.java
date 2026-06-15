@@ -24,6 +24,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyMap;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -162,6 +163,123 @@ class CartMergeServiceTest {
         } finally {
             Thread.interrupted();
         }
+    }
+
+    @Test
+    @DisplayName("merge 실패 - Executor 예외 발생 시 Redis 분산락을 해제한다")
+    void mergeGuestCartToUserCart_fail_whenExecutorThrows_unlocksDistributedLock() throws InterruptedException {
+        // given
+        Long userId = 1L;
+        String guestCartId = "guest-id";
+        String redisKey = "guest:cart:guest-id";
+        String orderKey = "guest:cart-order:guest-id";
+
+        Map<Object, Object> entries = new LinkedHashMap<>();
+        entries.put("101", "1");
+        entries.put("102", "2");
+
+        Set<String> orderedItemFields = new LinkedHashSet<>();
+        orderedItemFields.add("101");
+        orderedItemFields.add("102");
+
+        prepareLockAcquired(guestCartId);
+
+        when(guestCartRedisKeyProvider.buildGuestCartKey(guestCartId))
+            .thenReturn(redisKey);
+        when(guestCartRedisKeyProvider.buildGuestCartOrderKey(guestCartId))
+            .thenReturn(orderKey);
+
+        when(redisTemplate.opsForHash())
+            .thenReturn(hashOperations);
+        when(hashOperations.entries(redisKey))
+            .thenReturn(entries);
+
+        when(redisTemplate.opsForZSet())
+            .thenReturn(zSetOperations);
+        when(zSetOperations.range(orderKey, 0, -1))
+            .thenReturn(orderedItemFields);
+
+        RuntimeException executorException = new RuntimeException("merge failed");
+
+        doThrow(executorException)
+            .when(cartMergeExecutor)
+            .execute(
+                eq(userId),
+                anyMap()
+            );
+
+        // when & then
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+            cartMergeService.mergeGuestCartToUserCart(
+                userId,
+                guestCartId
+            )
+        ).isSameAs(executorException);
+
+        verify(cartMergeExecutor).execute(
+            eq(userId),
+            anyMap()
+        );
+
+        verify(lock).isHeldByCurrentThread();
+        verify(lock).unlock();
+    }
+
+    @Test
+    @DisplayName("merge 실패 - Executor 예외 발생 시 Redis Hash/ZSet key를 삭제하지 않는다")
+    void mergeGuestCartToUserCart_fail_whenExecutorThrows_doesNotDeleteRedisKeys() throws InterruptedException {
+        // given
+        Long userId = 1L;
+        String guestCartId = "guest-id";
+        String redisKey = "guest:cart:guest-id";
+        String orderKey = "guest:cart-order:guest-id";
+
+        Map<Object, Object> entries = new LinkedHashMap<>();
+        entries.put("101", "1");
+        entries.put("102", "2");
+
+        Set<String> orderedItemFields = new LinkedHashSet<>();
+        orderedItemFields.add("101");
+        orderedItemFields.add("102");
+
+        prepareLockAcquired(guestCartId);
+
+        when(guestCartRedisKeyProvider.buildGuestCartKey(guestCartId))
+            .thenReturn(redisKey);
+        when(guestCartRedisKeyProvider.buildGuestCartOrderKey(guestCartId))
+            .thenReturn(orderKey);
+
+        when(redisTemplate.opsForHash())
+            .thenReturn(hashOperations);
+        when(hashOperations.entries(redisKey))
+            .thenReturn(entries);
+
+        when(redisTemplate.opsForZSet())
+            .thenReturn(zSetOperations);
+        when(zSetOperations.range(orderKey, 0, -1))
+            .thenReturn(orderedItemFields);
+
+        RuntimeException executorException = new RuntimeException("merge failed");
+
+        doThrow(executorException)
+            .when(cartMergeExecutor)
+            .execute(
+                eq(userId),
+                anyMap()
+            );
+
+        // when & then
+        org.assertj.core.api.Assertions.assertThatThrownBy(() ->
+            cartMergeService.mergeGuestCartToUserCart(
+                userId,
+                guestCartId
+            )
+        ).isSameAs(executorException);
+
+        verify(redisTemplate, never()).delete(redisKey);
+        verify(redisTemplate, never()).delete(orderKey);
+
+        verify(lock).unlock();
     }
 
     @Test
