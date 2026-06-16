@@ -501,6 +501,34 @@ class GuestCartServiceTest {
     }
 
     @Test
+    @DisplayName("deleteCartItem 실패 - Redis Hash에 해당 itemId가 없으면 예외 발생")
+    void deleteCartItem_fail_whenItemIdDoesNotExistInRedisHash() {
+        // given
+        Long itemId = 101L;
+
+        when(hashOperations.hasKey(
+            REDIS_KEY,
+            "101"
+        )).thenReturn(false);
+
+        // when & then
+        assertThatThrownBy(() -> guestCartService.deleteCartItem(
+            GUEST_CART_ID,
+            response,
+            itemId
+        ))
+            .isInstanceOf(CustomException.class)
+            .hasMessage("장바구니에 해당 상품이 없습니다");
+
+        verify(hashOperations, never()).delete(any(), any());
+        verify(zSetOperations, never()).remove(any(), any());
+        verify(hashOperations, never()).size(any());
+        verify(redisTemplate, never()).delete(anyString());
+        verify(redisTemplate, never()).expire(anyString(), any());
+        verify(guestCartCookieProvider, never()).refreshCookie(anyString(), any());
+    }
+
+    @Test
     @DisplayName("getCart 성공 - ZSet 담기 순서 기준으로 장바구니를 조회한다")
     void getCart_success_returnItemsByZSetOrder() {
         // given
@@ -646,6 +674,262 @@ class GuestCartServiceTest {
         verify(productItemRepository).findAllByIdInWithProduct(
             List.of(104L)
         );
+    }
+
+    @Test
+    @DisplayName("getCart 성공 - Redis Hash가 비어 있으면 빈 장바구니를 반환한다")
+    void getCart_success_returnEmptyResult_whenRedisHashIsEmpty() {
+        // given
+        Pageable pageable = PageRequest.of(
+            0,
+            20
+        );
+
+        when(hashOperations.entries(REDIS_KEY))
+            .thenReturn(Map.of());
+
+        when(redisTemplate.hasKey(anyString()))
+            .thenReturn(false);
+
+        // when
+        CartPageResponse result = guestCartService.getCart(
+            GUEST_CART_ID,
+            response,
+            pageable
+        );
+
+        // then
+        assertThat(result.cartId()).isNull();
+        assertThat(result.content()).isEmpty();
+        assertThat(result.totalPrice()).isZero();
+        assertThat(result.itemCount()).isZero();
+        assertThat(result.page()).isEqualTo(0);
+        assertThat(result.size()).isEqualTo(20);
+        assertThat(result.totalElements()).isZero();
+        assertThat(result.totalPages()).isZero();
+
+        verify(productItemRepository, never()).findAllByIdInWithProduct(any());
+        verify(redisTemplate, never()).expire(anyString(), any());
+        verify(guestCartCookieProvider).refreshCookie(
+            GUEST_CART_ID,
+            response
+        );
+    }
+
+    @Test
+    @DisplayName("getCart 성공 - Redis ZSet이 null이면 itemId DESC 기준으로 폴백 정렬한다")
+    void getCart_success_sortByItemIdDesc_whenRedisZSetIsNull() {
+        // given
+        Pageable pageable = PageRequest.of(
+            0,
+            20
+        );
+
+        Map<Object, Object> entries = new LinkedHashMap<>();
+        entries.put("101", "1");
+        entries.put("103", "2");
+        entries.put("102", "3");
+
+        ProductItem productItem101 = productItemForCartDetail(
+            101L,
+            1L,
+            "상품 101",
+            "옵션 101",
+            1000L,
+            10L,
+            true,
+            "thumbnail-101.jpg"
+        );
+
+        ProductItem productItem102 = productItemForCartDetail(
+            102L,
+            1L,
+            "상품 102",
+            "옵션 102",
+            2000L,
+            10L,
+            true,
+            "thumbnail-102.jpg"
+        );
+
+        ProductItem productItem103 = productItemForCartDetail(
+            103L,
+            1L,
+            "상품 103",
+            "옵션 103",
+            3000L,
+            10L,
+            true,
+            "thumbnail-103.jpg"
+        );
+
+        when(hashOperations.entries(REDIS_KEY))
+            .thenReturn(entries);
+
+        when(redisTemplate.hasKey(anyString()))
+            .thenReturn(true);
+
+        when(zSetOperations.range(
+            ORDER_KEY,
+            0,
+            -1
+        )).thenReturn(null);
+
+        when(productItemRepository.findAllByIdInWithProduct(
+            List.of(
+                103L,
+                102L,
+                101L
+            )
+        )).thenReturn(List.of(
+            productItem101,
+            productItem102,
+            productItem103
+        ));
+
+        // when
+        CartPageResponse result = guestCartService.getCart(
+            GUEST_CART_ID,
+            response,
+            pageable
+        );
+
+        // then
+        verify(zSetOperations).range(
+            ORDER_KEY,
+            0,
+            -1
+        );
+
+        verify(productItemRepository).findAllByIdInWithProduct(
+            List.of(
+                103L,
+                102L,
+                101L
+            )
+        );
+
+        assertThat(result.content()).hasSize(3);
+
+        assertThat(result.content().get(0).itemId()).isEqualTo(103L);
+        assertThat(result.content().get(0).quantity()).isEqualTo(2);
+
+        assertThat(result.content().get(1).itemId()).isEqualTo(102L);
+        assertThat(result.content().get(1).quantity()).isEqualTo(3);
+
+        assertThat(result.content().get(2).itemId()).isEqualTo(101L);
+        assertThat(result.content().get(2).quantity()).isEqualTo(1);
+
+        assertThat(result.totalPrice()).isEqualTo(13000L);
+        assertThat(result.itemCount()).isEqualTo(6);
+        assertThat(result.totalElements()).isEqualTo(3);
+        assertThat(result.totalPages()).isEqualTo(1);
+
+        verify(redisTemplate).expire(eq(REDIS_KEY), any());
+        verify(redisTemplate).expire(eq(ORDER_KEY), any());
+        verify(guestCartCookieProvider).refreshCookie(
+            GUEST_CART_ID,
+            response
+        );
+    }
+
+    @Test
+    @DisplayName("getCart 성공 - Redis ZSet이 비어 있으면 itemId DESC 기준으로 폴백 정렬한다")
+    void getCart_success_sortByItemIdDesc_whenRedisZSetIsEmpty() {
+        // given
+        Pageable pageable = PageRequest.of(
+            0,
+            20
+        );
+
+        Map<Object, Object> entries = new LinkedHashMap<>();
+        entries.put("101", "1");
+        entries.put("103", "2");
+        entries.put("102", "3");
+
+        ProductItem productItem101 = productItemForCartDetail(
+            101L,
+            1L,
+            "상품 101",
+            "옵션 101",
+            1000L,
+            10L,
+            true,
+            "thumbnail-101.jpg"
+        );
+
+        ProductItem productItem102 = productItemForCartDetail(
+            102L,
+            1L,
+            "상품 102",
+            "옵션 102",
+            2000L,
+            10L,
+            true,
+            "thumbnail-102.jpg"
+        );
+
+        ProductItem productItem103 = productItemForCartDetail(
+            103L,
+            1L,
+            "상품 103",
+            "옵션 103",
+            3000L,
+            10L,
+            true,
+            "thumbnail-103.jpg"
+        );
+
+        when(hashOperations.entries(REDIS_KEY))
+            .thenReturn(entries);
+
+        when(redisTemplate.hasKey(anyString()))
+            .thenReturn(true);
+
+        when(zSetOperations.range(
+            ORDER_KEY,
+            0,
+            -1
+        )).thenReturn(Set.of());
+
+        when(productItemRepository.findAllByIdInWithProduct(
+            List.of(
+                103L,
+                102L,
+                101L
+            )
+        )).thenReturn(List.of(
+            productItem101,
+            productItem102,
+            productItem103
+        ));
+
+        // when
+        CartPageResponse result = guestCartService.getCart(
+            GUEST_CART_ID,
+            response,
+            pageable
+        );
+
+        // then
+        verify(productItemRepository).findAllByIdInWithProduct(
+            List.of(
+                103L,
+                102L,
+                101L
+            )
+        );
+
+        assertThat(result.content()).hasSize(3);
+
+        assertThat(result.content().get(0).itemId()).isEqualTo(103L);
+        assertThat(result.content().get(1).itemId()).isEqualTo(102L);
+        assertThat(result.content().get(2).itemId()).isEqualTo(101L);
+
+        assertThat(result.totalPrice()).isEqualTo(13000L);
+        assertThat(result.itemCount()).isEqualTo(6);
+        assertThat(result.totalElements()).isEqualTo(3);
+        assertThat(result.totalPages()).isEqualTo(1);
     }
 
     @Test
