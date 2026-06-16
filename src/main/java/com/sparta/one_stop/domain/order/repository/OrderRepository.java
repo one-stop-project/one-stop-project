@@ -60,8 +60,8 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
           and (:from is null or o.createdAt >= :from)
           and (:to is null or o.createdAt <= :to)
           and (:keyword is null
-               or u.name like concat('%', :keyword, '%')
-               or u.email like concat('%', :keyword, '%'))
+               or u.name like concat('%', :keyword, '%') escape '\\'
+               or u.email like concat('%', :keyword, '%') escape '\\')
         order by o.createdAt desc
     """)
     Page<Order> searchAllOrders(
