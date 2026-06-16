@@ -92,7 +92,7 @@ public class ReviewSummaryService {
 
             ReviewSummary result = converter.convert(response.getResult().getOutput().getText());
             if (result == null) {
-                throw new IllegalStateException("AI 응답 파싱 결과가 null입니다.");
+                throw new IllegalStateException("AI 응답 파싱 결과가 null입니다. 요청ID: " + requestId);
             }
             tokenLogger.logSuccess(requestId, response, System.currentTimeMillis() - start);
             return result;
