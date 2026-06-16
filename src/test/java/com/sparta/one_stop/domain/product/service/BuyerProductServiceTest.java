@@ -245,21 +245,20 @@ class BuyerProductServiceTest {
         }
 
         @Test
-        @DisplayName("인기순은 비활성 필터링 대비 pageSize의 2배를 조회한다(over-fetch)")
-        void overFetchesTwiceThePageSize() {
-            given(popularProductService.getPopularProductIds(40)).willReturn(List.of());
+        @DisplayName("pageSize와 무관하게 보관 상한(TOP 20)만큼 조회한다")
+        void fetchesTopNRegardlessOfPageSize() {
+            given(popularProductService.getPopularProductIds(anyInt())).willReturn(List.of());
             given(productRepository.findApproved(any(), any(), any())).willReturn(Page.empty(pageable));
 
-            buyerProductService.search(null, null, null, null, SortType.POPULAR, pageable);
+            buyerProductService.search(null, null, null, null, SortType.POPULAR, PageRequest.of(0, 10));
 
-            then(popularProductService).should().getPopularProductIds(40); // pageSize(20) * 2
+            then(popularProductService).should().getPopularProductIds(20);
         }
 
         @Test
-        @DisplayName("over-fetch 결과에서 비활성은 걸러지고 노출은 pageSize개로 제한된다")
-        void filtersInvisibleAndLimitsToPageSize() {
-            Pageable size2 = PageRequest.of(0, 2);
-            given(popularProductService.getPopularProductIds(4)).willReturn(List.of(1L, 2L, 3L, 4L));
+        @DisplayName("노출 불가(판매중 옵션 없음) 상품은 걸러진다")
+        void filtersInvisible() {
+            given(popularProductService.getPopularProductIds(anyInt())).willReturn(List.of(1L, 2L, 3L, 4L));
             given(productRepository.findAllByIdsWithItems(List.of(1L, 2L, 3L, 4L)))
                 .willReturn(List.of(
                     approvedProductWithOnSaleItem(1L),
@@ -268,38 +267,48 @@ class BuyerProductServiceTest {
                     approvedProductWithOnSaleItem(4L)));
 
             CacheableProductList result =
-                buyerProductService.search(null, null, null, null, SortType.POPULAR, size2);
+                buyerProductService.search(null, null, null, null, SortType.POPULAR, PageRequest.of(0, 20));
 
-            // 비활성 2L 제외 + pageSize(2)로 제한 → 1L, 3L
-            assertThat(result.content()).hasSize(2);
+            // 비활성 2L 제외 → 1L, 3L, 4L (랭킹 순서 유지)
+            assertThat(result.content()).hasSize(3);
             assertThat(result.content().get(0).getProductId()).isEqualTo(1L);
             assertThat(result.content().get(1).getProductId()).isEqualTo(3L);
+            assertThat(result.content().get(2).getProductId()).isEqualTo(4L);
+            assertThat(result.total()).isEqualTo(3);
         }
 
         @Test
-        @DisplayName("visible이 정확히 pageSize면 모두 노출된다(경계값)")
-        void exactlyLimitVisible() {
-            Pageable size2 = PageRequest.of(0, 2);
-            given(popularProductService.getPopularProductIds(4)).willReturn(List.of(1L, 2L));
-            given(productRepository.findAllByIdsWithItems(List.of(1L, 2L)))
-                .willReturn(List.of(approvedProductWithOnSaleItem(1L), approvedProductWithOnSaleItem(2L)));
+        @DisplayName("size<20이어도 page를 넘기면 11~20위까지 노출된다 (#407)")
+        void paginatesWithinTopN() {
+            List<Long> ids = List.of(1L, 2L, 3L, 4L, 5L, 6L, 7L, 8L, 9L, 10L, 11L, 12L);
+            given(popularProductService.getPopularProductIds(anyInt())).willReturn(ids);
+            given(productRepository.findAllByIdsWithItems(ids)).willReturn(visibleProducts(ids));
 
-            CacheableProductList result =
-                buyerProductService.search(null, null, null, null, SortType.POPULAR, size2);
+            CacheableProductList page0 =
+                buyerProductService.search(null, null, null, null, SortType.POPULAR, PageRequest.of(0, 10));
+            CacheableProductList page1 =
+                buyerProductService.search(null, null, null, null, SortType.POPULAR, PageRequest.of(1, 10));
 
-            assertThat(result.content()).hasSize(2);
+            assertThat(page0.content()).hasSize(10);
+            assertThat(page0.content().get(0).getProductId()).isEqualTo(1L);
+            assertThat(page0.content().get(9).getProductId()).isEqualTo(10L);
+
+            // 기존 버그: page>0는 무조건 빈 결과였음 → 이제 11·12위가 노출됨
+            assertThat(page1.content()).hasSize(2);
+            assertThat(page1.content().get(0).getProductId()).isEqualTo(11L);
+            assertThat(page1.content().get(1).getProductId()).isEqualTo(12L);
+            assertThat(page1.total()).isEqualTo(12);
         }
 
         @Test
-        @DisplayName("ZSET ID는 있으나 전부 비활성이면 DB fallback 없이 빈 결과를 반환한다")
+        @DisplayName("상위권 ID는 있으나 전부 노출 불가면 fallback 없이 빈 결과를 반환한다")
         void allInvisibleReturnsEmptyWithoutFallback() {
-            Pageable size2 = PageRequest.of(0, 2);
-            given(popularProductService.getPopularProductIds(4)).willReturn(List.of(1L, 2L));
+            given(popularProductService.getPopularProductIds(anyInt())).willReturn(List.of(1L, 2L));
             given(productRepository.findAllByIdsWithItems(List.of(1L, 2L)))
                 .willReturn(List.of(approvedProductNoOnSaleItem(1L), approvedProductNoOnSaleItem(2L)));
 
             CacheableProductList result =
-                buyerProductService.search(null, null, null, null, SortType.POPULAR, size2);
+                buyerProductService.search(null, null, null, null, SortType.POPULAR, PageRequest.of(0, 20));
 
             // popularIds는 비어있지 않으므로 DB fallback 경로로 빠지지 않고 빈 결과
             assertThat(result.content()).isEmpty();
@@ -319,7 +328,7 @@ class BuyerProductServiceTest {
         return product;
     }
 
-    // ON_SALE 아이템이 없어 isVisibleOnSale=false인 상품 (over-fetch 필터링 대상)
+    // ON_SALE 아이템이 없어 isVisibleOnSale=false인 상품 (노출 필터링 대상)
     private Product approvedProductNoOnSaleItem(Long id) {
         Seller seller = Seller.builder().shopName("shop").businessNumber("1234567890").build();
         seller.approve();
@@ -327,6 +336,10 @@ class BuyerProductServiceTest {
         product.approve();
         ReflectionTestUtils.setField(product, "id", id);
         return product;
+    }
+
+    private List<Product> visibleProducts(List<Long> ids) {
+        return ids.stream().map(this::approvedProductWithOnSaleItem).toList();
     }
 
     // ===== getDetail =====

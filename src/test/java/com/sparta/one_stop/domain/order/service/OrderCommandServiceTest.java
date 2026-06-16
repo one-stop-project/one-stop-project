@@ -4,6 +4,8 @@ import com.sparta.one_stop.domain.cart.entity.Cart;
 import com.sparta.one_stop.domain.cart.entity.CartItem;
 import com.sparta.one_stop.domain.cart.repository.CartItemRepository;
 import com.sparta.one_stop.domain.coupon.dto.CouponDiscountResult;
+import com.sparta.one_stop.domain.coupon.dto.CouponRestoreResult;
+import com.sparta.one_stop.domain.coupon.entity.UserCoupon;
 import com.sparta.one_stop.domain.coupon.service.CouponCommandService;
 import com.sparta.one_stop.domain.coupon.service.CouponQueryService;
 import com.sparta.one_stop.domain.delivery.entity.Delivery;
@@ -22,6 +24,7 @@ import com.sparta.one_stop.domain.order.repository.OrderItemRepository;
 import com.sparta.one_stop.domain.order.repository.OrderRepository;
 import com.sparta.one_stop.domain.payment.entity.Payment;
 import com.sparta.one_stop.domain.payment.repository.PaymentRepository;
+import com.sparta.one_stop.domain.point.payment.PaymentPointGuard;
 import com.sparta.one_stop.domain.point.service.PointService;
 import com.sparta.one_stop.domain.product.entity.Product;
 import com.sparta.one_stop.domain.product.entity.ProductItem;
@@ -30,6 +33,7 @@ import com.sparta.one_stop.domain.subscription.service.SubscriptionBenefitServic
 import com.sparta.one_stop.domain.user.entity.Seller;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.UserRepository;
+import com.sparta.one_stop.global.enums.coupon.UserCouponStatus;
 import com.sparta.one_stop.global.enums.order.OrderStatus;
 import com.sparta.one_stop.global.enums.order.OrderType;
 import com.sparta.one_stop.global.exception.CustomException;
@@ -53,6 +57,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -90,6 +95,9 @@ class OrderCommandServiceTest {
 
     @Mock
     private PointService pointService;
+
+    @Mock
+    private PaymentPointGuard paymentPointGuard;
 
     @Mock
     private CouponQueryService couponQueryService;
@@ -334,6 +342,274 @@ class OrderCommandServiceTest {
         verify(orderRepository).save(any(Order.class));
         verify(orderItemRepository).saveAll(any());
         verify(cartItemRepository).deleteAllById(List.of(cartItemId));
+    }
+
+    @Test
+    @DisplayName("createOrder 성공 - usedPoint가 있으면 포인트 사전 검증을 수행한다")
+    void createOrder_success_whenUsedPointExists_verifyPaymentPointGuardCalled() {
+        // given
+        Long userId = 1L;
+        Long itemId = 101L;
+
+        User user = mock(User.class);
+        ProductItem productItem = orderableProductItem(
+            itemId,
+            10000L,
+            10L
+        );
+
+        CreateOrderRequest request = new CreateOrderRequest(
+            OrderType.DIRECT,
+            List.of(new CreateOrderItemRequest(
+                itemId,
+                1
+            )),
+            null,
+            "홍길동",
+            "010-1234-5678",
+            "서울시 강남구",
+            "문 앞",
+            null,
+            5000
+        );
+
+        when(userRepository.findById(userId))
+            .thenReturn(Optional.of(user));
+
+        mockProductItemsWithLock(
+            List.of(itemId),
+            List.of(productItem)
+        );
+
+        given(couponQueryService.validateAndCalculateDiscount(
+            anyLong(),
+            any(),
+            anyLong()
+        )).willReturn(CouponDiscountResult.none());
+
+        when(orderRepository.save(any(Order.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+
+        // when
+        CreateOrderResponse result = orderCommandService.createOrder(
+            userId,
+            request
+        );
+
+        // then
+        assertThat(result).isNotNull();
+        assertThat(result.deliveryFee()).isEqualTo(3000L);
+        assertThat(result.finalPrice()).isEqualTo(8000L);
+
+        verify(paymentPointGuard).validateOnOrderCreation(
+            userId,
+            5000
+        );
+
+        ArgumentCaptor<Order> orderCaptor = ArgumentCaptor.forClass(Order.class);
+        verify(orderRepository).save(orderCaptor.capture());
+
+        Order savedOrder = orderCaptor.getValue();
+
+        assertThat(savedOrder.getTotalPrice()).isEqualTo(10000L);
+        assertThat(savedOrder.getDiscountPrice()).isEqualTo(0L);
+        assertThat(savedOrder.getUsedPoint()).isEqualTo(5000);
+        assertThat(savedOrder.getDeliveryFee()).isEqualTo(3000L);
+        assertThat(savedOrder.getFinalPrice()).isEqualTo(8000L);
+        assertThat(savedOrder.getStatus()).isEqualTo(OrderStatus.PENDING_PAYMENT);
+
+        verify(productItem).decreaseStock(1);
+        verify(orderItemRepository).saveAll(any());
+    }
+
+    @Test
+    @DisplayName("createOrder 성공 - 쿠폰 할인이 최종 결제 금액에 반영된다")
+    void createOrder_success_whenCouponDiscountApplied() {
+        // given
+        Long userId = 1L;
+        Long itemId = 101L;
+        Long userCouponId = 100L;
+
+        User user = mock(User.class);
+        UserCoupon userCoupon = mock(UserCoupon.class);
+
+        ProductItem productItem = orderableProductItem(
+            itemId,
+            10000L,
+            10L
+        );
+
+        CreateOrderRequest request = new CreateOrderRequest(
+            OrderType.DIRECT,
+            List.of(new CreateOrderItemRequest(
+                itemId,
+                2
+            )),
+            null,
+            "홍길동",
+            "010-1234-5678",
+            "서울시 강남구",
+            "문 앞",
+            userCouponId,
+            0
+        );
+
+        CouponDiscountResult couponDiscountResult = mock(CouponDiscountResult.class);
+
+        when(couponDiscountResult.discountPrice())
+            .thenReturn(5000L);
+        when(couponDiscountResult.userCoupon())
+            .thenReturn(userCoupon);
+
+        when(userRepository.findById(userId))
+            .thenReturn(Optional.of(user));
+
+        mockProductItemsWithLock(
+            List.of(itemId),
+            List.of(productItem)
+        );
+
+        given(couponQueryService.validateAndCalculateDiscount(
+            userId,
+            userCouponId,
+            20000L
+        )).willReturn(couponDiscountResult);
+
+        when(orderRepository.save(any(Order.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+
+        // when
+        CreateOrderResponse result = orderCommandService.createOrder(
+            userId,
+            request
+        );
+
+        // then
+        // 20,000(상품) - 5,000(쿠폰) - 0(포인트) - 0(구독할인) + 3,000(배송비) = 18,000
+        assertThat(result).isNotNull();
+        assertThat(result.deliveryFee()).isEqualTo(3000L);
+        assertThat(result.finalPrice()).isEqualTo(18000L);
+
+        ArgumentCaptor<Order> orderCaptor = ArgumentCaptor.forClass(Order.class);
+        verify(orderRepository).save(orderCaptor.capture());
+
+        Order savedOrder = orderCaptor.getValue();
+
+        assertThat(savedOrder.getUser()).isSameAs(user);
+        assertThat(savedOrder.getUserCoupon()).isSameAs(userCoupon);
+        assertThat(savedOrder.getTotalPrice()).isEqualTo(20000L);
+        assertThat(savedOrder.getDiscountPrice()).isEqualTo(5000L);
+        assertThat(savedOrder.getUsedPoint()).isEqualTo(0);
+        assertThat(savedOrder.getDeliveryFee()).isEqualTo(3000L);
+        assertThat(savedOrder.getFinalPrice()).isEqualTo(18000L);
+        assertThat(savedOrder.getStatus()).isEqualTo(OrderStatus.PENDING_PAYMENT);
+
+        verify(couponQueryService).validateAndCalculateDiscount(
+            userId,
+            userCouponId,
+            20000L
+        );
+
+        verify(productItem).decreaseStock(2);
+        verify(orderItemRepository).saveAll(any());
+    }
+
+    @Test
+    @DisplayName("cancelOrder 성공 - 쿠폰 복구 결과가 있으면 응답에 복구 쿠폰 정보를 포함한다")
+    void cancelOrder_success_whenCouponRestoreResultExists() {
+        // given
+        Long userId = 1L;
+        Long orderId = 10L;
+        Long userCouponId = 100L;
+
+        AtomicReference<OrderStatus> orderStatus =
+            new AtomicReference<>(OrderStatus.PAID);
+
+        Order order = cancelableOrder(
+            orderId,
+            userId,
+            18000L,
+            orderStatus
+        );
+
+        ProductItem productItem = mock(ProductItem.class);
+        when(productItem.getId()).thenReturn(101L);
+
+        OrderItem orderItem = cancelableOrderItem(
+            101L,
+            productItem,
+            2
+        );
+
+        Delivery delivery = mock(Delivery.class);
+        Payment payment = mock(Payment.class);
+
+        CouponRestoreResult couponRestoreResult = mock(CouponRestoreResult.class);
+
+        when(couponRestoreResult.userCouponId())
+            .thenReturn(userCouponId);
+        when(couponRestoreResult.couponName())
+            .thenReturn("테스트 쿠폰");
+        when(couponRestoreResult.status())
+            .thenReturn(UserCouponStatus.AVAILABLE);
+
+        CancelOrderRequest request = new CancelOrderRequest("단순 변심");
+
+        mockOrderWithLock(orderId, order);
+
+        when(orderItemRepository.findAllByOrderIdWithProductItem(orderId))
+            .thenReturn(List.of(orderItem));
+
+        when(deliveryRepository.findAllByOrderItemIdIn(List.of(101L)))
+            .thenReturn(List.of(delivery));
+
+        when(delivery.isCancelable())
+            .thenReturn(true);
+
+        when(paymentRepository.findByOrderId(orderId))
+            .thenReturn(Optional.of(payment));
+
+        when(couponCommandService.restoreCouponByOrder(order))
+            .thenReturn(couponRestoreResult);
+
+        when(pointService.refundPointByOrder(order))
+            .thenReturn(0);
+
+        // when
+        CancelOrderResponse result = orderCommandService.cancelOrder(
+            userId,
+            orderId,
+            request
+        );
+
+        // then
+        assertThat(result.orderId()).isEqualTo(orderId);
+        assertThat(result.status()).isEqualTo(OrderStatus.CANCELLED);
+        assertThat(result.refundAmount()).isEqualTo(18000L);
+        assertThat(result.restoredPoint()).isEqualTo(0);
+        assertThat(result.restoredCoupon()).isNotNull();
+
+        assertThat(result.restoredCoupon().userCouponId()).isEqualTo(userCouponId);
+        assertThat(result.restoredCoupon().couponName()).isEqualTo("테스트 쿠폰");
+        assertThat(result.restoredCoupon().status()).isEqualTo(UserCouponStatus.AVAILABLE);
+
+        verify(productItemRepository).increaseStockById(
+            101L,
+            2
+        );
+        verify(productItem, never()).increaseStock(anyLong());
+
+        verify(couponCommandService).restoreCouponByOrder(order);
+
+        verify(paymentRepository).findByOrderId(orderId);
+        verify(payment).cancel();
+
+        verify(orderItem).cancel();
+        verify(delivery).cancelOrder();
+        verify(order).cancel();
+        verify(pointService).refundPointByOrder(order);
+        verify(orderCancelHistoryRepository).save(any(OrderCancelHistory.class));
+        verify(deliveryHistoryRepository).saveAll(any());
     }
 
     @Test
@@ -665,6 +941,219 @@ class OrderCommandServiceTest {
     }
 
     @Test
+    @DisplayName("createOrder 실패 - 최소 주문 금액 1,000원 미만이면 예외 발생")
+    void createOrder_fail_whenTotalPriceIsLessThanMinimumOrderPrice() {
+        // given
+        Long userId = 1L;
+        Long itemId = 101L;
+
+        User user = mock(User.class);
+        ProductItem productItem = productItemForDiscountLimitValidation(
+            itemId,
+            500L,
+            10L
+        );
+
+        CreateOrderRequest request = directOrderRequest(
+            itemId,
+            1
+        );
+
+        when(userRepository.findById(userId))
+            .thenReturn(Optional.of(user));
+
+        mockProductItemsWithLock(
+            List.of(itemId),
+            List.of(productItem)
+        );
+
+        // when & then
+        assertThatThrownBy(() -> orderCommandService.createOrder(
+            userId,
+            request
+        ))
+            .isInstanceOf(CustomException.class)
+            .extracting("errorCode")
+            .isEqualTo(ErrorCode.ORDER_010);
+
+        verify(orderRepository, never()).save(any(Order.class));
+        verify(orderItemRepository, never()).saveAll(any());
+        verify(couponQueryService, never()).validateAndCalculateDiscount(
+            anyLong(),
+            any(),
+            anyLong()
+        );
+        verify(paymentPointGuard, never()).validateOnOrderCreation(
+            anyLong(),
+            any()
+        );
+    }
+
+    @Test
+    @DisplayName("createOrder 실패 - usedPoint가 있을 때 포인트 검증 실패 시 예외 발생")
+    void createOrder_fail_whenPaymentPointGuardThrowsException() {
+        // given
+        Long userId = 1L;
+        Long itemId = 101L;
+
+        User user = mock(User.class);
+        ProductItem productItem = productItemForDiscountLimitValidation(
+            itemId,
+            10000L,
+            10L
+        );
+
+        CreateOrderRequest request = new CreateOrderRequest(
+            OrderType.DIRECT,
+            List.of(new CreateOrderItemRequest(
+                itemId,
+                1
+            )),
+            null,
+            "홍길동",
+            "010-1234-5678",
+            "서울시 강남구",
+            "문 앞",
+            null,
+            5000
+        );
+
+        when(userRepository.findById(userId))
+            .thenReturn(Optional.of(user));
+
+        mockProductItemsWithLock(
+            List.of(itemId),
+            List.of(productItem)
+        );
+
+        given(couponQueryService.validateAndCalculateDiscount(
+            anyLong(),
+            any(),
+            anyLong()
+        )).willReturn(CouponDiscountResult.none());
+
+        CustomException pointException = new CustomException(ErrorCode.POINT_002);
+
+        doThrow(pointException)
+            .when(paymentPointGuard)
+            .validateOnOrderCreation(
+                userId,
+                5000
+            );
+
+        // when & then
+        assertThatThrownBy(() -> orderCommandService.createOrder(
+            userId,
+            request
+        ))
+            .isSameAs(pointException);
+
+        verify(paymentPointGuard).validateOnOrderCreation(
+            userId,
+            5000
+        );
+        verify(orderRepository, never()).save(any(Order.class));
+        verify(orderItemRepository, never()).saveAll(any());
+    }
+
+    @Test
+    @DisplayName("createOrder 실패 - CART 주문에서 상품 옵션이 STOP 상태이면 예외 발생")
+    void createOrder_fail_whenCartOrderProductItemIsStopped() {
+        // given
+        Long userId = 1L;
+        Long cartItemId = 10L;
+        Long itemId = 101L;
+
+        User user = mock(User.class);
+        ProductItem productItem = productItemOnlyOnSale(
+            itemId,
+            false
+        );
+
+        CartItem cartItem = cartItem(
+            userId,
+            productItem,
+            1
+        );
+
+        CreateOrderRequest request = cartOrderRequest(cartItemId);
+
+        when(userRepository.findById(userId))
+            .thenReturn(Optional.of(user));
+
+        when(cartItemRepository.findAllById(List.of(cartItemId)))
+            .thenReturn(List.of(cartItem));
+
+        mockProductItemsWithLock(
+            List.of(itemId),
+            List.of(productItem)
+        );
+
+        // when & then
+        assertThatThrownBy(() -> orderCommandService.createOrder(
+            userId,
+            request
+        ))
+            .isInstanceOf(CustomException.class)
+            .extracting("errorCode")
+            .isEqualTo(ErrorCode.ORDER_003);
+
+        verify(productItem, never()).decreaseStock(anyLong());
+        verify(orderRepository, never()).save(any(Order.class));
+        verify(orderItemRepository, never()).saveAll(any());
+        verify(cartItemRepository, never()).deleteAllById(any());
+    }
+
+    @Test
+    @DisplayName("createOrder 실패 - CART 주문에서 상품 옵션 재고가 0이면 예외 발생")
+    void createOrder_fail_whenCartOrderProductItemStockIsZero() {
+        // given
+        Long userId = 1L;
+        Long cartItemId = 10L;
+        Long itemId = 101L;
+
+        User user = mock(User.class);
+        ProductItem productItem = productItemForStockValidation(
+            itemId,
+            true,
+            0L
+        );
+
+        CartItem cartItem = cartItem(
+            userId,
+            productItem,
+            1
+        );
+
+        CreateOrderRequest request = cartOrderRequest(cartItemId);
+
+        when(userRepository.findById(userId))
+            .thenReturn(Optional.of(user));
+
+        when(cartItemRepository.findAllById(List.of(cartItemId)))
+            .thenReturn(List.of(cartItem));
+
+        mockProductItemsWithLock(
+            List.of(itemId),
+            List.of(productItem)
+        );
+
+        // when & then
+        assertThatThrownBy(() -> orderCommandService.createOrder(
+            userId,
+            request
+        ))
+            .isInstanceOf(CustomException.class)
+            .extracting("errorCode")
+            .isEqualTo(ErrorCode.INVENTORY_001);
+
+        verify(productItem, never()).decreaseStock(anyLong());
+        verify(orderRepository, never()).save(any(Order.class));
+        verify(orderItemRepository, never()).saveAll(any());
+        verify(cartItemRepository, never()).deleteAllById(any());
+    }
+
+    @Test
     @DisplayName("cancelOrder 성공 - 결제 전 주문을 취소한다")
     void cancelOrder_success_whenPendingPaymentOrder() {
         // given
@@ -682,6 +1171,8 @@ class OrderCommandServiceTest {
         );
 
         ProductItem productItem = mock(ProductItem.class);
+        when(productItem.getId()).thenReturn(101L);
+
         OrderItem orderItem = cancelableOrderItem(
             101L,
             productItem,
@@ -714,7 +1205,11 @@ class OrderCommandServiceTest {
         assertThat(result.refundAmount()).isEqualTo(23000L);
         assertThat(result.restoredPoint()).isEqualTo(0);
 
-        verify(productItem).increaseStock(2);
+        verify(productItemRepository).increaseStockById(
+            101L,
+            2
+        );
+        verify(productItem, never()).increaseStock(anyLong());
         verify(orderItem).cancel();
         verify(order).cancel();
         verify(pointService).refundPointByOrder(order);
@@ -752,6 +1247,8 @@ class OrderCommandServiceTest {
         );
 
         ProductItem productItem = mock(ProductItem.class);
+        when(productItem.getId()).thenReturn(101L);
+
         OrderItem orderItem = cancelableOrderItem(
             101L,
             productItem,
@@ -787,7 +1284,11 @@ class OrderCommandServiceTest {
         // then
         assertThat(result.status()).isEqualTo(OrderStatus.CANCELLED);
 
-        verify(productItem).increaseStock(2);
+        verify(productItemRepository).increaseStockById(
+            101L,
+            2
+        );
+        verify(productItem, never()).increaseStock(anyLong());
         verify(orderItem).cancel();
         verify(delivery).cancelOrder();
         verify(paymentRepository).findByOrderId(orderId);
@@ -796,6 +1297,85 @@ class OrderCommandServiceTest {
         verify(pointService).refundPointByOrder(order);
         verify(orderCancelHistoryRepository).save(any(OrderCancelHistory.class));
         verify(deliveryHistoryRepository).saveAll(any());
+    }
+
+    @Test
+    @DisplayName("cancelOrder 성공 - 포인트 환불 금액이 있으면 응답에 복구 포인트를 포함한다")
+    void cancelOrder_success_whenRefundPointExists() {
+        // given
+        Long userId = 1L;
+        Long orderId = 10L;
+
+        AtomicReference<OrderStatus> orderStatus =
+            new AtomicReference<>(OrderStatus.PENDING_PAYMENT);
+
+        Order order = cancelableOrder(
+            orderId,
+            userId,
+            23000L,
+            orderStatus
+        );
+
+        ProductItem productItem = mock(ProductItem.class);
+        when(productItem.getId()).thenReturn(101L);
+
+        OrderItem orderItem = cancelableOrderItem(
+            101L,
+            productItem,
+            2
+        );
+
+        CancelOrderRequest request = new CancelOrderRequest("단순 변심");
+
+        mockOrderWithLock(orderId, order);
+
+        when(orderItemRepository.findAllByOrderIdWithProductItem(orderId))
+            .thenReturn(List.of(orderItem));
+
+        when(deliveryRepository.findAllByOrderItemIdIn(List.of(101L)))
+            .thenReturn(List.of());
+
+        when(couponCommandService.restoreCouponByOrder(order))
+            .thenReturn(null);
+
+        when(pointService.refundPointByOrder(order))
+            .thenReturn(5000);
+
+        // when
+        CancelOrderResponse result = orderCommandService.cancelOrder(
+            userId,
+            orderId,
+            request
+        );
+
+        // then
+        assertThat(result.orderId()).isEqualTo(orderId);
+        assertThat(result.status()).isEqualTo(OrderStatus.CANCELLED);
+        assertThat(result.refundAmount()).isEqualTo(23000L);
+        assertThat(result.restoredPoint()).isEqualTo(5000);
+
+        verify(productItemRepository).increaseStockById(
+            101L,
+            2
+        );
+        verify(productItem, never()).increaseStock(anyLong());
+        verify(orderItem).cancel();
+        verify(order).cancel();
+        verify(pointService).refundPointByOrder(order);
+
+        ArgumentCaptor<OrderCancelHistory> historyCaptor =
+            ArgumentCaptor.forClass(OrderCancelHistory.class);
+
+        verify(orderCancelHistoryRepository).save(historyCaptor.capture());
+
+        OrderCancelHistory history = historyCaptor.getValue();
+
+        assertThat(history.getOrder()).isSameAs(order);
+        assertThat(history.getReason()).isEqualTo("단순 변심");
+        assertThat(history.getCancelledPrice()).isEqualTo(23000L);
+
+        verify(deliveryHistoryRepository, never()).saveAll(any());
+        verify(paymentRepository, never()).findByOrderId(orderId);
     }
 
     @Test

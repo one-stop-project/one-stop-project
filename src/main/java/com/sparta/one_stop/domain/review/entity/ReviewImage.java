@@ -25,6 +25,10 @@ public class ReviewImage extends BaseEntity {
     @Column(name = "display_order")
     private Integer displayOrder;
 
+    public void updateDisplayOrder(int displayOrder) {
+        this.displayOrder = displayOrder;
+    }
+
     @Builder
     public ReviewImage(
         Review review,

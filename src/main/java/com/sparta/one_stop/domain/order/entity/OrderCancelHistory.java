@@ -3,6 +3,8 @@ package com.sparta.one_stop.domain.order.entity;
 import com.sparta.one_stop.global.entity.BaseEntity;
 import com.sparta.one_stop.global.enums.order.CancelActorType;
 import com.sparta.one_stop.global.enums.order.OrderCancelType;
+import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -77,30 +79,14 @@ public class OrderCancelHistory extends BaseEntity {
         Long cancelledPrice,
         Integer restoredPoint
     ) {
-        if (order == null) {
-            throw new IllegalArgumentException("주문 정보는 필수입니다.");
-        }
-
-        if (actorType == null) {
-            throw new IllegalArgumentException("처리 주체 유형은 필수입니다.");
-        }
-
-        if (cancelType == null) {
-            throw new IllegalArgumentException("취소/거절 유형은 필수입니다.");
-        }
-
-        validateActorId(
+        validateConstructorArguments(
+            order,
             actorType,
-            actorId
+            actorId,
+            cancelType,
+            cancelledPrice,
+            restoredPoint
         );
-
-        if (cancelledPrice == null || cancelledPrice < 0) {
-            throw new IllegalArgumentException("취소/거절 금액은 0원 이상이어야 합니다.");
-        }
-
-        if (restoredPoint == null || restoredPoint < 0) {
-            throw new IllegalArgumentException("복구 포인트는 0 이상이어야 합니다.");
-        }
 
         this.order = order;
         this.orderItem = orderItem;
@@ -112,21 +98,54 @@ public class OrderCancelHistory extends BaseEntity {
         this.restoredPoint = restoredPoint;
     }
 
+    // == 검증 메서드 ==
+
+    private void validateConstructorArguments(
+        Order order,
+        CancelActorType actorType,
+        Long actorId,
+        OrderCancelType cancelType,
+        Long cancelledPrice,
+        Integer restoredPoint
+    ) {
+        if (order == null) {
+            throw new CustomException(ErrorCode.ORDER_020);
+        }
+
+        if (actorType == null) {
+            throw new CustomException(ErrorCode.ORDER_032);
+        }
+
+        if (cancelType == null) {
+            throw new CustomException(ErrorCode.ORDER_033);
+        }
+
+        validateActorId(actorType, actorId);
+
+        if (cancelledPrice == null || cancelledPrice < 0) {
+            throw new CustomException(ErrorCode.ORDER_037);
+        }
+
+        if (restoredPoint == null || restoredPoint < 0) {
+            throw new CustomException(ErrorCode.ORDER_038);
+        }
+    }
+
     // 처리 주체 유형에 따른 actorId 필수 여부 검증
     private void validateActorId(
         CancelActorType actorType,
         Long actorId
     ) {
         if (actorType.isActorIdRequired() && actorId == null) {
-            throw new IllegalArgumentException("처리자 ID는 필수입니다.");
+            throw new CustomException(ErrorCode.ORDER_034);
         }
 
         if (!actorType.isActorIdRequired() && actorId != null) {
-            throw new IllegalArgumentException("해당 처리 주체는 actorId를 가질 수 없습니다.");
+            throw new CustomException(ErrorCode.ORDER_035);
         }
 
         if (actorId != null && actorId <= 0) {
-            throw new IllegalArgumentException("처리자 ID는 1 이상이어야 합니다.");
+            throw new CustomException(ErrorCode.ORDER_036);
         }
     }
 

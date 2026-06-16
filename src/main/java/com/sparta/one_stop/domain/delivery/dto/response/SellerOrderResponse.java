@@ -10,6 +10,7 @@ import java.time.LocalDateTime;
 public record SellerOrderResponse(
     Long orderItemId,
     Long orderId,
+    Long deliveryId,
     String itemName,
     Integer quantity,
     Long price,
@@ -24,11 +25,12 @@ public record SellerOrderResponse(
         return new SellerOrderResponse(
             orderItem.getId(),
             orderItem.getOrder().getId(),
+            delivery.getId(),
             orderItem.getItemName(),
             orderItem.getQuantity(),
             orderItem.getPrice(),
             orderItem.getPrice() * orderItem.getQuantity(),
-            maskName(orderItem.getOrder().getReceiverName()),
+            maskName(orderItem.getOrder().getUser().getName()),
             orderItem.getOrder().getReceiverAddress(),
             orderItem.getStatus(),
             delivery.getStatus(),
@@ -37,8 +39,9 @@ public record SellerOrderResponse(
     }
 
     private static String maskName(String name) {
-        if (name == null || name.length() <= 1) return name;
+        if (name == null || name.isBlank()) return name;
+        if (name.length() == 1) return name;
+        if (name.length() == 2) return name.charAt(0) + "*";
         return name.charAt(0) + "*".repeat(name.length() - 2) + name.charAt(name.length() - 1);
     }
 }
-

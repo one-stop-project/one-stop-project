@@ -31,7 +31,9 @@ public class SubscriptionService {
      */
     public SubscriptionResponse subscribe(Long userId) {
 
-        User user = findUserById(userId);
+        // 비관적 락 — 같은 유저의 동시 구독 신청 방지
+        User user = userRepository.findByIdForUpdate(userId)
+            .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_001));
 
         boolean exists = subscriptionRepository.existsByUserIdAndStatusIn(
             userId,
@@ -108,15 +110,6 @@ public class SubscriptionService {
             userId,
             List.of(SubscriptionStatus.ACTIVE)
         );
-    }
-
-    // =========================
-    // private
-    // =========================
-
-    private User findUserById(Long userId) {
-        return userRepository.findById(userId)
-            .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_001));
     }
 
     private Subscription findSubscription(Long userId) {

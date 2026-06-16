@@ -34,6 +34,8 @@ import java.util.stream.Collectors;
 public class BuyerProductService {
 
     private static final int RELATED_PRODUCT_LIMIT = 10;
+    // 인기 상품 보관 상한 — PopularProductService.TOP_N(20)과 동일. 이 범위 안에서 페이지네이션한다.
+    private static final int POPULAR_MAX = 20;
 
     private final ProductRepository productRepository;
     private final ProductViewCountService viewCountService;
@@ -88,36 +90,40 @@ public class BuyerProductService {
     }
 
     private Page<ProductSummaryResponse> searchPopular(Pageable pageable) {
-        // 인기 상품은 상위 20개만 보관 → 2페이지부터는 빈 결과
-        if (pageable.getPageNumber() > 0) {
-            return Page.empty(pageable);
-        }
+        // 보관된 상위 N개(TOP 20)를 한 번에 추려두고 요청 페이지로 슬라이스한다.
+        // size<20이어도 page를 넘기면 11~20위까지 도달 가능 (page>0를 무조건 빈 결과로 막던 버그 수정).
+        List<ProductSummaryResponse> ranked = rankedPopular();
 
-        int limit = pageable.getPageSize();
-        // 비활성·판매중단 상품이 걸러져 화면이 덜 차지 않도록 여유분(2배) 가져와 거른 뒤 limit개만 노출
-        List<Long> popularIds = popularProductService.getPopularProductIds(limit * 2);
+        List<ProductSummaryResponse> content = ranked.stream()
+            .skip(pageable.getOffset())
+            .limit(pageable.getPageSize())
+            .toList();
 
-        // 랭킹이 비었거나 Redis 장애면 DB에서 판매수 높은 순으로 대체
+        return new PageImpl<>(content, pageable, ranked.size());
+    }
+
+    // 인기 상위 N개 중 노출 가능(승인·판매중 옵션 보유) 상품을 랭킹 순서로 반환.
+    // Redis 랭킹이 비었거나 장애면 DB 판매수 상위 N개로 대체한다.
+    private List<ProductSummaryResponse> rankedPopular() {
+        List<Long> popularIds = popularProductService.getPopularProductIds(POPULAR_MAX);
+
         if (popularIds.isEmpty()) {
-            Pageable salesDesc = PageRequest.of(0, limit,
-                Sort.by(Sort.Direction.DESC, "salesCount"));
             return productRepository.findApproved(
-                ProductStatus.APPROVED, SellerStatus.APPROVED, salesDesc
-            ).map(ProductSummaryResponse::from);
+                    ProductStatus.APPROVED, SellerStatus.APPROVED,
+                    PageRequest.of(0, POPULAR_MAX, Sort.by(Sort.Direction.DESC, "salesCount")))
+                .map(ProductSummaryResponse::from)
+                .getContent();
         }
 
         Map<Long, Product> productMap = productRepository.findAllByIdsWithItems(popularIds).stream()
             .collect(Collectors.toMap(Product::getId, Function.identity()));
 
-        List<ProductSummaryResponse> ordered = popularIds.stream()
+        return popularIds.stream()
             .map(productMap::get)
             .filter(Objects::nonNull)
             .filter(Product::isVisibleOnSale)
-            .limit(limit)
             .map(ProductSummaryResponse::from)
             .toList();
-
-        return new PageImpl<>(ordered, pageable, ordered.size());
     }
 
     // 단건 응답만 캐시 (10분)

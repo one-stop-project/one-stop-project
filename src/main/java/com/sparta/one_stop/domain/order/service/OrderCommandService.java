@@ -221,9 +221,14 @@ public class OrderCommandService {
         cancelPaymentIfPaidOrder(order);
 
         // 재고 복구 및 주문 상품 취소 처리
+        // 재고 복구는 JPA dirty checking 대신 DB 원자 update(stock = stock + qty)로 처리한다.
+        // 주문 생성 트랜잭션의 재고 차감과 주문 취소 트랜잭션의 재고 복구가 겹쳐도
+        // 기존 stock 값을 덮어쓰지 않도록 한다.
         for (OrderItem orderItem : orderItems) {
-            orderItem.getProductItem()
-                .increaseStock(orderItem.getQuantity());
+            productItemRepository.increaseStockById(
+                orderItem.getProductItem().getId(),
+                orderItem.getQuantity()
+            );
 
             orderItem.cancel();
         }

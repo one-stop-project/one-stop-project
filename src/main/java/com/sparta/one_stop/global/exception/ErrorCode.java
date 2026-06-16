@@ -21,6 +21,7 @@ public enum ErrorCode {
     COMMON_007(HttpStatus.INTERNAL_SERVER_ERROR, "COMMON_007", "서버 내부 오류가 발생했습니다"),
     COMMON_008(HttpStatus.SERVICE_UNAVAILABLE, "COMMON_008", "서비스가 일시적으로 이용 불가합니다"),
     COMMON_009(HttpStatus.TOO_MANY_REQUESTS, "COMMON_009", "요청이 너무 많습니다. 잠시 후 다시 시도해주세요"),
+    COMMON_010(HttpStatus.BAD_REQUEST, "COMMON_010", "요청 파라미터 값이 올바르지 않습니다"),
 
     // ===== AUTH - 인증/인가 =====
     AUTH_001(HttpStatus.BAD_REQUEST, "AUTH_001", "이메일 형식이 올바르지 않습니다"),
@@ -95,6 +96,14 @@ public enum ErrorCode {
     CART_005(HttpStatus.BAD_REQUEST, "CART_005", "본인의 상품은 장바구니에 담을 수 없습니다"),
     CART_006(HttpStatus.FORBIDDEN, "CART_006", "본인의 장바구니만 접근할 수 있습니다"),
 
+    // ===== CART - 장바구니 엔티티 검증 =====
+    CART_020(HttpStatus.BAD_REQUEST, "CART_020", "장바구니 소유자는 필수입니다"),
+    CART_021(HttpStatus.BAD_REQUEST, "CART_021", "장바구니 정보는 필수입니다"),
+    CART_022(HttpStatus.BAD_REQUEST, "CART_022", "상품 옵션 정보는 필수입니다"),
+    CART_023(HttpStatus.BAD_REQUEST, "CART_023", "수량은 1 이상이어야 합니다"),
+    CART_024(HttpStatus.BAD_REQUEST, "CART_024", "장바구니 최대 수량은 99개입니다"),
+    CART_025(HttpStatus.BAD_REQUEST, "CART_025", "수량은 1 미만이 될 수 없습니다"),
+
     // ===== ORDER - 주문 =====
     ORDER_001(HttpStatus.BAD_REQUEST, "ORDER_001", "주문할 상품이 없습니다"),
     ORDER_002(HttpStatus.BAD_REQUEST, "ORDER_002", "재고가 부족합니다"),
@@ -110,6 +119,44 @@ public enum ErrorCode {
     ORDER_012(HttpStatus.BAD_REQUEST, "ORDER_012", "쿠폰 할인 금액과 사용 포인트의 합은 상품 금액을 초과할 수 없습니다"),
     ORDER_013(HttpStatus.CONFLICT, "ORDER_013", "주문 처리 중입니다. 잠시 후 다시 시도해주세요."),
 
+    // ===== ORDER - 주문 상품 엔티티 검증 =====
+    ORDER_020(HttpStatus.BAD_REQUEST, "ORDER_020", "주문 정보는 필수입니다"),
+    ORDER_021(HttpStatus.BAD_REQUEST, "ORDER_021", "상품 옵션 정보는 필수입니다"),
+    ORDER_022(HttpStatus.BAD_REQUEST, "ORDER_022", "판매자 정보는 필수입니다"),
+    ORDER_023(HttpStatus.BAD_REQUEST, "ORDER_023", "상품명은 필수입니다"),
+    ORDER_024(HttpStatus.BAD_REQUEST, "ORDER_024", "수량은 1 이상이어야 합니다"),
+    ORDER_025(HttpStatus.BAD_REQUEST, "ORDER_025", "가격은 0원 이상이어야 합니다"),
+    ORDER_026(HttpStatus.BAD_REQUEST, "ORDER_026", "주문 접수는 결제 대기 상태에서만 처리할 수 있습니다"),
+    ORDER_027(HttpStatus.BAD_REQUEST, "ORDER_027", "주문 확정은 주문 접수 상태에서만 가능합니다"),
+    ORDER_028(HttpStatus.BAD_REQUEST, "ORDER_028", "배송 시작은 주문 확정 상태에서만 가능합니다"),
+    ORDER_029(HttpStatus.BAD_REQUEST, "ORDER_029", "배송 완료는 배송 중 상태에서만 가능합니다"),
+    ORDER_030(HttpStatus.BAD_REQUEST, "ORDER_030", "주문 거절은 주문 접수 상태에서만 가능합니다"),
+    ORDER_031(HttpStatus.BAD_REQUEST, "ORDER_031", "현재 상태에서는 주문 상품을 취소할 수 없습니다"),
+
+    // ===== ORDER - 주문 취소/거절 이력 엔티티 검증 =====
+    ORDER_032(HttpStatus.BAD_REQUEST, "ORDER_032", "처리 주체 유형은 필수입니다"),
+    ORDER_033(HttpStatus.BAD_REQUEST, "ORDER_033", "취소/거절 유형은 필수입니다"),
+    ORDER_034(HttpStatus.BAD_REQUEST, "ORDER_034", "처리자 ID는 필수입니다"),
+    ORDER_035(HttpStatus.BAD_REQUEST, "ORDER_035", "해당 처리 주체는 actorId를 가질 수 없습니다"),
+    ORDER_036(HttpStatus.BAD_REQUEST, "ORDER_036", "처리자 ID는 1 이상이어야 합니다"),
+    ORDER_037(HttpStatus.BAD_REQUEST, "ORDER_037", "취소/거절 금액은 0원 이상이어야 합니다"),
+    ORDER_038(HttpStatus.BAD_REQUEST, "ORDER_038", "복구 포인트는 0 이상이어야 합니다"),
+
+    // ===== ORDER - 주문 엔티티 검증 =====
+    ORDER_039(HttpStatus.BAD_REQUEST, "ORDER_039", "주문자는 필수입니다"),
+    ORDER_040(HttpStatus.BAD_REQUEST, "ORDER_040", "총 주문 금액은 0원 이상이어야 합니다"),
+    ORDER_041(HttpStatus.BAD_REQUEST, "ORDER_041", "총 할인 금액은 0원 이상이어야 합니다"),
+    ORDER_042(HttpStatus.BAD_REQUEST, "ORDER_042", "최종 결제 금액은 0원 이상이어야 합니다"),
+    ORDER_043(HttpStatus.BAD_REQUEST, "ORDER_043", "사용 포인트는 0 이상이어야 합니다"),
+    ORDER_044(HttpStatus.BAD_REQUEST, "ORDER_044", "구독 할인 금액은 0원 이상이어야 합니다"),
+    ORDER_045(HttpStatus.BAD_REQUEST, "ORDER_045", "수령인 이름은 필수입니다"),
+    ORDER_046(HttpStatus.BAD_REQUEST, "ORDER_046", "수령인 연락처는 필수입니다"),
+    ORDER_047(HttpStatus.BAD_REQUEST, "ORDER_047", "배송 주소는 필수입니다"),
+    ORDER_048(HttpStatus.BAD_REQUEST, "ORDER_048", "배송비는 0원 이상이어야 합니다"),
+    ORDER_049(HttpStatus.BAD_REQUEST, "ORDER_049", "주문 유형은 필수입니다"),
+    ORDER_050(HttpStatus.BAD_REQUEST, "ORDER_050", "결제 대기 상태에서만 결제 완료 처리할 수 있습니다"),
+    ORDER_051(HttpStatus.BAD_REQUEST, "ORDER_051", "이미 취소된 주문입니다"),
+
     // ===== PAYMENT - 결제 =====
     PAYMENT_001(HttpStatus.BAD_REQUEST, "PAYMENT_001", "이미 결제가 완료된 주문입니다"),
     PAYMENT_002(HttpStatus.BAD_REQUEST, "PAYMENT_002", "결제 금액이 주문 금액과 일치하지 않습니다"),
@@ -120,11 +167,42 @@ public enum ErrorCode {
     PAYMENT_007(HttpStatus.BAD_REQUEST, "PAYMENT_007", "지원하지 않는 결제 수단입니다"),
     PAYMENT_008(HttpStatus.BAD_REQUEST, "PAYMENT_008", "취소된 주문은 결제할 수 없습니다"),
     PAYMENT_009(HttpStatus.NOT_FOUND, "PAYMENT_009", "결제 정보를 찾을 수 없습니다"),
+    PAYMENT_010(HttpStatus.CONFLICT, "PAYMENT_010", "결제 처리 중입니다. 잠시 후 다시 시도해주세요."),
+
+    // ===== PAYMENT - 결제 엔티티 검증 =====
+    PAYMENT_020(HttpStatus.BAD_REQUEST, "PAYMENT_020", "주문 정보는 필수입니다"),
+    PAYMENT_021(HttpStatus.BAD_REQUEST, "PAYMENT_021", "결제 키는 필수입니다"),
+    PAYMENT_022(HttpStatus.BAD_REQUEST, "PAYMENT_022", "결제 금액은 0원 이상이어야 합니다"),
+    PAYMENT_023(HttpStatus.BAD_REQUEST, "PAYMENT_023", "결제 수단은 필수입니다"),
+    PAYMENT_024(HttpStatus.BAD_REQUEST, "PAYMENT_024", "결제 대기 상태에서만 승인할 수 있습니다"),
+    PAYMENT_025(HttpStatus.BAD_REQUEST, "PAYMENT_025", "결제 대기 상태에서만 실패 처리할 수 있습니다"),
+    PAYMENT_026(HttpStatus.BAD_REQUEST, "PAYMENT_026", "이미 취소된 결제입니다"),
+    PAYMENT_027(HttpStatus.BAD_REQUEST, "PAYMENT_027", "결제 완료 상태에서만 취소할 수 있습니다"),
 
     // ===== OUTBOX - 이벤트 발행 =====
     OUTBOX_001(HttpStatus.CONFLICT, "OUTBOX_001", "이미 저장된 Outbox 이벤트입니다"),
     OUTBOX_002(HttpStatus.NOT_FOUND, "OUTBOX_002", "Outbox 이벤트를 찾을 수 없습니다"),
     OUTBOX_003(HttpStatus.BAD_REQUEST, "OUTBOX_003", "처리할 수 없는 Outbox 이벤트 상태입니다"),
+
+    // ===== OUTBOX - 이벤트 엔티티 검증 =====
+    OUTBOX_020(HttpStatus.BAD_REQUEST, "OUTBOX_020", "이벤트 ID는 필수입니다"),
+    OUTBOX_021(HttpStatus.BAD_REQUEST, "OUTBOX_021", "이벤트 타입은 필수입니다"),
+    OUTBOX_022(HttpStatus.BAD_REQUEST, "OUTBOX_022", "Aggregate Type은 필수입니다"),
+    OUTBOX_023(HttpStatus.BAD_REQUEST, "OUTBOX_023", "Aggregate ID는 필수입니다"),
+    OUTBOX_024(HttpStatus.BAD_REQUEST, "OUTBOX_024", "Kafka Topic은 필수입니다"),
+    OUTBOX_025(HttpStatus.BAD_REQUEST, "OUTBOX_025", "Partition Key는 필수입니다"),
+    OUTBOX_026(HttpStatus.BAD_REQUEST, "OUTBOX_026", "이벤트 Payload는 필수입니다"),
+    OUTBOX_027(HttpStatus.BAD_REQUEST, "OUTBOX_027", "PENDING 상태의 이벤트만 PROCESSING 처리할 수 있습니다"),
+    OUTBOX_028(HttpStatus.BAD_REQUEST, "OUTBOX_028", "PROCESSING 상태의 이벤트만 PUBLISHED 처리할 수 있습니다"),
+    OUTBOX_029(HttpStatus.BAD_REQUEST, "OUTBOX_029", "PROCESSING 상태의 이벤트만 실패 처리할 수 있습니다"),
+    OUTBOX_030(HttpStatus.BAD_REQUEST, "OUTBOX_030", "최대 재시도 횟수는 0 이상이어야 합니다"),
+
+    // ===== NOTIFICATION - 알림 엔티티 검증 =====
+    NOTIFICATION_020(HttpStatus.BAD_REQUEST, "NOTIFICATION_020", "알림 대상 사용자는 필수입니다"),
+    NOTIFICATION_021(HttpStatus.BAD_REQUEST, "NOTIFICATION_021", "이벤트 ID는 필수입니다"),
+    NOTIFICATION_022(HttpStatus.BAD_REQUEST, "NOTIFICATION_022", "알림 유형은 필수입니다"),
+    NOTIFICATION_023(HttpStatus.BAD_REQUEST, "NOTIFICATION_023", "알림 제목은 필수입니다"),
+    NOTIFICATION_024(HttpStatus.BAD_REQUEST, "NOTIFICATION_024", "알림 내용은 필수입니다"),
 
     // ===== POINT - 포인트 =====
     POINT_001(HttpStatus.NOT_FOUND, "POINT_001", "포인트 계정을 찾을 수 없습니다"),
@@ -137,6 +215,34 @@ public enum ErrorCode {
     POINT_008(HttpStatus.BAD_REQUEST, "POINT_008", "적립률은 100%를 초과할 수 없습니다."),
     POINT_009(HttpStatus.BAD_REQUEST, "POINT_009", "안전상한선 초과"),
     POINT_010(HttpStatus.BAD_REQUEST,"POINT_010","해시 입력값 오류"),
+
+    // ===== POINT - 포인트 엔티티 검증 =====
+    POINT_020(HttpStatus.BAD_REQUEST, "POINT_020", "포인트 소유자는 필수입니다"),
+    POINT_021(HttpStatus.BAD_REQUEST, "POINT_021", "포인트 소유자 ID는 필수입니다"),
+
+    // ===== POINT - 포인트 이력 엔티티 검증 =====
+    POINT_022(HttpStatus.BAD_REQUEST, "POINT_022", "포인트 계정은 필수입니다"),
+    POINT_023(HttpStatus.BAD_REQUEST, "POINT_023", "포인트 사용자는 필수입니다"),
+    POINT_024(HttpStatus.BAD_REQUEST, "POINT_024", "포인트 변동 금액은 0일 수 없습니다"),
+    POINT_025(HttpStatus.BAD_REQUEST, "POINT_025", "잔여 포인트는 0 이상이어야 합니다"),
+    POINT_026(HttpStatus.BAD_REQUEST, "POINT_026", "포인트 이력 유형은 필수입니다"),
+    POINT_027(HttpStatus.BAD_REQUEST, "POINT_027", "적립/충전/복구 금액은 양수여야 합니다"),
+    POINT_028(HttpStatus.BAD_REQUEST, "POINT_028", "생성 시 잔여 포인트는 변동 금액과 같아야 합니다"),
+    POINT_029(HttpStatus.BAD_REQUEST, "POINT_029", "포인트 만료일은 필수입니다"),
+    POINT_030(HttpStatus.BAD_REQUEST, "POINT_030", "사용/만료 금액은 음수여야 합니다"),
+    POINT_031(HttpStatus.BAD_REQUEST, "POINT_031", "사용/만료 이력의 잔여 포인트는 0이어야 합니다"),
+    POINT_032(HttpStatus.BAD_REQUEST, "POINT_032", "차감 가능한 포인트 이력이 아닙니다"),
+    POINT_033(HttpStatus.BAD_REQUEST, "POINT_033", "잔여 포인트가 부족합니다"),
+    POINT_034(HttpStatus.BAD_REQUEST, "POINT_034", "만료 가능한 포인트 이력이 아닙니다"),
+
+    // ===== POINT - 포인트 사용 상세 엔티티 검증 =====
+    POINT_035(HttpStatus.BAD_REQUEST, "POINT_035", "포인트 사용 이력은 필수입니다"),
+    POINT_036(HttpStatus.BAD_REQUEST, "POINT_036", "차감 대상 포인트 이력은 필수입니다"),
+    POINT_037(HttpStatus.BAD_REQUEST, "POINT_037", "USE 이력만 사용 상세 이력과 연결할 수 있습니다"),
+    POINT_038(HttpStatus.BAD_REQUEST, "POINT_038", "차감 대상은 CHARGE/EARN/REFUND 이력이어야 합니다"),
+    POINT_039(HttpStatus.BAD_REQUEST, "POINT_039", "차감 금액은 1 이상이어야 합니다"),
+    POINT_040(HttpStatus.BAD_REQUEST, "POINT_040", "차감 금액은 원본 이력의 잔여 포인트를 초과할 수 없습니다"),
+    POINT_041(HttpStatus.BAD_REQUEST, "POINT_041", "원본 포인트 만료일은 필수입니다"),
 
     // ===== SHIPPING - 배송 =====
     SHIPPING_001(HttpStatus.BAD_REQUEST, "SHIPPING_001", "주문 확인 전에는 배송을 시작할 수 없습니다"),
@@ -165,6 +271,34 @@ public enum ErrorCode {
     COUPON_010(HttpStatus.BAD_REQUEST, "COUPON_010", "이미 비활성화된 쿠폰입니다"),
     COUPON_011(HttpStatus.NOT_FOUND, "COUPON_011", "사용자 쿠폰을 찾을 수 없습니다"),
     COUPON_012(HttpStatus.SERVICE_UNAVAILABLE, "COUPON_012", "쿠폰 발급 처리 중 일시적인 오류가 발생했습니다. 잠시 후 다시 시도해주세요"),
+
+    // ===== COUPON - 쿠폰 엔티티 검증 =====
+    COUPON_020(HttpStatus.BAD_REQUEST, "COUPON_020", "쿠폰명은 필수입니다"),
+    COUPON_021(HttpStatus.BAD_REQUEST, "COUPON_021", "쿠폰 할인 타입은 필수입니다"),
+    COUPON_022(HttpStatus.BAD_REQUEST, "COUPON_022", "쿠폰 할인 값은 1 이상이어야 합니다"),
+    COUPON_023(HttpStatus.BAD_REQUEST, "COUPON_023", "최소 주문 금액은 0원 이상이어야 합니다"),
+    COUPON_024(HttpStatus.BAD_REQUEST, "COUPON_024", "쿠폰 발급 가능 총 수량은 1 이상이어야 합니다"),
+    COUPON_025(HttpStatus.BAD_REQUEST, "COUPON_025", "쿠폰 시작일은 필수입니다"),
+    COUPON_026(HttpStatus.BAD_REQUEST, "COUPON_026", "쿠폰 만료일은 필수입니다"),
+    COUPON_027(HttpStatus.BAD_REQUEST, "COUPON_027", "쿠폰 만료일은 시작일 이후여야 합니다"),
+    COUPON_028(HttpStatus.BAD_REQUEST, "COUPON_028", "정률 쿠폰 할인율은 100 이하이어야 합니다"),
+    COUPON_029(HttpStatus.BAD_REQUEST, "COUPON_029", "정률 쿠폰은 최대 할인 금액이 필수입니다"),
+    COUPON_030(HttpStatus.BAD_REQUEST, "COUPON_030", "정액 쿠폰은 최대 할인 금액을 사용할 수 없습니다"),
+    COUPON_031(HttpStatus.BAD_REQUEST, "COUPON_031", "주문 금액은 0원 이상이어야 합니다"),
+    COUPON_032(HttpStatus.BAD_REQUEST, "COUPON_032", "현재 시각은 필수입니다"),
+    COUPON_033(HttpStatus.BAD_REQUEST, "COUPON_033", "비활성 쿠폰은 발급할 수 없습니다"),
+
+    // ===== COUPON - 사용자 쿠폰 엔티티 검증 =====
+    COUPON_034(HttpStatus.BAD_REQUEST, "COUPON_034", "쿠폰 소유자는 필수입니다"),
+    COUPON_035(HttpStatus.BAD_REQUEST, "COUPON_035", "쿠폰 정보는 필수입니다"),
+    COUPON_036(HttpStatus.BAD_REQUEST, "COUPON_036", "쿠폰을 사용할 주문 정보는 필수입니다"),
+    COUPON_037(HttpStatus.BAD_REQUEST, "COUPON_037", "쿠폰 사용 일시는 필수입니다"),
+    COUPON_038(HttpStatus.BAD_REQUEST, "COUPON_038", "사용 가능한 쿠폰이 아닙니다"),
+    COUPON_039(HttpStatus.BAD_REQUEST, "COUPON_039", "사용 완료된 쿠폰만 복구할 수 있습니다"),
+    COUPON_040(HttpStatus.BAD_REQUEST, "COUPON_040", "이미 사용된 쿠폰은 만료 처리할 수 없습니다"),
+    COUPON_041(HttpStatus.BAD_REQUEST, "COUPON_041", "아직 만료되지 않은 쿠폰입니다"),
+    COUPON_042(HttpStatus.BAD_REQUEST, "COUPON_042", "사용자 ID는 필수입니다"),
+    COUPON_043(HttpStatus.FORBIDDEN, "COUPON_043", "본인 쿠폰만 사용할 수 있습니다"),
 
     // ===== REVIEW - 리뷰 =====
     REVIEW_001(HttpStatus.BAD_REQUEST, "REVIEW_001", "배송 완료 후에만 리뷰를 작성할 수 있습니다"),

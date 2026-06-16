@@ -2,10 +2,18 @@ package com.sparta.one_stop.global.sse;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+
+import java.io.IOException;
+import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 class SseConnectionManagerTest {
 
@@ -57,6 +65,47 @@ class SseConnectionManagerTest {
             userId,
             "test-message"
         )).doesNotThrowAnyException();
+    }
+
+    @Test
+    @DisplayName("send 실패 - IOException 발생 시 emitter를 제거하고 completeWithError를 호출한다")
+    void send_fail_whenIOExceptionOccurs_thenRemoveEmitterAndCompleteWithError() throws Exception {
+        // given
+        Long userId = 1L;
+        String data = "test-message";
+
+        SseEmitter emitter = mock(SseEmitter.class);
+        IOException sendException = new IOException("SSE send failed");
+
+        @SuppressWarnings("unchecked")
+        Map<Long, SseEmitter> emitters =
+            (Map<Long, SseEmitter>) ReflectionTestUtils.getField(
+                sseConnectionManager,
+                "emitters"
+            );
+
+        assertThat(emitters).isNotNull();
+
+        emitters.put(
+            userId,
+            emitter
+        );
+
+        doThrow(sendException)
+            .when(emitter)
+            .send(any(SseEmitter.SseEventBuilder.class));
+
+        // when
+        sseConnectionManager.send(
+            userId,
+            data
+        );
+
+        // then
+        assertThat(emitters).doesNotContainKey(userId);
+
+        verify(emitter).send(any(SseEmitter.SseEventBuilder.class));
+        verify(emitter).completeWithError(sendException);
     }
 
     @Test

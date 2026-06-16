@@ -2,6 +2,8 @@ package com.sparta.one_stop.domain.coupon.entity;
 
 import com.sparta.one_stop.global.enums.coupon.CouponDiscountType;
 import com.sparta.one_stop.global.enums.coupon.CouponStatus;
+import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -9,7 +11,7 @@ import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatNoException;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class CouponTest {
 
@@ -69,22 +71,53 @@ class CouponTest {
     }
 
     @Test
-    @DisplayName("Coupon 생성 실패 - 쿠폰명이 없으면 예외가 발생한다")
+    @DisplayName("Coupon 생성 실패 - 쿠폰명이 null이면 예외가 발생한다")
+    void createCoupon_fail_whenNameIsNull() {
+        // given
+        LocalDateTime now = LocalDateTime.now();
+
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new Coupon(
+                null,
+                CouponDiscountType.FIXED,
+                1000,
+                0L,
+                null,
+                100,
+                now.minusDays(1),
+                now.plusDays(30)
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_020);
+    }
+
+    @Test
+    @DisplayName("Coupon 생성 실패 - 쿠폰명이 blank이면 예외가 발생한다")
     void createCoupon_fail_whenNameIsBlank() {
         // given
         LocalDateTime now = LocalDateTime.now();
 
-        // when & then
-        assertThatThrownBy(() -> new Coupon(
-            " ",
-            CouponDiscountType.FIXED,
-            1000,
-            0L,
-            null,
-            100,
-            now.minusDays(1),
-            now.plusDays(30)
-        )).isInstanceOf(IllegalArgumentException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new Coupon(
+                " ",
+                CouponDiscountType.FIXED,
+                1000,
+                0L,
+                null,
+                100,
+                now.minusDays(1),
+                now.plusDays(30)
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_020);
     }
 
     @Test
@@ -93,17 +126,48 @@ class CouponTest {
         // given
         LocalDateTime now = LocalDateTime.now();
 
-        // when & then
-        assertThatThrownBy(() -> new Coupon(
-            "테스트 쿠폰",
-            null,
-            1000,
-            0L,
-            null,
-            100,
-            now.minusDays(1),
-            now.plusDays(30)
-        )).isInstanceOf(IllegalArgumentException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new Coupon(
+                "테스트 쿠폰",
+                null,
+                1000,
+                0L,
+                null,
+                100,
+                now.minusDays(1),
+                now.plusDays(30)
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_021);
+    }
+
+    @Test
+    @DisplayName("Coupon 생성 실패 - 할인 값이 null이면 예외가 발생한다")
+    void createCoupon_fail_whenDiscountValueIsNull() {
+        // given
+        LocalDateTime now = LocalDateTime.now();
+
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new Coupon(
+                "테스트 쿠폰",
+                CouponDiscountType.FIXED,
+                null,
+                0L,
+                null,
+                100,
+                now.minusDays(1),
+                now.plusDays(30)
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_022);
     }
 
     @Test
@@ -112,17 +176,48 @@ class CouponTest {
         // given
         LocalDateTime now = LocalDateTime.now();
 
-        // when & then
-        assertThatThrownBy(() -> new Coupon(
-            "테스트 쿠폰",
-            CouponDiscountType.FIXED,
-            0,
-            0L,
-            null,
-            100,
-            now.minusDays(1),
-            now.plusDays(30)
-        )).isInstanceOf(IllegalArgumentException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new Coupon(
+                "테스트 쿠폰",
+                CouponDiscountType.FIXED,
+                0,
+                0L,
+                null,
+                100,
+                now.minusDays(1),
+                now.plusDays(30)
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_022);
+    }
+
+    @Test
+    @DisplayName("Coupon 생성 실패 - 최소 주문 금액이 null이면 예외가 발생한다")
+    void createCoupon_fail_whenMinOrderPriceIsNull() {
+        // given
+        LocalDateTime now = LocalDateTime.now();
+
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new Coupon(
+                "테스트 쿠폰",
+                CouponDiscountType.FIXED,
+                1000,
+                null,
+                null,
+                100,
+                now.minusDays(1),
+                now.plusDays(30)
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_023);
     }
 
     @Test
@@ -131,17 +226,48 @@ class CouponTest {
         // given
         LocalDateTime now = LocalDateTime.now();
 
-        // when & then
-        assertThatThrownBy(() -> new Coupon(
-            "테스트 쿠폰",
-            CouponDiscountType.FIXED,
-            1000,
-            -1L,
-            null,
-            100,
-            now.minusDays(1),
-            now.plusDays(30)
-        )).isInstanceOf(IllegalArgumentException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new Coupon(
+                "테스트 쿠폰",
+                CouponDiscountType.FIXED,
+                1000,
+                -1L,
+                null,
+                100,
+                now.minusDays(1),
+                now.plusDays(30)
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_023);
+    }
+
+    @Test
+    @DisplayName("Coupon 생성 실패 - 총 발급 수량이 null이면 예외가 발생한다")
+    void createCoupon_fail_whenTotalQuantityIsNull() {
+        // given
+        LocalDateTime now = LocalDateTime.now();
+
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new Coupon(
+                "테스트 쿠폰",
+                CouponDiscountType.FIXED,
+                1000,
+                0L,
+                null,
+                null,
+                now.minusDays(1),
+                now.plusDays(30)
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_024);
     }
 
     @Test
@@ -150,17 +276,73 @@ class CouponTest {
         // given
         LocalDateTime now = LocalDateTime.now();
 
-        // when & then
-        assertThatThrownBy(() -> new Coupon(
-            "테스트 쿠폰",
-            CouponDiscountType.FIXED,
-            1000,
-            0L,
-            null,
-            0,
-            now.minusDays(1),
-            now.plusDays(30)
-        )).isInstanceOf(IllegalArgumentException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new Coupon(
+                "테스트 쿠폰",
+                CouponDiscountType.FIXED,
+                1000,
+                0L,
+                null,
+                0,
+                now.minusDays(1),
+                now.plusDays(30)
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_024);
+    }
+
+    @Test
+    @DisplayName("Coupon 생성 실패 - 시작일이 null이면 예외가 발생한다")
+    void createCoupon_fail_whenStartAtIsNull() {
+        // given
+        LocalDateTime now = LocalDateTime.now();
+
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new Coupon(
+                "테스트 쿠폰",
+                CouponDiscountType.FIXED,
+                1000,
+                0L,
+                null,
+                100,
+                null,
+                now.plusDays(30)
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_025);
+    }
+
+    @Test
+    @DisplayName("Coupon 생성 실패 - 만료일이 null이면 예외가 발생한다")
+    void createCoupon_fail_whenExpiredAtIsNull() {
+        // given
+        LocalDateTime now = LocalDateTime.now();
+
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new Coupon(
+                "테스트 쿠폰",
+                CouponDiscountType.FIXED,
+                1000,
+                0L,
+                null,
+                100,
+                now.minusDays(1),
+                null
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_026);
     }
 
     @Test
@@ -169,17 +351,23 @@ class CouponTest {
         // given
         LocalDateTime now = LocalDateTime.now();
 
-        // when & then
-        assertThatThrownBy(() -> new Coupon(
-            "테스트 쿠폰",
-            CouponDiscountType.FIXED,
-            1000,
-            0L,
-            null,
-            100,
-            now,
-            now
-        )).isInstanceOf(IllegalArgumentException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new Coupon(
+                "테스트 쿠폰",
+                CouponDiscountType.FIXED,
+                1000,
+                0L,
+                null,
+                100,
+                now,
+                now
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_027);
     }
 
     @Test
@@ -188,17 +376,23 @@ class CouponTest {
         // given
         LocalDateTime now = LocalDateTime.now();
 
-        // when & then
-        assertThatThrownBy(() -> new Coupon(
-            "테스트 정률 쿠폰",
-            CouponDiscountType.RATE,
-            101,
-            0L,
-            5000L,
-            100,
-            now.minusDays(1),
-            now.plusDays(30)
-        )).isInstanceOf(IllegalArgumentException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new Coupon(
+                "테스트 정률 쿠폰",
+                CouponDiscountType.RATE,
+                101,
+                0L,
+                5000L,
+                100,
+                now.minusDays(1),
+                now.plusDays(30)
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_028);
     }
 
     @Test
@@ -207,17 +401,48 @@ class CouponTest {
         // given
         LocalDateTime now = LocalDateTime.now();
 
-        // when & then
-        assertThatThrownBy(() -> new Coupon(
-            "테스트 정률 쿠폰",
-            CouponDiscountType.RATE,
-            10,
-            0L,
-            null,
-            100,
-            now.minusDays(1),
-            now.plusDays(30)
-        )).isInstanceOf(IllegalArgumentException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new Coupon(
+                "테스트 정률 쿠폰",
+                CouponDiscountType.RATE,
+                10,
+                0L,
+                null,
+                100,
+                now.minusDays(1),
+                now.plusDays(30)
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_029);
+    }
+
+    @Test
+    @DisplayName("Coupon 생성 실패 - 정률 쿠폰의 최대 할인 금액이 0 이하이면 예외가 발생한다")
+    void createCoupon_fail_whenRateCouponMaxDiscountPriceIsZeroOrNegative() {
+        // given
+        LocalDateTime now = LocalDateTime.now();
+
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new Coupon(
+                "테스트 정률 쿠폰",
+                CouponDiscountType.RATE,
+                10,
+                0L,
+                0L,
+                100,
+                now.minusDays(1),
+                now.plusDays(30)
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_029);
     }
 
     @Test
@@ -226,17 +451,23 @@ class CouponTest {
         // given
         LocalDateTime now = LocalDateTime.now();
 
-        // when & then
-        assertThatThrownBy(() -> new Coupon(
-            "테스트 정액 쿠폰",
-            CouponDiscountType.FIXED,
-            1000,
-            0L,
-            5000L,
-            100,
-            now.minusDays(1),
-            now.plusDays(30)
-        )).isInstanceOf(IllegalArgumentException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new Coupon(
+                "테스트 정액 쿠폰",
+                CouponDiscountType.FIXED,
+                1000,
+                0L,
+                5000L,
+                100,
+                now.minusDays(1),
+                now.plusDays(30)
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_030);
     }
 
     @Test
@@ -267,9 +498,14 @@ class CouponTest {
 
         coupon.deactivate();
 
-        // when & then
-        assertThatThrownBy(() -> coupon.validateIssuable(now))
-            .isInstanceOf(IllegalStateException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> coupon.validateIssuable(now)
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_033);
     }
 
     @Test
@@ -283,9 +519,14 @@ class CouponTest {
             100
         );
 
-        // when & then
-        assertThatThrownBy(() -> coupon.validateIssuable(now))
-            .isInstanceOf(IllegalStateException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> coupon.validateIssuable(now)
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_003);
     }
 
     @Test
@@ -299,9 +540,14 @@ class CouponTest {
             100
         );
 
-        // when & then
-        assertThatThrownBy(() -> coupon.validateIssuable(now))
-            .isInstanceOf(IllegalStateException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> coupon.validateIssuable(now)
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_003);
     }
 
     @Test
@@ -317,9 +563,14 @@ class CouponTest {
 
         coupon.increaseIssuedQuantity();
 
-        // when & then
-        assertThatThrownBy(() -> coupon.validateIssuable(now))
-            .isInstanceOf(IllegalStateException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> coupon.validateIssuable(now)
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_001);
     }
 
     @Test
@@ -353,9 +604,14 @@ class CouponTest {
 
         coupon.increaseIssuedQuantity();
 
-        // when & then
-        assertThatThrownBy(coupon::increaseIssuedQuantity)
-            .isInstanceOf(IllegalStateException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            coupon::increaseIssuedQuantity
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_001);
     }
 
     @Test
@@ -462,9 +718,14 @@ class CouponTest {
             100
         );
 
-        // when & then
-        assertThatThrownBy(() -> coupon.calculateDiscountPrice(null))
-            .isInstanceOf(IllegalArgumentException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> coupon.calculateDiscountPrice(null)
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_031);
     }
 
     @Test
@@ -478,9 +739,14 @@ class CouponTest {
             100
         );
 
-        // when & then
-        assertThatThrownBy(() -> coupon.calculateDiscountPrice(-1L))
-            .isInstanceOf(IllegalArgumentException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> coupon.calculateDiscountPrice(-1L)
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_031);
     }
 
     @Test
@@ -500,9 +766,14 @@ class CouponTest {
             now.plusDays(30)
         );
 
-        // when & then
-        assertThatThrownBy(() -> coupon.calculateDiscountPrice(5000L))
-            .isInstanceOf(IllegalStateException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> coupon.calculateDiscountPrice(5000L)
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_005);
     }
 
     @Test
@@ -536,9 +807,14 @@ class CouponTest {
 
         coupon.deactivate();
 
-        // when & then
-        assertThatThrownBy(coupon::deactivate)
-            .isInstanceOf(IllegalStateException.class);
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            coupon::deactivate
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_010);
     }
 
     @Test
@@ -614,6 +890,27 @@ class CouponTest {
     }
 
     @Test
+    @DisplayName("isInPeriod 실패 - 현재 시각이 null이면 예외가 발생한다")
+    void isInPeriod_fail_whenNowIsNull() {
+        // given
+        LocalDateTime now = LocalDateTime.now();
+        Coupon coupon = fixedCoupon(
+            now.minusDays(1),
+            now.plusDays(1),
+            100
+        );
+
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> coupon.isInPeriod(null)
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_032);
+    }
+
+    @Test
     @DisplayName("isExpired 성공 - 현재 시각이 만료일 이후이면 true를 반환한다")
     void isExpired_success_whenNowIsAfterExpiredAt() {
         // given
@@ -654,13 +951,38 @@ class CouponTest {
     void isExpired_success_whenNowEqualsExpiredAt() {
         // given
         LocalDateTime now = LocalDateTime.now();
-        Coupon coupon = fixedCoupon(now.minusDays(30), now, 100);
+        Coupon coupon = fixedCoupon(
+            now.minusDays(30),
+            now,
+            100
+        );
 
         // when
         boolean result = coupon.isExpired(now);
 
         // then
         assertThat(result).isFalse();
+    }
+
+    @Test
+    @DisplayName("isExpired 실패 - 현재 시각이 null이면 예외가 발생한다")
+    void isExpired_fail_whenNowIsNull() {
+        // given
+        LocalDateTime now = LocalDateTime.now();
+        Coupon coupon = fixedCoupon(
+            now.minusDays(1),
+            now.plusDays(1),
+            100
+        );
+
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> coupon.isExpired(null)
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.COUPON_032);
     }
 
     private Coupon fixedCoupon(

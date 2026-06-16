@@ -3,8 +3,14 @@ package com.sparta.one_stop.global.alert.slack;
 import com.sparta.one_stop.global.outbox.entity.OutboxEvent;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.client.RestClient;
 
+import java.util.Map;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -53,6 +59,62 @@ class SlackAlertServiceTest {
 
         // then
         verify(restClient, never()).post();
+    }
+
+    @Test
+    @DisplayName("Slack 알림 활성화 및 Webhook URL이 있으면 Slack 요청을 전송한다")
+    @SuppressWarnings({
+        "rawtypes",
+        "unchecked"
+    })
+    void sendOutboxDeadAlert_enabledAndWebhookUrlExists_sendRequestSuccessfully() {
+        // given
+        OutboxEvent outboxEvent = createDeadOutboxEvent();
+        String webhookUrl = "https://hooks.slack.com/services/test/webhook";
+
+        RestClient.RequestBodyUriSpec requestBodyUriSpec =
+            mock(RestClient.RequestBodyUriSpec.class);
+        RestClient.RequestBodySpec requestBodySpec =
+            mock(RestClient.RequestBodySpec.class);
+        RestClient.ResponseSpec responseSpec =
+            mock(RestClient.ResponseSpec.class);
+
+        when(slackAlertProperties.isEnabled()).thenReturn(true);
+        when(slackAlertProperties.hasWebhookUrl()).thenReturn(true);
+        when(slackAlertProperties.getWebhookUrl()).thenReturn(webhookUrl);
+
+        when(restClient.post()).thenReturn(requestBodyUriSpec);
+        when(requestBodyUriSpec.uri(webhookUrl)).thenReturn(requestBodySpec);
+
+        // body() 반환 타입이 RequestBodySpec으로 잡히므로 자기 자신을 반환하게 한다
+        when(requestBodySpec.body(any(Map.class))).thenReturn(requestBodySpec);
+
+        when(requestBodySpec.retrieve()).thenReturn(responseSpec);
+        when(responseSpec.toBodilessEntity()).thenReturn(ResponseEntity.ok().build());
+
+        // when
+        slackAlertService.sendOutboxDeadAlert(outboxEvent);
+
+        // then
+        verify(restClient).post();
+        verify(requestBodyUriSpec).uri(webhookUrl);
+
+        ArgumentCaptor<Map> bodyCaptor = ArgumentCaptor.forClass(Map.class);
+
+        verify(requestBodySpec).body(bodyCaptor.capture());
+        verify(requestBodySpec).retrieve();
+        verify(responseSpec).toBodilessEntity();
+
+        Map<String, String> body = bodyCaptor.getValue();
+
+        assertThat(body).containsKey("text");
+
+        String text = body.get("text");
+
+        assertThat(text).contains("Outbox DEAD 이벤트 발생");
+        assertThat(text).contains("payment-approved-1");
+        assertThat(text).contains("PAYMENT_APPROVED");
+        assertThat(text).contains("Kafka 발행 실패");
     }
 
     private OutboxEvent createDeadOutboxEvent() {

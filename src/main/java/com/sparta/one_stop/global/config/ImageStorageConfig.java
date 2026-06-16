@@ -36,8 +36,10 @@ public class ImageStorageConfig {
             if (!location.endsWith("/")) {
                 location += "/";
             }
+            // 업로드 디렉토리를 먼저 보고, 없으면 클래스패스 기본 이미지(default-product.png 등)로 폴백한다.
+            // 배포(!local)에는 이 핸들러가 없고, 클래스패스 static을 Spring 기본 정적 서빙이 처리한다.
             registry.addResourceHandler(properties.urlPrefix() + "/**")
-                    .addResourceLocations(location);
+                    .addResourceLocations(location, "classpath:/static/images/");
         }
     }
 

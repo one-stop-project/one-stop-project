@@ -7,6 +7,8 @@ import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
 
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
@@ -76,6 +78,47 @@ class OutboxKafkaProducerTest {
             .hasMessageContaining("Kafka 발행 실패")
             .hasMessageContaining(topic)
             .hasMessageContaining(key);
+
+        verify(kafkaTemplate).send(
+            topic,
+            key,
+            payload
+        );
+    }
+
+    @Test
+    @DisplayName("send 실패 - Kafka 발행 타임아웃 시 KafkaPublishException으로 전환한다")
+    void send_fail_whenKafkaSendTimeout() {
+        // given
+        String topic = "payment.approved";
+        String key = "1";
+        String payload = "{\"orderId\":1}";
+
+        CompletableFuture<SendResult<String, String>> future =
+            new CompletableFuture<>() {
+                @Override
+                public SendResult<String, String> get(
+                    long timeout,
+                    TimeUnit unit
+                ) throws TimeoutException {
+                    throw new TimeoutException("kafka send timeout");
+                }
+            };
+
+        when(kafkaTemplate.send(topic, key, payload))
+            .thenReturn(future);
+
+        // when & then
+        assertThatThrownBy(() -> outboxKafkaProducer.send(
+            topic,
+            key,
+            payload
+        ))
+            .isInstanceOf(KafkaPublishException.class)
+            .hasMessageContaining("Kafka 발행 실패")
+            .hasMessageContaining(topic)
+            .hasMessageContaining(key)
+            .hasCauseInstanceOf(TimeoutException.class);
 
         verify(kafkaTemplate).send(
             topic,

@@ -109,8 +109,9 @@ class SellerItemServiceTest {
 
     // ===== 목 세팅 헬퍼 =====
 
+    // updateItem은 이제 항상 비관적 락(findByIdForUpdate)으로 조회한다 (#441)
     private void mockFindItem(ProductItem item) {
-        given(productItemRepository.findById(ITEM_ID)).willReturn(Optional.of(item));
+        given(productItemRepository.findByIdForUpdate(ITEM_ID)).willReturn(Optional.of(item));
     }
 
     private void mockFindItemForUpdate(ProductItem item) {
@@ -122,8 +123,8 @@ class SellerItemServiceTest {
     class UpdateItem {
 
         @Test
-        @DisplayName("price만 수정하면 락 없이 조회하고 이력을 남기지 않는다")
-        void updateItem_priceOnly_succeedsWithoutLock() {
+        @DisplayName("price만 수정해도 비관적 락으로 조회한다 — 동시 재고 변경 덮어쓰기 방지 (#441)")
+        void updateItem_priceOnly_usesPessimisticLock() {
             // given
             ProductItem item = createItem(SELLER_USER_ID, ProductStatus.APPROVED, 1000L, 50L);
             mockFindItem(item);
@@ -135,8 +136,8 @@ class SellerItemServiceTest {
 
             // then
             assertThat(response.price()).isEqualTo(2000L);
-            verify(productItemRepository).findById(ITEM_ID);
-            verify(productItemRepository, never()).findByIdForUpdate(anyLong());
+            verify(productItemRepository).findByIdForUpdate(ITEM_ID);
+            verify(productItemRepository, never()).findById(anyLong());
             verify(inventoryHistoryRepository, never()).save(any());
         }
 
@@ -182,6 +183,8 @@ class SellerItemServiceTest {
 
             // then
             assertThat(response.status()).isEqualTo(ProductItemStatus.STOP);
+            verify(productItemRepository).findByIdForUpdate(ITEM_ID);
+            verify(productItemRepository, never()).findById(anyLong());
             verify(inventoryHistoryRepository, never()).save(any());
         }
 
@@ -201,6 +204,8 @@ class SellerItemServiceTest {
             assertThat(response.price()).isEqualTo(1000L);
             assertThat(response.stock()).isEqualTo(50L);
             assertThat(response.status()).isEqualTo(ProductItemStatus.ON_SALE);
+            verify(productItemRepository).findByIdForUpdate(ITEM_ID);
+            verify(productItemRepository, never()).findById(anyLong());
             verify(inventoryHistoryRepository, never()).save(any());
         }
 
@@ -208,7 +213,7 @@ class SellerItemServiceTest {
         @DisplayName("itemId에 해당하는 옵션이 없으면 PRODUCT_001 예외가 발생한다")
         void updateItem_itemNotFound_throwsProduct001() {
             // given
-            given(productItemRepository.findById(ITEM_ID)).willReturn(Optional.empty());
+            given(productItemRepository.findByIdForUpdate(ITEM_ID)).willReturn(Optional.empty());
             ItemUpdateRequest request = new ItemUpdateRequest(2000L, null, null);
 
             // when & then

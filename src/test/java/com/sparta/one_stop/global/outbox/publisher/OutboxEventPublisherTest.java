@@ -11,8 +11,10 @@ import org.springframework.data.domain.Pageable;
 import java.lang.reflect.Field;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -66,6 +68,31 @@ class OutboxEventPublisherTest {
 
         // then
         verify(outboxEventPublishExecutor, never()).execute(any(OutboxEvent.class));
+    }
+
+    @Test
+    @DisplayName("publishPendingEvents 성공 - 단일 이벤트 처리 실패 시에도 이후 이벤트 처리를 계속한다")
+    void publishPendingEvents_success_whenSingleEventFails() {
+        // given
+        OutboxEvent event1 = pendingOutboxEvent(1L);
+        OutboxEvent event2 = pendingOutboxEvent(2L);
+        OutboxEvent event3 = pendingOutboxEvent(3L);
+
+        when(outboxEventRepository.findByStatusOrderByCreatedAtAsc(
+            eq(OutboxEventStatus.PENDING),
+            any(Pageable.class)
+        )).thenReturn(List.of(event1, event2, event3));
+
+        doThrow(new RuntimeException("테스트용 Outbox 이벤트 처리 실패"))
+            .when(outboxEventPublishExecutor)
+            .execute(event1);
+
+        // when & then
+        assertDoesNotThrow(outboxEventPublisher::publishPendingEvents);
+
+        verify(outboxEventPublishExecutor).execute(event1);
+        verify(outboxEventPublishExecutor).execute(event2);
+        verify(outboxEventPublishExecutor).execute(event3);
     }
 
     private OutboxEvent pendingOutboxEvent(Long id) {

@@ -3,11 +3,13 @@ package com.sparta.one_stop.domain.payment.entity;
 import com.sparta.one_stop.domain.order.entity.Order;
 import com.sparta.one_stop.global.enums.payment.PaymentMethod;
 import com.sparta.one_stop.global.enums.payment.PaymentStatus;
+import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class PaymentTest {
 
@@ -38,15 +40,19 @@ class PaymentTest {
     @Test
     @DisplayName("Payment 생성 실패 - 주문 정보가 null이면 예외 발생")
     void createPayment_fail_whenOrderIsNull() {
-        // when & then
-        assertThatThrownBy(() -> new Payment(
-            null,
-            "payment-key",
-            10000L,
-            PaymentMethod.MOCK
-        ))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("주문 정보는 필수입니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new Payment(
+                null,
+                "payment-key",
+                10000L,
+                PaymentMethod.MOCK
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PAYMENT_020);
     }
 
     @Test
@@ -55,15 +61,19 @@ class PaymentTest {
         // given
         Order order = order();
 
-        // when & then
-        assertThatThrownBy(() -> new Payment(
-            order,
-            null,
-            10000L,
-            PaymentMethod.MOCK
-        ))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("결제 키는 필수입니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new Payment(
+                order,
+                null,
+                10000L,
+                PaymentMethod.MOCK
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PAYMENT_021);
     }
 
     @Test
@@ -72,15 +82,19 @@ class PaymentTest {
         // given
         Order order = order();
 
-        // when & then
-        assertThatThrownBy(() -> new Payment(
-            order,
-            " ",
-            10000L,
-            PaymentMethod.MOCK
-        ))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("결제 키는 필수입니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new Payment(
+                order,
+                " ",
+                10000L,
+                PaymentMethod.MOCK
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PAYMENT_021);
     }
 
     @Test
@@ -89,15 +103,19 @@ class PaymentTest {
         // given
         Order order = order();
 
-        // when & then
-        assertThatThrownBy(() -> new Payment(
-            order,
-            "payment-key",
-            null,
-            PaymentMethod.MOCK
-        ))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("결제 금액은 0원 이상이어야 합니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new Payment(
+                order,
+                "payment-key",
+                null,
+                PaymentMethod.MOCK
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PAYMENT_022);
     }
 
     @Test
@@ -106,15 +124,19 @@ class PaymentTest {
         // given
         Order order = order();
 
-        // when & then
-        assertThatThrownBy(() -> new Payment(
-            order,
-            "payment-key",
-            -1L,
-            PaymentMethod.MOCK
-        ))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("결제 금액은 0원 이상이어야 합니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new Payment(
+                order,
+                "payment-key",
+                -1L,
+                PaymentMethod.MOCK
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PAYMENT_022);
     }
 
     @Test
@@ -123,15 +145,19 @@ class PaymentTest {
         // given
         Order order = order();
 
-        // when & then
-        assertThatThrownBy(() -> new Payment(
-            order,
-            "payment-key",
-            10000L,
-            null
-        ))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("결제 수단은 필수입니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            () -> new Payment(
+                order,
+                "payment-key",
+                10000L,
+                null
+            )
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PAYMENT_023);
     }
 
     @Test
@@ -155,10 +181,14 @@ class PaymentTest {
         Payment payment = payment();
         payment.approve();
 
-        // when & then
-        assertThatThrownBy(payment::approve)
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessage("결제 대기 상태에서만 승인할 수 있습니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            payment::approve
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PAYMENT_024);
     }
 
     @Test
@@ -183,10 +213,14 @@ class PaymentTest {
         Payment payment = payment();
         payment.approve();
 
-        // when & then
-        assertThatThrownBy(payment::fail)
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessage("결제 대기 상태에서만 실패 처리할 수 있습니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            payment::fail
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PAYMENT_025);
     }
 
     @Test
@@ -210,10 +244,14 @@ class PaymentTest {
         // given
         Payment payment = payment();
 
-        // when & then
-        assertThatThrownBy(payment::cancel)
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessage("결제 완료 상태에서만 취소할 수 있습니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            payment::cancel
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PAYMENT_027);
     }
 
     @Test
@@ -224,10 +262,14 @@ class PaymentTest {
         payment.approve();
         payment.cancel();
 
-        // when & then
-        assertThatThrownBy(payment::cancel)
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessage("이미 취소된 결제입니다.");
+        // when
+        CustomException exception = assertThrows(
+            CustomException.class,
+            payment::cancel
+        );
+
+        // then
+        assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.PAYMENT_026);
     }
 
     private Payment payment() {

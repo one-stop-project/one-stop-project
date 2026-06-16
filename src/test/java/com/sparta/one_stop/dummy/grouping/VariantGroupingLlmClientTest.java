@@ -20,7 +20,7 @@ import static org.mockito.Mockito.when;
 class VariantGroupingLlmClientTest {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
-    private final DummyPromptProperties prompts = new DummyPromptProperties(null, "변형을 묶어라");
+    private final DummyPromptProperties prompts = new DummyPromptProperties("변형을 묶어라");
     private final Map<String, Object> input = Map.of("clusters", List.of());
 
     @Test
@@ -61,7 +61,7 @@ class VariantGroupingLlmClientTest {
     @DisplayName("variant-grouping 프롬프트 누락 → 예외")
     void throwsWhenPromptMissing() {
         VariantGroupingLlmClient client = new VariantGroupingLlmClient(
-            mock(ChatClient.class), new DummyPromptProperties(null, null), objectMapper);
+            mock(ChatClient.class), new DummyPromptProperties(null), objectMapper);
         assertThatThrownBy(() -> client.request(input))
             .isInstanceOf(IllegalStateException.class);
     }

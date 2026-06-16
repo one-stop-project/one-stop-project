@@ -12,7 +12,6 @@ import com.sparta.one_stop.domain.product.entity.QProduct;
 import com.sparta.one_stop.domain.product.entity.QProductCategoryMapping;
 import com.sparta.one_stop.domain.product.entity.QProductItem;
 import com.sparta.one_stop.global.enums.product.ProductItemStatus;
-import com.sparta.one_stop.global.enums.product.SortType;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -79,18 +78,11 @@ public class ProductRepositoryImpl implements ProductRepositoryCustom {
             where.and(tagOr);
         }
 
-        if (isPriceSort(cond.sort())) {
-            // 가격 정렬은 판매중(ON_SALE) 옵션만 대상 — 옵션 존재 보장 + 가격 범위도 ON_SALE 기준
-            // exists 필터와 ORDER BY MIN이 동일 술어(onSalePriceWhere)를 공유해야 정렬 기준이 어긋나지 않음
-            where.and(JPAExpressions.selectOne().from(productItem)
-                .where(onSalePriceWhere(cond)).exists());
-        } else if (cond.minPrice() != null || cond.maxPrice() != null) {
-            // 최신순 등은 옵션 상태 무관 — 가격 범위에 드는 옵션이 하나라도 있으면 노출
-            BooleanBuilder price = new BooleanBuilder().and(productItem.product.eq(product));
-            if (cond.minPrice() != null) price.and(productItem.price.goe(cond.minPrice()));
-            if (cond.maxPrice() != null) price.and(productItem.price.loe(cond.maxPrice()));
-            where.and(JPAExpressions.selectOne().from(productItem).where(price).exists());
-        }
+        // 정렬 무관 공통: 판매중(ON_SALE) 옵션이 (가격 필터가 있으면 그 범위 안에) 최소 1개 있는 상품만 노출.
+        // 노출 최저가·가격필터·가격정렬이 모두 ON_SALE 동일 술어(onSalePriceWhere)를 공유하므로
+        // 모든 옵션이 STOP이라 최저가가 0원으로 찍히는 노출, STOP 옵션 가격으로 필터를 통과해 판매중가로 보이는 불일치를 막는다.
+        where.and(JPAExpressions.selectOne().from(productItem)
+            .where(onSalePriceWhere(cond)).exists());
 
         return where;
     }
@@ -115,7 +107,7 @@ public class ProductRepositoryImpl implements ProductRepositoryCustom {
             .where(onSalePriceWhere(cond));
     }
 
-    // 판매중(ON_SALE) 옵션 + (있으면) 가격 범위 — 가격 정렬의 필터/정렬 공통 술어
+    // 판매중(ON_SALE) 옵션 + (있으면) 가격 범위 — 노출 exists 필터·가격필터·가격정렬 MIN이 공유하는 공통 술어
     private BooleanBuilder onSalePriceWhere(ProductSearchCond cond) {
         BooleanBuilder where = new BooleanBuilder()
             .and(productItem.product.eq(product))
@@ -123,9 +115,5 @@ public class ProductRepositoryImpl implements ProductRepositoryCustom {
         if (cond.minPrice() != null) where.and(productItem.price.goe(cond.minPrice()));
         if (cond.maxPrice() != null) where.and(productItem.price.loe(cond.maxPrice()));
         return where;
-    }
-
-    private boolean isPriceSort(SortType sort) {
-        return sort == SortType.PRICE_ASC || sort == SortType.PRICE_DESC;
     }
 }

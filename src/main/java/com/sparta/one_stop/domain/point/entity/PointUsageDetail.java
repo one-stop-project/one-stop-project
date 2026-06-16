@@ -2,6 +2,8 @@ package com.sparta.one_stop.domain.point.entity;
 
 import com.sparta.one_stop.global.entity.BaseEntity;
 import com.sparta.one_stop.global.enums.point.PointHistoryType;
+import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -83,31 +85,32 @@ public class PointUsageDetail extends BaseEntity {
         Integer usedAmount
     ) {
         if (useHistory == null) {
-            throw new IllegalArgumentException("포인트 사용 이력은 필수입니다.");
+            throw new CustomException(ErrorCode.POINT_035);
         }
 
         if (sourceHistory == null) {
-            throw new IllegalArgumentException("차감 대상 포인트 이력은 필수입니다.");
+            throw new CustomException(ErrorCode.POINT_036);
         }
 
         if (useHistory.getType() != PointHistoryType.USE) {
-            throw new IllegalArgumentException("USE 이력만 사용 상세 이력과 연결할 수 있습니다.");
+            throw new CustomException(ErrorCode.POINT_037);
         }
 
         if (!sourceHistory.isDeductibleSource()) {
-            throw new IllegalArgumentException("차감 대상은 CHARGE/EARN/REFUND 이력이어야 합니다.");
+            throw new CustomException(ErrorCode.POINT_038);
         }
 
         if (usedAmount == null || usedAmount <= 0) {
-            throw new IllegalArgumentException("차감 금액은 1 이상이어야 합니다.");
+            throw new CustomException(ErrorCode.POINT_039);
         }
 
-        if (sourceHistory.getRemainingAmount() < usedAmount) {
-            throw new IllegalArgumentException("차감 금액은 원본 이력의 잔여 포인트를 초과할 수 없습니다.");
+        if (sourceHistory.getRemainingAmount() == null
+            || sourceHistory.getRemainingAmount() < usedAmount) {
+            throw new CustomException(ErrorCode.POINT_040);
         }
 
         if (sourceHistory.getExpireAt() == null) {
-            throw new IllegalArgumentException("원본 포인트 만료일은 필수입니다.");
+            throw new CustomException(ErrorCode.POINT_041);
         }
     }
 

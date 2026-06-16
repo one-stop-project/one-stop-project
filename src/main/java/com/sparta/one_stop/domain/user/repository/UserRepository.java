@@ -3,10 +3,12 @@ package com.sparta.one_stop.domain.user.repository;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.global.enums.user.UserRole;
 import com.sparta.one_stop.global.enums.user.UserStatus;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -19,6 +21,12 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByEmail(String email);
 
     boolean existsByEmail(String email);
+
+    // ── 동시성 제어 ──
+    // 구독 신청 시 동일 유저 동시 요청 직렬화용 비관적 락
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT u FROM User u WHERE u.id = :userId")
+    Optional<User> findByIdForUpdate(@Param("userId") Long userId);
 
     // ── N+1 방어 ──
     //SELLER 로그인 시 사용 — Seller 정보 한 번에 fetch, Hibernate가 LEFT JOIN으로 1회 쿼리만 발생

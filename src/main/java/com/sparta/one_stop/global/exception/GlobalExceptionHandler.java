@@ -3,6 +3,7 @@ package com.sparta.one_stop.global.exception;
 import com.sparta.one_stop.global.response.ErrorResponse;
 import jakarta.persistence.LockTimeoutException;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.PessimisticLockingFailureException;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 
 /**
  * 전역 예외 처리 핸들러
@@ -49,6 +51,83 @@ public class GlobalExceptionHandler {
         return ResponseEntity
             .badRequest()
             .body(ErrorResponse.ofValidation(e.getBindingResult(), request.getRequestURI()));
+    }
+
+    /**
+     * @RequestParam, @PathVariable 등 Controller 메서드 파라미터 검증 실패 처리
+     */
+    @ExceptionHandler(ConstraintViolationException.class)
+    public ResponseEntity<ErrorResponse> handleConstraintViolationException(
+        ConstraintViolationException e,
+        HttpServletRequest request
+    ) {
+        String detail = e.getConstraintViolations()
+            .stream()
+            .findFirst()
+            .map(violation -> violation.getMessage())
+            .orElse(null);
+
+        log.error(
+            "ConstraintViolationException: {} - {}",
+            request.getRequestURI(),
+            detail
+        );
+
+        return ResponseEntity
+            .status(ErrorCode.COMMON_010.getStatus())
+            .body(ErrorResponse.of(
+                ErrorCode.COMMON_010,
+                detail,
+                request.getRequestURI()
+            ));
+    }
+
+    /**
+     * 잘못된 상태 예외 처리
+     * 상태 전이 위반 등 IllegalStateException 발생 시 400 반환
+     */
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<ErrorResponse> handleIllegalStateException(
+        IllegalStateException e,
+        HttpServletRequest request
+    ) {
+        log.warn(
+            "IllegalStateException: {} - {}",
+            request.getRequestURI(),
+            e.getMessage()
+        );
+
+        return ResponseEntity
+            .status(ErrorCode.COMMON_001.getStatus())
+            .body(ErrorResponse.of(
+                ErrorCode.COMMON_001,
+                e.getMessage(),
+                request.getRequestURI()
+            ));
+    }
+
+    /**
+     * 잘못된 인자 예외 처리
+     * 입력값 위반 등 IllegalArgumentException 발생 시 400 반환
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ErrorResponse> handleIllegalArgumentException(
+        IllegalArgumentException e,
+        HttpServletRequest request
+    ) {
+        log.warn(
+            "IllegalArgumentException: {} - {}",
+            request.getRequestURI(),
+            e.getMessage()
+        );
+
+        return ResponseEntity
+            .status(ErrorCode.COMMON_001.getStatus())
+            .body(ErrorResponse.of(
+                ErrorCode.COMMON_001,
+                e.getMessage(),
+                request.getRequestURI()
+            ));
     }
 
     /**
@@ -105,6 +184,19 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * 잘못된 JSON 요청 바디 처리
+     * 필드 타입 불일치, JSON 파싱 오류 등 400 반환
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleHttpMessageNotReadable(
+        HttpMessageNotReadableException e, HttpServletRequest request) {
+        log.warn("HttpMessageNotReadableException: {} - {}", request.getRequestURI(), e.getMessage());
+        return ResponseEntity
+            .status(ErrorCode.COMMON_002.getStatus())
+            .body(ErrorResponse.of(ErrorCode.COMMON_002, null, request.getRequestURI()));
+    }
+
+    /**
      * 필수 파라미터 누락 처리
      */
     @ExceptionHandler(MissingServletRequestParameterException.class)
@@ -140,4 +232,5 @@ public class GlobalExceptionHandler {
             .status(ErrorCode.COMMON_007.getStatus())
             .body(ErrorResponse.of(ErrorCode.COMMON_007, null, request.getRequestURI()));
     }
+
 }
