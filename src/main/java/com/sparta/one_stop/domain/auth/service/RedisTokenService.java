@@ -37,13 +37,22 @@ public class RedisTokenService {
             "end";
     private static final RedisScript<Long> ROTATE_RT =
         new DefaultRedisScript<>(ROTATE_RT_SCRIPT, Long.class);
-    private final RedisTemplate<String, String> redisTemplate;
-    private final DeviceLimitService deviceLimitService;
+    // ═══════════ OAuth2 일회용 핸드오프 code ═══════════
+    private static final String OAUTH2_CODE_PREFIX = "oauth2:code:"; // 일관성 위해 RedisKeyConstants로 옮겨도 됨
+    private static final long OAUTH2_CODE_TTL_SECONDS = 60;
 
 
     // ═══════════════════════════════════════════════════════════
     //  Key 생성
     // ═══════════════════════════════════════════════════════════
+    private static final String CODE_SEP = ":"; // JWT(base64url+'.')·UUID 모두 ':' 미포함 → 구분자 안전
+    private final RedisTemplate<String, String> redisTemplate;
+
+
+    // ═══════════════════════════════════════════════════════════
+    //  Refresh Token 관리
+    // ═══════════════════════════════════════════════════════════
+    private final DeviceLimitService deviceLimitService;
 
     private String rtKey(Long userId, String deviceId) {
         return REFRESH_TOKEN_PREFIX + userId + ":" + deviceId;
@@ -52,11 +61,6 @@ public class RedisTokenService {
     private String blKey(String jti) {
         return BLACKLIST_PREFIX + jti;
     }
-
-
-    // ═══════════════════════════════════════════════════════════
-    //  Refresh Token 관리
-    // ═══════════════════════════════════════════════════════════
 
     /**
      * RT 저장 — Fail-Close (보안 우선)
@@ -86,6 +90,11 @@ public class RedisTokenService {
             throw new CustomException(ErrorCode.COMMON_008);
         }
     }
+
+
+    // ═══════════════════════════════════════════════════════════
+    //  Access Token 블랙리스트
+    // ═══════════════════════════════════════════════════════════
 
     /**
      * RT 원자적 갱신 (Compare-And-Swap)
@@ -121,6 +130,11 @@ public class RedisTokenService {
         }
     }
 
+    // ═══════════════════════════════════════════════════════════
+    //  User-level 토큰 무효화 (iat-cutoff)
+    //  비번변경/탈퇴/정지 시 호출 → 그 이전 발급된 모든 AT를 다음 요청에서 거부
+    // ═══════════════════════════════════════════════════════════
+
     /**
      * 사용자의 모든 기기 RT 일괄 삭제
      *
@@ -133,11 +147,6 @@ public class RedisTokenService {
         // DeviceLimitService가 ZSET 인덱스로 일괄 삭제 (SCAN 불필요)
         return deviceLimitService.removeAllDevices(userId);
     }
-
-
-    // ═══════════════════════════════════════════════════════════
-    //  Access Token 블랙리스트
-    // ═══════════════════════════════════════════════════════════
 
     public void addToBlacklist(String jti, long expirySeconds) {
         try {
@@ -162,11 +171,6 @@ public class RedisTokenService {
             return false;
         }
     }
-
-    // ═══════════════════════════════════════════════════════════
-    //  User-level 토큰 무효화 (iat-cutoff)
-    //  비번변경/탈퇴/정지 시 호출 → 그 이전 발급된 모든 AT를 다음 요청에서 거부
-    // ═══════════════════════════════════════════════════════════
 
     /**
      * 사용자의 모든 기존 AT 무효화 — cutoff 시각을 현재로 기록
@@ -216,6 +220,37 @@ public class RedisTokenService {
         return USER_TOKEN_CUTOFF_PREFIX + userId;
     }
 
+    private String oauth2CodeKey(String code) {
+        return OAUTH2_CODE_PREFIX + code;
+    }
+
+    /** code 저장 — Fail-Close. 저장 못 하면 교환 불가이므로 핸드오프를 실패시킨다. */
+    public void saveOAuth2Code(String code, String deviceId, String accessToken) {
+        try {
+            redisTemplate.opsForValue().set(
+                oauth2CodeKey(code), deviceId + CODE_SEP + accessToken,
+                OAUTH2_CODE_TTL_SECONDS, TimeUnit.SECONDS);
+        } catch (RedisConnectionFailureException | RedisSystemException e) {
+            log.error("Redis 통신 장애 (OAuth2 code 저장 실패)", e);
+            throw new CustomException(ErrorCode.COMMON_008);
+        }
+    }
+
+    /** code 원자적 1회 소비(GETDEL). 없거나 만료면 null. ※ Redis 6.2+ / Spring Data Redis 2.6+ */
+    public OAuth2Handoff consumeOAuth2Code(String code) {
+        String value;
+        try {
+            value = redisTemplate.opsForValue().getAndDelete(oauth2CodeKey(code));
+        } catch (RedisConnectionFailureException | RedisSystemException e) {
+            log.error("Redis 통신 장애 (OAuth2 code 소비 실패)", e);
+            throw new CustomException(ErrorCode.COMMON_008);
+        }
+        if (value == null) return null;
+        int idx = value.indexOf(CODE_SEP);
+        if (idx < 0) return null; // 손상된 값
+        return new OAuth2Handoff(value.substring(0, idx), value.substring(idx + 1));
+    }
+
     /**
      * RT를 SHA-256으로 단방향 해싱 (Hex 문자열)
      *
@@ -239,5 +274,7 @@ public class RedisTokenService {
             throw new IllegalStateException("SHA-256 알고리즘을 찾을 수 없습니다", e);
         }
     }
+
+    public record OAuth2Handoff(String deviceId, String accessToken) {}
 
 }

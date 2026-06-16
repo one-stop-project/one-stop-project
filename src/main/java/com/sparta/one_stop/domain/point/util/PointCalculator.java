@@ -26,7 +26,7 @@ public class PointCalculator {
     // @return 적립 포인트 (소수점 버림)
     // @throws CustomException 음수 또는 비정상 값
     public static int calculateEarnedPoint(int baseAmount) {
-        return calculateEarnedPoint(baseAmount, EARN_RATE);
+        return calculateEarnedPoint(BigDecimal.valueOf(baseAmount), EARN_RATE);
     }
 
     // 적립 포인트 계산(커스텀 적립률)
@@ -34,17 +34,15 @@ public class PointCalculator {
     // @param baseAmount : 적립 기준 금액
     // @param rate : 적립률 (예: 0.01, 0.025, 0.05)
     // @return 적립 포인트(소수점 버림)
-    public static int calculateEarnedPoint(int baseAmount, BigDecimal rate) {
+    public static int calculateEarnedPoint(BigDecimal baseAmount, BigDecimal rate) {
         validateBaseAmount(baseAmount);
         validateRate(rate);
 
-        if (baseAmount == 0) {
+        if (baseAmount.compareTo(BigDecimal.ZERO) == 0) {
             return 0;
         }
 
-        // BigDecimal로 정밀 계산 → setScale(0, FLOOR)로 소수점 버림 → intValueExact()로 안전 변환
-        return BigDecimal.valueOf(baseAmount)
-            .multiply(rate)
+        return baseAmount.multiply(rate)
             .setScale(0, RoundingMode.FLOOR)
             .intValueExact();
     }
@@ -60,7 +58,7 @@ public class PointCalculator {
     // return 적립 기준 금액 : 음수면 0으로 clamp
 
     public static int calculateEarnBase(int productAmount, int couponDiscount, int usedPoint) {
-        validateBaseAmount(productAmount);
+        validateBaseAmount(BigDecimal.valueOf(productAmount));
         if (couponDiscount < 0) {
             throw new CustomException(ErrorCode.COUPON_008, "쿠폰 할인 금액은 음수일 수 없습니다");
         }
@@ -74,14 +72,12 @@ public class PointCalculator {
 
 
     //----------------------검증-----------------------
-    private static void validateBaseAmount(int amount) {
-        if (amount < 0) {
-            throw new CustomException(ErrorCode.POINT_003,
-                "포인트 금액은 0 이상이어야 합니다: " + amount);
+    private static void validateBaseAmount(BigDecimal amount) {
+        if (amount.compareTo(BigDecimal.ZERO) < 0) {
+            throw new CustomException(ErrorCode.POINT_003, "포인트 금액은 0 이상이어야 합니다.");
         }
-        if (amount > SAFE_MAX_AMOUNT) {
-            throw new CustomException(ErrorCode.POINT_003,
-                "포인트 금액이 최대 한도를 초과했습니다: " + amount);
+        if (amount.compareTo(new BigDecimal(SAFE_MAX_AMOUNT)) > 0) {
+            throw new CustomException(ErrorCode.POINT_003, "포인트 금액이 최대 한도를 초과했습니다.");
         }
     }
 

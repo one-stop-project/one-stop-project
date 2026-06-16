@@ -9,6 +9,7 @@ import com.sparta.one_stop.global.response.ApiResponse;
 import com.sparta.one_stop.global.security.AuthUser;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.annotation.Profile;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
@@ -54,6 +55,7 @@ public class PointController {
 
     // 테스트용 포인트 충전
     @PostMapping("/charge")
+    @Profile({"local", "test", "dev"}) // ★ prod 환경에서는 404 처리됨
     public ResponseEntity<ApiResponse<PointChargeResponse>> chargePoint(
         @AuthenticationPrincipal AuthUser authUser,
         @Valid @RequestBody PointChargeRequest request

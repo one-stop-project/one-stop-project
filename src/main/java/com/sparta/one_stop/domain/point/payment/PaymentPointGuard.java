@@ -74,16 +74,17 @@ public class PaymentPointGuard {
     }
 
     /**
-     * 결제 승인 직전 재검증 — 엄격한 검증 (락 포함)
+     * 결제 승인 직전 재검증 — 별도 트랜잭션에서 최신 잔액 재조회
      *
      * <p><b>주문 생성과 결제 사이에 다른 트랜잭션이 차감했을 수 있음</b>
      * <br>예: 다른 탭에서 동시 결제, 만료 배치 실행 등
      *
-     * <p>{@code REQUIRES_NEW}로 별도 트랜잭션 — 결제 트랜잭션 영향 격리
+     * <p>{@code REQUIRES_NEW}로 별도 트랜잭션에서 최신 상태를 다시 조회한다.
+     * 이 메서드 자체는 비관적 락을 획득하지 않으며, 실제 차감 시 낙관적 락으로 충돌을 감지한다.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)
     public void validateBeforePaymentApproval(Long userId, Integer requestedPoint, Long orderId) {
-        if (requestedPoint == null || requestedPoint <= 0) {
+        if (requestedPoint == null || requestedPoint == 0) {
             return; // 포인트 미사용 결제
         }
 
@@ -113,3 +114,4 @@ public class PaymentPointGuard {
         }
     }
 }
+

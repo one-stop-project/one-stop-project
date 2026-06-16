@@ -141,6 +141,13 @@ public class AuthService {
         rateLimitService.tryConsume(RateLimitPolicy.DEVICE_REGISTER_PER_IP, clientIp);
 
         boolean isNewDevice = deviceLimitService.isNewDevice(user.getId(), deviceId);
+        if (isNewDevice) {
+            // 등록 전에 계정별 신규 기기 제한을 검증해 실패 시 유령 기기가 남지 않게 한다.
+            rateLimitService.tryConsume(
+                RateLimitPolicy.DEVICE_REGISTER_PER_ACCOUNT,
+                String.valueOf(user.getId())
+            );
+        }
 
         // 3. 토큰 발급 (트랜잭션 외부 — DB 부담 없음)
         String accessToken = jwtTokenProvider.createAccessToken(user.getId(), user.getRole(), user.getTokenVersion());
@@ -149,10 +156,6 @@ public class AuthService {
         // 4. 기기 등록 (Lua Script 원자 실행) — 결과 객체 활용
         DeviceLimitService.DeviceRegistrationResult result =
             deviceLimitService.registerDevice(user.getId(), deviceId);
-
-        if (result.isNewDevice()) {
-            rateLimitService.tryConsume(RateLimitPolicy.DEVICE_REGISTER_PER_ACCOUNT, String.valueOf(user.getId()));
-        }
 
         // 5. RT 저장
         redisTokenService.saveRefreshToken(
@@ -190,6 +193,7 @@ public class AuthService {
             // 추방된 기기의 RT 강제 삭제 (이미 deviceLimitService에서 ZSET 추방되어도
             // RT는 살아있으므로 명시 삭제)
             redisTokenService.deleteRefreshToken(user.getId(), result.evictedDeviceId());
+            deviceContextService.removeContext(user.getId(), result.evictedDeviceId());
         }
 
         // Fail-Open 발생 시 보안 이벤트 (운영팀 인지 필요)
@@ -390,6 +394,22 @@ public class AuthService {
         if (request.businessNumber() == null || request.businessNumber().isBlank()) {
             throw new CustomException(ErrorCode.SELLER_011);
         }
+    }
+
+    // ━━━ POST /api/auth/oauth2/exchange ━━━
+    public TokenRefreshResponse exchangeOAuth2Code(String code, String deviceIdCookie) {
+        RedisTokenService.OAuth2Handoff handoff = redisTokenService.consumeOAuth2Code(code);
+        if (handoff == null) {
+            throw new CustomException(ErrorCode.AUTH_010, "유효하지 않거나 만료된 인증 코드입니다.");
+        }
+
+        // (선택) device_id 바인딩 — 아래 "남는 판단" 참고. cross-origin이면 주의사항 있음.
+        // if (deviceIdCookie == null || !handoff.deviceId().equals(deviceIdCookie)) {
+        //     throw new CustomException(ErrorCode.AUTH_006, "인증 코드와 기기가 일치하지 않습니다.");
+        // }
+
+        return TokenRefreshResponse.of(handoff.accessToken(),
+            jwtTokenProvider.getAccessTokenExpirySeconds());
     }
 }
 

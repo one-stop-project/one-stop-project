@@ -83,6 +83,9 @@ public class PointTxService {
             );
         }
 
+        // 잔액 응답 전에 무결성 검증 — DB 직접 조작 감지
+        point.verifyIntegrity();
+
         // 포인트 이력 페이징 조회
         Page<PointHistory> historyPage = findHistoryPage(
             userId,
@@ -124,6 +127,10 @@ public class PointTxService {
 
         // 포인트 계정 조회, 없으면 생성
         Point point = pointRepository.findByUserId(userId)
+            .map(existing -> {
+                existing.verifyIntegrity();
+                return existing;
+            })
             .orElseGet(() -> pointRepository.save(Point.createInitial(user)));
 
         Integer amount = request.amount();
@@ -174,8 +181,7 @@ public class PointTxService {
             throw new CustomException(ErrorCode.COMMON_001);
         }
 
-        Point point = pointRepository.findByUserId(userId)
-            .orElseThrow(() -> new CustomException(ErrorCode.POINT_001));
+        Point point = getVerifiedPoint(userId);
 
         validateEnoughBalance(
             point,
@@ -237,6 +243,7 @@ public class PointTxService {
 
         Point point = useHistories.get(0)
             .getPoint();
+        point.verifyIntegrity();
 
         LocalDate today = LocalDate.now();
         int restoredPoint = 0;
@@ -307,6 +314,10 @@ public class PointTxService {
 
         // Point 계정 없으면 새로 생성
         Point point = pointRepository.findByUserId(userId)
+            .map(existing -> {
+                existing.verifyIntegrity();
+                return existing;
+            })
             .orElseGet(() -> {
                 User user = order.getUser();
                 return pointRepository.save(Point.createInitial(user));
@@ -350,6 +361,19 @@ public class PointTxService {
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     //  내부 헬퍼 메서드 (기존 PointService에서 그대로 이동)
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+
+    /**
+     * 기존 포인트 계정을 조회하고 무결성을 검증한다.
+     * 포인트 계정이 반드시 존재해야 하는 조회/차감 경로에서 사용한다.
+     */
+    private Point getVerifiedPoint(Long userId) {
+        Point point = pointRepository.findByUserId(userId)
+            .orElseThrow(() -> new CustomException(ErrorCode.POINT_001));
+
+        point.verifyIntegrity();
+        return point;
+    }
 
     private void validateChargeAmount(Integer amount) {
         if (amount == null

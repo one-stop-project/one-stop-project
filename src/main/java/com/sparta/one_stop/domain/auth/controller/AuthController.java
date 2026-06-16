@@ -1,6 +1,7 @@
 package com.sparta.one_stop.domain.auth.controller;
 
 import com.sparta.one_stop.domain.auth.dto.request.LoginRequest;
+import com.sparta.one_stop.domain.auth.dto.request.OAuth2ExchangeRequest;
 import com.sparta.one_stop.domain.auth.dto.request.SignUpRequest;
 import com.sparta.one_stop.domain.auth.dto.request.TokenRefreshRequest;
 import com.sparta.one_stop.domain.auth.dto.response.LoginResponse;
@@ -172,6 +173,18 @@ public class AuthController {
             .header(HttpHeaders.SET_COOKIE, newRtCookie)
             .body(ApiResponse.success(result.response()));
     }
+
+    @Operation(summary = "소셜 로그인 코드 교환",
+        description = "OAuth2 성공 후 받은 일회용 code를 Access Token으로 교환합니다. refresh_token/device_id는 이미 쿠키로 설정되어 있습니다.")
+    @PostMapping("/oauth2/exchange")
+    public ResponseEntity<ApiResponse<TokenRefreshResponse>> exchangeOAuth2Code(
+        @Valid @RequestBody OAuth2ExchangeRequest request,
+        @CookieValue(value = "device_id", required = false) String deviceId) {
+        return ResponseEntity.ok(
+            ApiResponse.success(authService.exchangeOAuth2Code(request.code(), deviceId)));
+    }
+
+
 
     @Operation(
         summary = "로그아웃",
