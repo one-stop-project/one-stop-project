@@ -10,6 +10,7 @@ import org.springframework.web.client.RestClient;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -115,6 +116,48 @@ class SlackAlertServiceTest {
         assertThat(text).contains("payment-approved-1");
         assertThat(text).contains("PAYMENT_APPROVED");
         assertThat(text).contains("Kafka 발행 실패");
+    }
+
+    @Test
+    @DisplayName("Slack 전송 실패 - RestClient 호출 중 예외가 발생해도 외부로 전파하지 않는다")
+    @SuppressWarnings({
+        "rawtypes",
+        "unchecked"
+    })
+    void sendOutboxDeadAlert_success_whenRestClientThrowsException() {
+        // given
+        OutboxEvent outboxEvent = createDeadOutboxEvent();
+        String webhookUrl = "https://hooks.slack.com/services/test/webhook";
+
+        RestClient.RequestBodyUriSpec requestBodyUriSpec =
+            mock(RestClient.RequestBodyUriSpec.class);
+        RestClient.RequestBodySpec requestBodySpec =
+            mock(RestClient.RequestBodySpec.class);
+        RestClient.ResponseSpec responseSpec =
+            mock(RestClient.ResponseSpec.class);
+
+        when(slackAlertProperties.isEnabled()).thenReturn(true);
+        when(slackAlertProperties.hasWebhookUrl()).thenReturn(true);
+        when(slackAlertProperties.getWebhookUrl()).thenReturn(webhookUrl);
+
+        when(restClient.post()).thenReturn(requestBodyUriSpec);
+        when(requestBodyUriSpec.uri(webhookUrl)).thenReturn(requestBodySpec);
+        when(requestBodySpec.body(any(Map.class))).thenReturn(requestBodySpec);
+        when(requestBodySpec.retrieve()).thenReturn(responseSpec);
+
+        // Slack Webhook 호출 중 예외 발생
+        when(responseSpec.toBodilessEntity())
+            .thenThrow(new RuntimeException("Slack webhook failed"));
+
+        // when & then
+        assertThatCode(() -> slackAlertService.sendOutboxDeadAlert(outboxEvent))
+            .doesNotThrowAnyException();
+
+        verify(restClient).post();
+        verify(requestBodyUriSpec).uri(webhookUrl);
+        verify(requestBodySpec).body(any(Map.class));
+        verify(requestBodySpec).retrieve();
+        verify(responseSpec).toBodilessEntity();
     }
 
     private OutboxEvent createDeadOutboxEvent() {

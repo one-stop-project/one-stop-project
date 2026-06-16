@@ -185,6 +185,73 @@ class RateLimitServiceTest {
     }
 
     @Test
+    @DisplayName("isAllowed 성공 - RedisSystemException 발생 시 Fail-Open으로 true를 반환한다")
+    void isAllowed_success_returnTrue_whenRedisSystemExceptionOccurs() {
+        // given
+        RateLimitPolicy policy = RateLimitPolicy.PAYMENT_APPROVE_PER_USER;
+        String identifier = "1";
+        String redisKey = policy.buildKey(identifier);
+
+        when(redisTemplate.execute(
+            any(RedisScript.class),
+            eq(List.of(redisKey)),
+            eq(String.valueOf(policy.getWindowSeconds())),
+            eq(String.valueOf(policy.getLimit()))
+        )).thenThrow(new RedisSystemException(
+            "Redis system error",
+            new RuntimeException("redis down")
+        ));
+
+        // when
+        boolean result = rateLimitService.isAllowed(
+            policy,
+            identifier
+        );
+
+        // then
+        assertThat(result).isTrue();
+
+        verify(redisTemplate).execute(
+            any(RedisScript.class),
+            eq(List.of(redisKey)),
+            eq(String.valueOf(policy.getWindowSeconds())),
+            eq(String.valueOf(policy.getLimit()))
+        );
+    }
+
+    @Test
+    @DisplayName("isAllowed 성공 - Redis 연결 장애 발생 시 Fail-Open으로 true를 반환한다")
+    void isAllowed_success_returnTrue_whenRedisConnectionFails() {
+        // given
+        RateLimitPolicy policy = RateLimitPolicy.PAYMENT_APPROVE_PER_USER;
+        String identifier = "1";
+        String redisKey = policy.buildKey(identifier);
+
+        when(redisTemplate.execute(
+            any(RedisScript.class),
+            eq(List.of(redisKey)),
+            eq(String.valueOf(policy.getWindowSeconds())),
+            eq(String.valueOf(policy.getLimit()))
+        )).thenThrow(new RedisConnectionFailureException("Redis connection failed"));
+
+        // when
+        boolean result = rateLimitService.isAllowed(
+            policy,
+            identifier
+        );
+
+        // then
+        assertThat(result).isTrue();
+
+        verify(redisTemplate).execute(
+            any(RedisScript.class),
+            eq(List.of(redisKey)),
+            eq(String.valueOf(policy.getWindowSeconds())),
+            eq(String.valueOf(policy.getLimit()))
+        );
+    }
+
+    @Test
     @DisplayName("isAllowed 실패 - 제한 횟수를 초과하면 false를 반환한다")
     void isAllowed_fail_whenLimitExceeded() {
         // given

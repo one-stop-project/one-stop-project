@@ -29,6 +29,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 
@@ -243,10 +244,36 @@ class ReviewServiceTest {
             lenient().when(user.getId()).thenReturn(userId);
             lenient().when(rv.getProduct()).thenReturn(product);
             lenient().when(product.getId()).thenReturn(10L);
-            lenient().when(rv.getImages()).thenReturn(new java.util.ArrayList<>());
+            lenient().when(rv.getImages()).thenReturn(new ArrayList<>());
             lenient().when(rv.getCreatedAt()).thenReturn(LocalDateTime.now());
-            // soft delete 되지 않은 상태
             lenient().when(rv.getStatus()).thenReturn(ReviewStatus.ACTIVE);
+            return rv;
+        }
+
+        /**
+         * 기존 이미지가 있는 리뷰 mock 생성 헬퍼.
+         * 실제 ReviewImage 객체를 생성하여 이미지 동기화 로직(orphanRemoval) 검증에 사용.
+         */
+        private Review reviewWithImages(Long userId, List<String> existingUrls) {
+            Review  rv      = mock(Review.class);
+            User    user    = mock(User.class);
+            Product product = mock(Product.class);
+            lenient().when(rv.getUser()).thenReturn(user);
+            lenient().when(user.getId()).thenReturn(userId);
+            lenient().when(rv.getProduct()).thenReturn(product);
+            lenient().when(product.getId()).thenReturn(10L);
+            lenient().when(rv.getCreatedAt()).thenReturn(LocalDateTime.now());
+            lenient().when(rv.getStatus()).thenReturn(ReviewStatus.ACTIVE);
+
+            ArrayList<ReviewImage> images = new ArrayList<>();
+            for (int i = 0; i < existingUrls.size(); i++) {
+                images.add(ReviewImage.builder()
+                    .review(rv)
+                    .imageUrl(existingUrls.get(i))
+                    .displayOrder(i)
+                    .build());
+            }
+            lenient().when(rv.getImages()).thenReturn(images);
             return rv;
         }
 
@@ -291,6 +318,83 @@ class ReviewServiceTest {
                 .extracting(ReviewImage::getImageUrl)
                 .containsExactly("new1.jpg", "new2.jpg");
         }
+
+        // ── 이미지 동기화 테스트 (PR #401 orphanRemoval 기반 로직 검증) ──
+
+        @Test
+        @DisplayName("성공 - 기존 이미지 전체 삭제 (빈 리스트)")
+        void success_emptyImages_removeAll() {
+            Long reviewId = 1L;
+            Long userId   = 1L;
+
+            Review rv = reviewWithImages(userId, List.of("existing1.jpg", "existing2.jpg"));
+            when(reviewRepository.findById(reviewId)).thenReturn(Optional.of(rv));
+
+            UpdateReviewRequest req = mock(UpdateReviewRequest.class);
+            when(req.getRating()).thenReturn(4);
+            when(req.getContent()).thenReturn("이미지를 전부 삭제합니다");
+            when(req.getImageUrls()).thenReturn(List.of());
+
+            reviewService.updateReview(authUser(userId), reviewId, req);
+
+            assertThat(rv.getImages()).isEmpty();
+        }
+
+        @Test
+        @DisplayName("성공 - 기존 이미지 유지 + 신규 추가")
+        void success_retainAndAdd() {
+            Long reviewId = 1L;
+            Long userId   = 1L;
+
+            Review rv = reviewWithImages(userId, List.of("existing1.jpg", "existing2.jpg"));
+            when(reviewRepository.findById(reviewId)).thenReturn(Optional.of(rv));
+
+            UpdateReviewRequest req = mock(UpdateReviewRequest.class);
+            when(req.getRating()).thenReturn(5);
+            when(req.getContent()).thenReturn("기존 유지하면서 새 이미지 추가");
+            // existing1 유지, existing2 삭제, new1 추가
+            when(req.getImageUrls()).thenReturn(List.of("existing1.jpg", "new1.jpg"));
+
+            reviewService.updateReview(authUser(userId), reviewId, req);
+
+            assertThat(rv.getImages()).hasSize(2);
+            assertThat(rv.getImages())
+                .extracting(ReviewImage::getImageUrl)
+                .containsExactly("existing1.jpg", "new1.jpg");
+            assertThat(rv.getImages().get(0).getDisplayOrder()).isEqualTo(0);
+            assertThat(rv.getImages().get(1).getDisplayOrder()).isEqualTo(1);
+        }
+
+        @Test
+        @DisplayName("성공 - 이미지 순서 변경")
+        void success_reorderImages() {
+            Long reviewId = 1L;
+            Long userId   = 1L;
+
+            Review rv = reviewWithImages(userId, List.of("a.jpg", "b.jpg", "c.jpg"));
+            when(reviewRepository.findById(reviewId)).thenReturn(Optional.of(rv));
+
+            UpdateReviewRequest req = mock(UpdateReviewRequest.class);
+            when(req.getRating()).thenReturn(5);
+            when(req.getContent()).thenReturn("이미지 순서만 변경합니다");
+            when(req.getImageUrls()).thenReturn(List.of("c.jpg", "a.jpg", "b.jpg"));
+
+            reviewService.updateReview(authUser(userId), reviewId, req);
+
+            assertThat(rv.getImages()).hasSize(3);
+            assertThat(rv.getImages())
+                .extracting(ReviewImage::getImageUrl)
+                .containsExactlyInAnyOrder("a.jpg", "b.jpg", "c.jpg");
+            rv.getImages().forEach(img -> {
+                switch (img.getImageUrl()) {
+                    case "c.jpg" -> assertThat(img.getDisplayOrder()).isEqualTo(0);
+                    case "a.jpg" -> assertThat(img.getDisplayOrder()).isEqualTo(1);
+                    case "b.jpg" -> assertThat(img.getDisplayOrder()).isEqualTo(2);
+                }
+            });
+        }
+
+        // ── 실패 케이스 ──
 
         @Test
         @DisplayName("실패 - 리뷰를 찾을 수 없음")
@@ -388,7 +492,6 @@ class ReviewServiceTest {
 
             reviewService.deleteReview(authUser(userId), reviewId);
 
-            // hard delete가 아닌 soft delete 확인
             verify(rv).delete();
             verify(reviewRepository, never()).delete(any());
         }
@@ -528,7 +631,6 @@ class ReviewServiceTest {
             var result = reviewService.getReviewable(authUser(userId));
 
             assertThat(result).isEmpty();
-            // 방어코드로 인해 findReviewedOrderItemIds 호출 자체가 없어야 함
             verify(reviewRepository, never()).findReviewedOrderItemIds(anyList());
         }
 
