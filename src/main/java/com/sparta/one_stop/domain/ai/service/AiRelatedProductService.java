@@ -1,9 +1,8 @@
 package com.sparta.one_stop.domain.ai.service;
 
-import com.sparta.one_stop.domain.ai.dto.RelatedProductResponse;
 import com.sparta.one_stop.domain.ai.repository.AiProductReader;
+import com.sparta.one_stop.domain.product.dto.response.ProductSummaryResponse;
 import com.sparta.one_stop.domain.product.entity.Product;
-import com.sparta.one_stop.domain.product.entity.ProductItem;
 import com.sparta.one_stop.domain.product.repository.ProductRepository;
 import com.sparta.one_stop.domain.product.service.PopularProductService;
 import com.sparta.one_stop.global.enums.product.ProductStatus;
@@ -36,7 +35,7 @@ public class AiRelatedProductService {
     private final PopularProductService popularProductService;
 
     @CircuitBreaker(name = "ai-assistant", fallbackMethod = "getRelatedProductsFallback")
-    public List<RelatedProductResponse> getRelatedProducts(Long productId) {
+    public List<ProductSummaryResponse> getRelatedProducts(Long productId) {
         Product product = productRepository.findById(productId)
             .orElseThrow(() -> new CustomException(ErrorCode.PRODUCT_001));
 
@@ -61,17 +60,17 @@ public class AiRelatedProductService {
             .filter(this::hasStock)
             .sorted((a, b) -> Long.compare(b.getSalesCount(), a.getSalesCount()))
             .limit(RELATED_LIMIT)
-            .map(RelatedProductResponse::from)
+            .map(ProductSummaryResponse::from)
             .toList();
     }
 
     // Circuit Breaker fallback — Redis ZSET 인기상품 반환
-    List<RelatedProductResponse> getRelatedProductsFallback(Long productId, Throwable t) {
+    List<ProductSummaryResponse> getRelatedProductsFallback(Long productId, Throwable t) {
         log.warn("[AI Related] circuit breaker triggered. productId={} reason={}", productId, t.getMessage());
         return getPopularFallback(productId);
     }
 
-    private List<RelatedProductResponse> getPopularFallback(Long productId) {
+    private List<ProductSummaryResponse> getPopularFallback(Long productId) {
         List<Long> popularIds = popularProductService.getPopularProductIds(RELATED_LIMIT * 2);
         if (popularIds.isEmpty()) {
             return List.of();
@@ -84,7 +83,7 @@ public class AiRelatedProductService {
             .filter(Objects::nonNull)
             .filter(this::hasStock)
             .limit(RELATED_LIMIT)
-            .map(RelatedProductResponse::from)
+            .map(ProductSummaryResponse::from)
             .toList();
     }
 

@@ -14,11 +14,12 @@ public interface AiProductReader extends JpaRepository<Product, Long> {
 
     // 같은 카테고리 내 상품 ID 조회 (자기 자신 제외, 인기순)
     @Query("""
-        SELECT DISTINCT p.id FROM Product p
+        SELECT p.id FROM Product p
         JOIN p.categoryMappings m
         WHERE m.category.id IN :categoryIds
         AND p.id != :excludeId
         AND p.status = :status
+        GROUP BY p.id
         ORDER BY p.salesCount DESC
         """)
     List<Long> findIdsByCategoryIds(
