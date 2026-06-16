@@ -103,18 +103,22 @@ public class BuyerProductService {
     }
 
     // 인기 상위 N개 중 노출 가능(승인·판매중 옵션 보유) 상품을 랭킹 순서로 반환.
-    // Redis 랭킹이 비었거나 장애면 DB 판매수 상위 N개로 대체한다.
+    // Redis 랭킹이 비었거나 장애면 DB 판매수 상위 N개 ID로 대체한다.
     private List<ProductSummaryResponse> rankedPopular() {
         List<Long> popularIds = popularProductService.getPopularProductIds(POPULAR_MAX);
 
         if (popularIds.isEmpty()) {
-            return productRepository.findApproved(
+            popularIds = productRepository.findApproved(
                     ProductStatus.APPROVED, SellerStatus.APPROVED,
                     PageRequest.of(0, POPULAR_MAX, Sort.by(Sort.Direction.DESC, "salesCount")))
-                .map(ProductSummaryResponse::from)
-                .getContent();
+                .stream().map(Product::getId).toList();
+        }
+        if (popularIds.isEmpty()) {
+            return List.of();
         }
 
+        // 폴백·정상 경로 공통: 노출 가능(승인·판매자 승인·판매중 옵션 보유) 상품만 랭킹 순서로.
+        // 폴백도 isVisibleOnSale 필터를 거쳐 전 옵션 STOP인 상품의 0원 노출을 막는다.
         Map<Long, Product> productMap = productRepository.findAllByIdsWithItems(popularIds).stream()
             .collect(Collectors.toMap(Product::getId, Function.identity()));
 
@@ -162,7 +166,9 @@ public class BuyerProductService {
         Product product = productRepository.findWithCollectionsById(productId)
             .orElseThrow(() -> new CustomException(ErrorCode.PRODUCT_001));
 
-        if (!product.isApproved() || product.getSeller().getStatus() != SellerStatus.APPROVED) {
+        // 승인·판매자 승인뿐 아니라 판매중(ON_SALE) 옵션이 최소 1개 있어야 노출
+        // (전 옵션 STOP인 상품이 0원·빈 옵션 상세로 노출되는 것 방지)
+        if (!product.isVisibleOnSale()) {
             throw new CustomException(ErrorCode.PRODUCT_002);
         }
         return product;
