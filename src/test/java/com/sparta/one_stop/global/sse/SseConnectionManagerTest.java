@@ -54,6 +54,41 @@ class SseConnectionManagerTest {
     }
 
     @Test
+    @DisplayName("connect 실패 - 초기 connect 이벤트 전송 실패 시 emitter를 제거하고 completeWithError를 호출한다")
+    void connect_fail_whenInitialEventSendFails_thenRemoveEmitterAndCompleteWithError() throws Exception {
+        // given
+        Long userId = 1L;
+
+        SseEmitter emitter = mock(SseEmitter.class);
+        IOException sendException = new IOException("SSE initial event failed");
+
+        SseConnectionManager manager = new SseConnectionManager(() -> emitter);
+
+        @SuppressWarnings("unchecked")
+        Map<Long, SseEmitter> emitters =
+            (Map<Long, SseEmitter>) ReflectionTestUtils.getField(
+                manager,
+                "emitters"
+            );
+
+        assertThat(emitters).isNotNull();
+
+        doThrow(sendException)
+            .when(emitter)
+            .send(any(SseEmitter.SseEventBuilder.class));
+
+        // when
+        SseEmitter result = manager.connect(userId);
+
+        // then
+        assertThat(result).isSameAs(emitter);
+        assertThat(emitters).doesNotContainKey(userId);
+
+        verify(emitter).send(any(SseEmitter.SseEventBuilder.class));
+        verify(emitter).completeWithError(sendException);
+    }
+
+    @Test
     @DisplayName("send 성공 - 연결된 사용자에게 전송해도 예외가 발생하지 않는다")
     void send_success_whenUserIsConnected() {
         // given
