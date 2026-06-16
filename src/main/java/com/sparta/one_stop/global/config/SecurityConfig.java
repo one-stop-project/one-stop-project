@@ -5,10 +5,12 @@ import com.sparta.one_stop.global.security.JwtAuthenticationEntryPoint;
 import com.sparta.one_stop.global.security.JwtAuthenticationFilter;
 import com.sparta.one_stop.global.security.JwtExceptionFilter;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.actuate.autoconfigure.security.servlet.EndpointRequest;
 import org.springframework.boot.autoconfigure.security.servlet.PathRequest;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
@@ -41,6 +43,16 @@ public class SecurityConfig {
     private final UrlBasedCorsConfigurationSource corsConfigurationSource;
     private final SecurityHeaderConfig securityHeadersConfig;
 
+
+    @Bean
+    @Order(0)
+    public SecurityFilterChain actuatorSecurityFilterChain(HttpSecurity http) throws Exception {
+        http
+            .securityMatcher(EndpointRequest.toAnyEndpoint())
+            .authorizeHttpRequests(auth -> auth.anyRequest().permitAll())
+            .csrf(AbstractHttpConfigurer::disable);
+        return http.build();
+    }
 
     // @Component 필터의 서블릿 자동 등록 비활성화 (Security 체인에서만 실행되도록)
     @Bean
