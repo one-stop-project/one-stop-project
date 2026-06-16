@@ -79,6 +79,8 @@ springdoc:
     path: /v3/api-docs
 
 management:
+  server:
+    port: 8081
   endpoints:
     web:
       exposure:
