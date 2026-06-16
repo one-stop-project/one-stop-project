@@ -16,6 +16,7 @@ import com.sparta.one_stop.domain.user.entity.Seller;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.UserRepository;
 import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import com.sparta.one_stop.global.security.AuthUser;
 import jakarta.servlet.http.HttpServletResponse;
 import org.junit.jupiter.api.DisplayName;
@@ -965,6 +966,65 @@ class CartServiceTest {
 
         // then
         verify(cartItemRepository).delete(cartItem);
+    }
+
+    @Test
+    @DisplayName("로그인 장바구니 삭제 실패 - 장바구니가 없으면 예외 발생")
+    void deleteCartItemByItemId_fail_whenCartDoesNotExist() {
+        // given
+        Long userId = 1L;
+        Long itemId = 101L;
+
+        when(cartRepository.findByUserId(userId))
+            .thenReturn(Optional.empty());
+
+        // when & then
+        assertThatThrownBy(() -> cartService.deleteCartItemByItemId(
+            userId,
+            itemId
+        ))
+            .isInstanceOf(CustomException.class)
+            .extracting("errorCode")
+            .isEqualTo(ErrorCode.CART_004);
+
+        verify(cartItemRepository, never()).findByCartIdAndProductItemId(
+            any(),
+            any()
+        );
+        verify(cartItemRepository, never()).delete(any(CartItem.class));
+    }
+
+    @Test
+    @DisplayName("로그인 장바구니 삭제 실패 - 장바구니 상품이 없으면 예외 발생")
+    void deleteCartItemByItemId_fail_whenCartItemDoesNotExist() {
+        // given
+        Long userId = 1L;
+        Long itemId = 101L;
+
+        Cart cart = cart(10L);
+
+        when(cartRepository.findByUserId(userId))
+            .thenReturn(Optional.of(cart));
+
+        when(cartItemRepository.findByCartIdAndProductItemId(
+            cart.getId(),
+            itemId
+        )).thenReturn(Optional.empty());
+
+        // when & then
+        assertThatThrownBy(() -> cartService.deleteCartItemByItemId(
+            userId,
+            itemId
+        ))
+            .isInstanceOf(CustomException.class)
+            .extracting("errorCode")
+            .isEqualTo(ErrorCode.CART_004);
+
+        verify(cartItemRepository).findByCartIdAndProductItemId(
+            cart.getId(),
+            itemId
+        );
+        verify(cartItemRepository, never()).delete(any(CartItem.class));
     }
 
     private User user() {
