@@ -89,18 +89,22 @@ public class NotificationService {
      * 알림 DB 저장이 롤백되었는데 실시간 알림만 먼저 전송되는 상황을 막기 위해
      * Redis publish는 트랜잭션 커밋 이후에 수행한다.
      *
-     * 예외 상황:
+     * 처리 방식:
      * - 현재 트랜잭션 동기화가 활성화되어 있으면 afterCommit에서 발행한다.
      * - 트랜잭션 동기화가 없는 상황에서 호출되면 즉시 발행한다.
+     * - Redis publish는 publishSafely()를 통해 수행하여 발행 실패가 외부로 전파되지 않도록 한다.
      *
-     * Redis publish 실패는 Notification DB 저장 결과에 영향을 주지 않는다.
-     * 실제 발행 실패 처리는 NotificationRedisPublisher 내부에서 로그로 남긴다.
+     * 주의:
+     * - Redis Pub/Sub은 메시지를 영속 저장하지 않는다.
+     * - 따라서 알림 내역의 정합성은 Notification DB 저장으로 보장한다.
+     * - Redis Pub/Sub은 다중 서버 간 실시간 전파 용도로만 사용한다.
+     * - Redis 발행 실패는 알림 저장 결과에 영향을 주지 않도록 NotificationService에서 방어한다.
      */
     private void publishAfterCommit(Notification notification) {
         NotificationPubSubMessage message = NotificationPubSubMessage.from(notification);
 
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            notificationRedisPublisher.publish(message);
+            publishSafely(message);
             return;
         }
 
@@ -108,10 +112,29 @@ public class NotificationService {
             new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
-                    notificationRedisPublisher.publish(message);
+                    publishSafely(message);
                 }
             }
         );
+    }
+
+    /**
+     * Redis Pub/Sub 알림 메시지 안전 발행
+     *
+     * Redis publish 실패는 알림 저장 트랜잭션 결과에 영향을 주면 안 된다.
+     * 따라서 발행 중 예외가 발생해도 외부로 전파하지 않고 로그만 남긴다.
+     */
+    private void publishSafely(NotificationPubSubMessage message) {
+        try {
+            notificationRedisPublisher.publish(message);
+        } catch (Exception e) {
+            log.error(
+                "알림 Redis Pub/Sub 발행 실패 - eventId: {}, userId: {}",
+                message.eventId(),
+                message.userId(),
+                e
+            );
+        }
     }
 
 }
