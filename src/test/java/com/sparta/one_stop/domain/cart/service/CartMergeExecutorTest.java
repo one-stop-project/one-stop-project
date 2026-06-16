@@ -342,6 +342,39 @@ class CartMergeExecutorTest {
     }
 
     @Test
+    @DisplayName("merge 제외 - 게스트 장바구니 itemId가 DB에 없으면 조용히 skip한다")
+    void execute_skip_whenGuestCartProductItemDoesNotExist() {
+        // given
+        Long userId = 1L;
+        Cart cart = cart(10L);
+
+        Map<Long, Integer> guestQuantityMap = new LinkedHashMap<>();
+        guestQuantityMap.put(999L, 2);
+
+        when(cartRepository.findByUserId(userId))
+            .thenReturn(Optional.of(cart));
+
+        when(productItemRepository.findAllByIdInWithProduct(List.of(999L)))
+            .thenReturn(List.of());
+
+        when(cartItemRepository.findAllByCartIdWithProductItem(cart.getId()))
+            .thenReturn(List.of());
+
+        // when
+        cartMergeExecutor.execute(
+            userId,
+            guestQuantityMap
+        );
+
+        // then
+        verify(productItemRepository).findAllByIdInWithProduct(List.of(999L));
+        verify(cartItemRepository).findAllByCartIdWithProductItem(cart.getId());
+
+        verify(cartItemRepository, never()).save(any(CartItem.class));
+        verify(userRepository, never()).getReferenceById(any());
+    }
+
+    @Test
     @DisplayName("merge 제외 - stock이 0인 상품은 merge하지 않는다")
     void execute_skip_whenStockIsZero() {
         // given
