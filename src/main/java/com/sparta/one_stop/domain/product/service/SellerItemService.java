@@ -45,10 +45,9 @@ public class SellerItemService {
     public ItemUpdateResponse updateItem(Long userId, Long itemId, ItemUpdateRequest request) {
         boolean stockChanged = request.stock() != null;
 
-        // 재고 변경이 있으면 비관적 락으로 조회
-        ProductItem item = (stockChanged
-                ? productItemRepository.findByIdForUpdate(itemId)
-                : productItemRepository.findById(itemId))
+        // 가격/상태만 바꿔도 옵션 행 전체가 UPDATE되므로(부분 update 아님, @Version 없음),
+        // 동시 입고·주문의 재고 변경을 덮어쓰지 않도록 항상 비관적 락으로 조회한다.
+        ProductItem item = productItemRepository.findByIdForUpdate(itemId)
                 .orElseThrow(() -> new CustomException(ErrorCode.PRODUCT_001));
 
         validateOwner(item, userId);
