@@ -14,9 +14,11 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
@@ -139,6 +141,56 @@ class NotificationServiceTest {
 
         inOrder.verify(notificationRepository).saveAndFlush(any(Notification.class));
         inOrder.verify(notificationRedisPublisher).publish(any(NotificationPubSubMessage.class));
+    }
+
+    @Test
+    @DisplayName("notify 성공 - afterCommit 콜백 내부 Redis Pub/Sub 발행 예외가 외부로 전파되지 않는다")
+    void notify_success_whenAfterCommitPublishThrowsException_thenDoesNotPropagate() {
+        // given
+        Long userId = 1L;
+        String eventId = "payment-approved-3";
+        NotificationType type = NotificationType.PAYMENT_APPROVED;
+        String title = "결제 완료";
+        String message = "주문 #3 결제가 완료되었습니다.";
+
+        if (!TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.initSynchronization();
+        }
+
+        try {
+            when(notificationRepository.existsByEventId(eventId))
+                .thenReturn(false);
+
+            when(notificationRepository.saveAndFlush(any(Notification.class)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+
+            doThrow(new RuntimeException("Redis publish failed"))
+                .when(notificationRedisPublisher)
+                .publish(any(NotificationPubSubMessage.class));
+
+            // when
+            notificationService.notify(
+                userId,
+                eventId,
+                type,
+                title,
+                message
+            );
+
+            TransactionSynchronization synchronization =
+                TransactionSynchronizationManager.getSynchronizations().get(0);
+
+            // then
+            assertThatCode(synchronization::afterCommit)
+                .doesNotThrowAnyException();
+
+            verify(notificationRepository).saveAndFlush(any(Notification.class));
+            verify(notificationRedisPublisher).publish(any(NotificationPubSubMessage.class));
+        } finally {
+            if (TransactionSynchronizationManager.isSynchronizationActive()) {
+                TransactionSynchronizationManager.clearSynchronization();
+            }
+        }
     }
 
     @Test

@@ -119,10 +119,11 @@ public class OutboxEventPublishExecutor {
      * 동작:
      * - 트랜잭션 동기화가 활성화되어 있으면 afterCommit 콜백에 Slack 알림을 등록한다.
      * - 트랜잭션 동기화가 없는 테스트/예외적 호출 환경에서는 즉시 전송한다.
+     * - Slack 알림 전송 중 예외가 발생해도 외부로 전파하지 않고 로그만 남긴다.
      */
     private void sendSlackAlertAfterCommit(OutboxEvent outboxEvent) {
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
-            slackAlertService.sendOutboxDeadAlert(outboxEvent);
+            sendSlackAlertSafely(outboxEvent);
             return;
         }
 
@@ -130,10 +131,22 @@ public class OutboxEventPublishExecutor {
             new TransactionSynchronization() {
                 @Override
                 public void afterCommit() {
-                    slackAlertService.sendOutboxDeadAlert(outboxEvent);
+                    sendSlackAlertSafely(outboxEvent);
                 }
             }
         );
+    }
+
+    private void sendSlackAlertSafely(OutboxEvent outboxEvent) {
+        try {
+            slackAlertService.sendOutboxDeadAlert(outboxEvent);
+        } catch (Exception e) {
+            log.error(
+                "Outbox DEAD Slack 알림 전송 실패 - eventId: {}",
+                outboxEvent.getEventId(),
+                e
+            );
+        }
     }
 
 }
