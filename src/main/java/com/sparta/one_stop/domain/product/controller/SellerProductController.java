@@ -93,6 +93,18 @@ public class SellerProductController {
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
+    // 상품 단건 상세 조회 (판매자 본인) — 미승인 상품·판매중단 옵션·재고 포함
+    @Operation(summary = "내 상품 단건 상세 조회")
+    @GetMapping("/{productId}")
+    public ResponseEntity<ApiResponse<ProductDetailResponse>> getMyProductDetail(
+        @AuthenticationPrincipal AuthUser authUser,
+        @PathVariable Long productId
+    ) {
+        ProductDetailResponse response =
+            sellerProductService.getMyProductDetail(authUser.userId(), productId);
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
     // 상품 수정
     @Operation(summary = "상품 수정")
     @PatchMapping("/{productId}")
