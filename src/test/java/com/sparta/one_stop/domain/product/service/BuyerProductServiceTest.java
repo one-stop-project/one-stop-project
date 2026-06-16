@@ -35,6 +35,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -225,6 +226,27 @@ class BuyerProductServiceTest {
         }
 
         @Test
+        @DisplayName("DB fallback에서도 판매중 옵션 없는 상품은 제외되고 0원으로 노출되지 않는다 (#446)")
+        void fallbackFiltersInvisibleAndNoZeroPrice() {
+            // ZSET 비어 fallback → findApproved가 준 ID 중 노출 가능(ON_SALE) 상품만 통과
+            given(popularProductService.getPopularProductIds(anyInt())).willReturn(List.of());
+            Product visible = approvedProductWithOnSaleItem(1L);   // ON_SALE 1000원
+            Product allStop = approvedProductAllStopItem(2L);      // 전 옵션 STOP → 노출 불가
+            given(productRepository.findApproved(any(), any(), any()))
+                .willReturn(new PageImpl<>(List.of(visible, allStop)));
+            given(productRepository.findAllByIdsWithItems(List.of(1L, 2L)))
+                .willReturn(List.of(visible, allStop));
+
+            CacheableProductList result =
+                buyerProductService.search(null, null, null, null, SortType.POPULAR, PageRequest.of(0, 20));
+
+            // all-STOP(2L) 제외 → 1L만, minPrice는 0원이 아니라 ON_SALE 최저가 1000원
+            assertThat(result.content()).hasSize(1);
+            assertThat(result.content().get(0).getProductId()).isEqualTo(1L);
+            assertThat(result.content().get(0).getMinPrice()).isEqualTo(1000L);
+        }
+
+        @Test
         @DisplayName("ZSET에 ID가 있으면 ZSET 순서대로 상품을 조립한다")
         void validZSetUsesItsOrder() {
             given(popularProductService.getPopularProductIds(anyInt()))
@@ -338,6 +360,15 @@ class BuyerProductServiceTest {
         return product;
     }
 
+    // 옵션은 있으나 전부 STOP인 승인 상품 (#446 시나리오: ON_SALE 옵션 0개 → 노출 불가)
+    private Product approvedProductAllStopItem(Long id) {
+        Product product = approvedProductNoOnSaleItem(id);
+        ProductItem stopItem = ProductItem.builder().price(5000L).stock(3L).build();
+        ReflectionTestUtils.setField(stopItem, "status", ProductItemStatus.STOP);
+        product.getProductItems().add(stopItem);
+        return product;
+    }
+
     private List<Product> visibleProducts(List<Long> ids) {
         return ids.stream().map(this::approvedProductWithOnSaleItem).toList();
     }
@@ -387,13 +418,26 @@ class BuyerProductServiceTest {
         @Test
         @DisplayName("정상 조회 시 응답이 반환된다")
         void approved_returnsResponse() {
-            Product product = approvedProduct();
+            Product product = approvedProductWithOnSaleItem(PRODUCT_ID);
             given(productRepository.findWithCollectionsById(PRODUCT_ID))
                 .willReturn(Optional.of(product));
 
             BuyerProductDetailResponse response = buyerProductService.getDetail(PRODUCT_ID);
 
             assertThat(response).isNotNull();
+        }
+
+        @Test
+        @DisplayName("승인 상품이라도 판매중(ON_SALE) 옵션이 하나도 없으면 PRODUCT_002 예외가 발생한다 (#446)")
+        void approvedButAllOptionsStop_throwsProduct002() {
+            // 전 옵션 STOP → isVisibleOnSale=false → 0원·빈 옵션 상세로 노출되면 안 됨
+            Product allStop = approvedProductAllStopItem(PRODUCT_ID);
+            given(productRepository.findWithCollectionsById(PRODUCT_ID))
+                .willReturn(Optional.of(allStop));
+
+            assertThatThrownBy(() -> buyerProductService.getDetail(PRODUCT_ID))
+                .isInstanceOf(CustomException.class)
+                .extracting("errorCode").isEqualTo(ErrorCode.PRODUCT_002);
         }
 
         @Test
@@ -460,8 +504,8 @@ class BuyerProductServiceTest {
         @Test
         @DisplayName("카테고리 매핑이 비어있으면 빈 리스트를 반환하고 findRelated는 호출되지 않는다")
         void emptyCategoryMappings_returnsEmptyAndSkipsRepo() {
-            // given - approvedProduct는 categoryMappings 비어있음
-            Product product = approvedProduct();
+            // given - ON_SALE 옵션은 있으나 categoryMappings는 비어있음
+            Product product = approvedProductWithOnSaleItem(PRODUCT_ID);
             given(productRepository.findWithCollectionsById(PRODUCT_ID))
                 .willReturn(Optional.of(product));
 
@@ -478,7 +522,7 @@ class BuyerProductServiceTest {
         @DisplayName("카테고리 매핑이 있으면 findRelated에 categoryIds와 excludeId가 전달된다")
         void hasCategoryMappings_callsFindRelatedWithCorrectArgs() {
             // given
-            Product product = approvedProduct();
+            Product product = approvedProductWithOnSaleItem(PRODUCT_ID);
             attachCategory(product, CATEGORY_ID_1);
             attachCategory(product, CATEGORY_ID_2);
             given(productRepository.findWithCollectionsById(PRODUCT_ID))
