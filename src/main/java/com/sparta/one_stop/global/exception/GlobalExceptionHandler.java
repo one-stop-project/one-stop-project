@@ -15,6 +15,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 
 /**
  * 전역 예외 처리 핸들러
@@ -180,6 +181,19 @@ public class GlobalExceptionHandler {
         return ResponseEntity
             .status(ErrorCode.COMMON_003.getStatus())
             .body(ErrorResponse.of(ErrorCode.COMMON_003, null, request.getRequestURI()));
+    }
+
+    /**
+     * 잘못된 JSON 요청 바디 처리
+     * 필드 타입 불일치, JSON 파싱 오류 등 400 반환
+     */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleHttpMessageNotReadable(
+        HttpMessageNotReadableException e, HttpServletRequest request) {
+        log.warn("HttpMessageNotReadableException: {} - {}", request.getRequestURI(), e.getMessage());
+        return ResponseEntity
+            .status(ErrorCode.COMMON_002.getStatus())
+            .body(ErrorResponse.of(ErrorCode.COMMON_002, null, request.getRequestURI()));
     }
 
     /**
