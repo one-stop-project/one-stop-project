@@ -147,6 +147,101 @@ class PaymentServiceTest {
     }
 
     @Test
+    @DisplayName("approvePayment 성공 - 포인트를 사용한 결제 승인 시 포인트 검증과 차감 후 결제를 완료한다")
+    void approvePayment_success_whenUsedPointGreaterThanZero() throws Exception {
+        // given
+        Long userId = 1L;
+        Long orderId = 10L;
+        Long amount = 30000L;
+        Integer usedPoint = 5000;
+
+        ApprovePaymentRequest request = new ApprovePaymentRequest(
+            orderId,
+            amount
+        );
+
+        willDoNothing()
+            .given(couponCommandService)
+            .useCouponByOrder(any(Order.class));
+
+        AtomicReference<OrderStatus> orderStatus =
+            new AtomicReference<>(OrderStatus.PENDING_PAYMENT);
+
+        Order order = payableOrder(
+            orderId,
+            userId,
+            amount,
+            orderStatus
+        );
+
+        when(order.getUsedPoint())
+            .thenReturn(usedPoint);
+
+        when(orderRepository.findByIdWithLock(orderId))
+            .thenReturn(Optional.of(order));
+
+        when(paymentRepository.existsByOrderId(orderId))
+            .thenReturn(false);
+
+        when(paymentRepository.save(any(Payment.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+
+        when(objectMapper.writeValueAsString(any(PaymentApprovedEventPayload.class)))
+            .thenReturn("{\"orderId\":10}");
+
+        // when
+        ApprovePaymentResponse result = paymentService.approvePayment(
+            userId,
+            request
+        );
+
+        // then
+        assertThat(result).isNotNull();
+        assertThat(result.orderId()).isEqualTo(orderId);
+        assertThat(result.finalPrice()).isEqualTo(amount);
+        assertThat(result.status()).isEqualTo(OrderStatus.PAID);
+
+        verify(orderRepository).findByIdWithLock(orderId);
+
+        verify(paymentPointGuard).validateBeforePaymentApproval(
+            userId,
+            usedPoint,
+            orderId
+        );
+
+        verify(pointService).usePoint(
+            userId,
+            order,
+            usedPoint
+        );
+
+        ArgumentCaptor<Payment> paymentCaptor =
+            ArgumentCaptor.forClass(Payment.class);
+
+        verify(paymentRepository).save(paymentCaptor.capture());
+
+        Payment savedPayment = paymentCaptor.getValue();
+
+        assertThat(savedPayment.getOrder()).isSameAs(order);
+        assertThat(savedPayment.getAmount()).isEqualTo(amount);
+        assertThat(savedPayment.getMethod()).isEqualTo(PaymentMethod.MOCK);
+        assertThat(savedPayment.getStatus()).isEqualTo(PaymentStatus.PAID);
+        assertThat(savedPayment.getApprovedAt()).isNotNull();
+
+        verify(order).completePayment();
+        assertThat(orderStatus.get()).isEqualTo(OrderStatus.PAID);
+
+        verify(couponCommandService).useCouponByOrder(order);
+        verify(deliveryService).createDeliveriesForPayment(order);
+
+        verify(outboxEventService).savePaymentApprovedEvent(
+            anyString(),
+            eq(orderId),
+            anyString()
+        );
+    }
+
+    @Test
     @DisplayName("approvePayment 성공 - Outbox payload 직렬화 실패해도 결제는 성공한다")
     void approvePayment_success_whenOutboxPayloadSerializationFails() throws Exception {
         // given
