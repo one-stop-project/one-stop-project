@@ -9,14 +9,17 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -85,6 +88,57 @@ class NotificationServiceTest {
         assertThat(publishedMessage.type()).isEqualTo(type);
         assertThat(publishedMessage.title()).isEqualTo(title);
         assertThat(publishedMessage.message()).isEqualTo(message);
+    }
+
+    @Test
+    @DisplayName("notify 성공 - 트랜잭션 동기화가 비활성 상태이면 즉시 Redis Pub/Sub 발행한다")
+    void notify_success_publishImmediately_whenTransactionSynchronizationInactive() {
+        // given
+        Long userId = 1L;
+        String eventId = "payment-approved-2";
+        NotificationType type = NotificationType.PAYMENT_APPROVED;
+        String title = "결제 완료";
+        String message = "주문 #2 결제가 완료되었습니다.";
+
+        assertThat(TransactionSynchronizationManager.isSynchronizationActive())
+            .isFalse();
+
+        when(notificationRepository.existsByEventId(eventId))
+            .thenReturn(false);
+
+        when(notificationRepository.saveAndFlush(any(Notification.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+
+        // when
+        notificationService.notify(
+            userId,
+            eventId,
+            type,
+            title,
+            message
+        );
+
+        // then
+        ArgumentCaptor<NotificationPubSubMessage> messageCaptor =
+            ArgumentCaptor.forClass(NotificationPubSubMessage.class);
+
+        verify(notificationRedisPublisher).publish(messageCaptor.capture());
+
+        NotificationPubSubMessage publishedMessage = messageCaptor.getValue();
+
+        assertThat(publishedMessage.userId()).isEqualTo(userId);
+        assertThat(publishedMessage.eventId()).isEqualTo(eventId);
+        assertThat(publishedMessage.type()).isEqualTo(type);
+        assertThat(publishedMessage.title()).isEqualTo(title);
+        assertThat(publishedMessage.message()).isEqualTo(message);
+
+        InOrder inOrder = inOrder(
+            notificationRepository,
+            notificationRedisPublisher
+        );
+
+        inOrder.verify(notificationRepository).saveAndFlush(any(Notification.class));
+        inOrder.verify(notificationRedisPublisher).publish(any(NotificationPubSubMessage.class));
     }
 
     @Test
