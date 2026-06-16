@@ -31,35 +31,28 @@ import java.util.Map;
 /**
  * 포인트 만료 배치 — Spring Batch + Cursor 기반
  *
- * <p><b>왜 Cursor 방식인가</b>
- * <ul>
- *   <li>기존 구현은 {@code findExpireTargetHistories()} → 결과 전체를 메모리에 적재 → OOM 위험</li>
- *   <li>JpaCursorItemReader는 ResultSet 커서로 한 건씩 흘려보냄 → 메모리 평탄</li>
- *   <li>수백만 건 만료 시에도 안전</li>
- * </ul>
+ * 왜 Cursor 방식인가
  *
- * <p><b>왜 Chunk 처리인가 (백프레셔)</b>
- * <ul>
- *   <li>{@code CHUNK_SIZE}개씩 트랜잭션 분리 → 한 트랜잭션이 너무 길어지지 않음</li>
- *   <li>중간 실패 시 이전 청크는 커밋된 상태 유지 → 재실행 시 처음부터 안 함</li>
- *   <li>DB 락 점유 시간 최소화 → 운영 트래픽 영향 최소화</li>
- * </ul>
+ *   기존 구현은 {@code findExpireTargetHistories()} → 결과 전체를 메모리에 적재 → OOM 위험
+ *   JpaCursorItemReader는 ResultSet 커서로 한 건씩 흘려보냄 → 메모리 평탄
+ *   수백만 건 만료 시에도 안전
  *
- * <p><b>실행</b>
- * <pre>
+ *
+ * 왜 Chunk 처리인가 (백프레셔)
+ *
+ *   {@code CHUNK_SIZE}개씩 트랜잭션 분리 → 한 트랜잭션이 너무 길어지지 않음
+ *   중간 실패 시 이전 청크는 커밋된 상태 유지 → 재실행 시 처음부터 안 함
+ *   DB 락 점유 시간 최소화 → 운영 트래픽 영향 최소화
+ *
+ *
+ * 실행
+ *
  *   // PointExpireScheduler에서:
  *   jobLauncher.run(pointExpireJob,
  *       new JobParametersBuilder()
  *           .addString("expireDate", LocalDate.now().toString())
  *           .addLong("timestamp", System.currentTimeMillis())  // 재실행 가능하도록
  *           .toJobParameters());
- * </pre>
- *
- * <p><b>build.gradle 추가 필요</b>
- * <pre>
- *   implementation 'org.springframework.boot:spring-boot-starter-batch'
- * </pre>
- * <br>그리고 메인 클래스에 {@code @EnableBatchProcessing} 추가
  */
 @Slf4j
 @Configuration
