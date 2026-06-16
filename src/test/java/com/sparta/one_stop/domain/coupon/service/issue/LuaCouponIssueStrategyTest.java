@@ -190,6 +190,109 @@ class LuaCouponIssueStrategyTest {
     }
 
     @Test
+    @DisplayName("issue 성공 - 트랜잭션 커밋 콜백 실행 시 Redis 발급 보상 Script를 실행하지 않는다")
+    void issue_success_whenTransactionCommitted_thenDoesNotExecuteCompensationScript() {
+        // given
+        Long userId = 1L;
+        Long couponId = 10L;
+        String stockKey = "coupon:stock:10";
+        String issuedUsersKey = "coupon:issued-users:10";
+        String userIdValue = String.valueOf(userId);
+
+        User user = mock(User.class);
+        Coupon coupon = couponForIssueResponse(couponId);
+        UserCoupon savedUserCoupon = issuedUserCoupon(
+            100L,
+            coupon
+        );
+
+        when(userRepository.findById(userId))
+            .thenReturn(Optional.of(user));
+
+        when(couponRepository.findById(couponId))
+            .thenReturn(Optional.of(coupon));
+
+        when(redisTemplate.opsForValue())
+            .thenReturn(valueOperations);
+
+        when(valueOperations.setIfAbsent(
+            eq(stockKey),
+            anyString(),
+            any(Duration.class)
+        )).thenReturn(true);
+
+        // 발급 Lua Script 성공
+        when(redisTemplate.execute(
+            any(DefaultRedisScript.class),
+            eq(List.of(
+                stockKey,
+                issuedUsersKey
+            )),
+            eq(userIdValue),
+            anyString()
+        )).thenReturn(99L);
+
+        when(userCouponRepository.existsByUserIdAndCouponId(
+            userId,
+            couponId
+        )).thenReturn(false);
+
+        when(userCouponRepository.saveAndFlush(any(UserCoupon.class)))
+            .thenReturn(savedUserCoupon);
+
+        when(couponRepository.increaseIssuedQuantity(
+            couponId,
+            CouponStatus.ACTIVE
+        )).thenReturn(1);
+
+        // when
+        IssueCouponResponse result = luaCouponIssueStrategy.issue(
+            userId,
+            couponId
+        );
+
+        TransactionSynchronizationManager.getSynchronizations()
+            .forEach(synchronization ->
+                synchronization.afterCompletion(TransactionSynchronization.STATUS_COMMITTED)
+            );
+
+        // then
+        assertThat(result).isNotNull();
+        assertThat(result.userCouponId()).isEqualTo(100L);
+        assertThat(result.couponId()).isEqualTo(couponId);
+        assertThat(result.couponName()).isEqualTo("테스트 쿠폰");
+        assertThat(result.status()).isEqualTo(UserCouponStatus.AVAILABLE);
+
+        // 발급 Lua Script는 실행되어야 한다
+        verify(redisTemplate).execute(
+            any(DefaultRedisScript.class),
+            eq(List.of(
+                stockKey,
+                issuedUsersKey
+            )),
+            eq(userIdValue),
+            anyString()
+        );
+
+        verify(userCouponRepository).saveAndFlush(any(UserCoupon.class));
+
+        verify(couponRepository).increaseIssuedQuantity(
+            couponId,
+            CouponStatus.ACTIVE
+        );
+
+        // 커밋 성공 시에는 보상 Lua Script가 실행되면 안 된다
+        verify(redisTemplate, never()).execute(
+            any(DefaultRedisScript.class),
+            eq(List.of(
+                stockKey,
+                issuedUsersKey
+            )),
+            eq(userIdValue)
+        );
+    }
+
+    @Test
     @DisplayName("issue 실패 - userId가 null이면 인증 예외가 발생하고 Repository/Redis를 호출하지 않는다")
     void issue_fail_whenUserIdIsNull() {
         // given
