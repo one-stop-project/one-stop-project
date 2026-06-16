@@ -5,6 +5,7 @@ import com.sparta.one_stop.domain.product.dto.response.PopularKeywordResponse;
 import com.sparta.one_stop.domain.product.dto.response.PopularProductResponse;
 import com.sparta.one_stop.domain.product.dto.response.BuyerProductDetailResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductSummaryResponse;
+import com.sparta.one_stop.domain.ai.service.AiRelatedProductService;
 import com.sparta.one_stop.domain.product.service.BuyerProductService;
 import com.sparta.one_stop.domain.product.service.PopularKeywordService;
 import com.sparta.one_stop.domain.product.service.PopularProductService;
@@ -43,6 +44,7 @@ public class BuyerProductController {
     private static final int POPULAR_KEYWORD_MAX_LIMIT = 10;
 
     private final BuyerProductService buyerProductService;
+    private final AiRelatedProductService aiRelatedProductService;
     private final PopularProductService popularProductService;
     private final PopularKeywordService popularKeywordService;
 
@@ -156,6 +158,6 @@ public class BuyerProductController {
     @Operation(summary = "연관 상품 조회")
     @GetMapping("/{productId}/related")
     public ResponseEntity<ApiResponse<List<ProductSummaryResponse>>> getRelated(@PathVariable Long productId) {
-        return ResponseEntity.ok(ApiResponse.success(buyerProductService.getRelated(productId)));
+        return ResponseEntity.ok(ApiResponse.success(aiRelatedProductService.getRelatedProducts(productId)));
     }
 }
