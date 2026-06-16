@@ -45,7 +45,10 @@ public class AdminOrderService {
         }
 
         // 빈 문자열은 null로 처리 (검색 조건 미적용)
-        String searchKeyword = (keyword != null && !keyword.isBlank()) ? keyword : null;
+        // LIKE 특수문자(\, %, _) 이스케이프 — 미처리 시 % 입력으로 전체 조회 가능
+        String searchKeyword = (keyword != null && !keyword.isBlank())
+            ? keyword.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            : null;
 
         Page<Order> orders = orderRepository.searchAllOrders(
             status, fromDateTime, toDateTime, searchKeyword, pageable
