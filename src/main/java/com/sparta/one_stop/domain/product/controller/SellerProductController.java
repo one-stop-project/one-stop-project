@@ -9,6 +9,7 @@ import com.sparta.one_stop.domain.product.dto.response.ProductDetailResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductImageAddResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductImageDeleteResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductImageThumbnailResponse;
+import com.sparta.one_stop.domain.product.dto.response.SellerProductDetailResponse;
 import com.sparta.one_stop.domain.product.dto.response.SellerProductListResponse;
 import com.sparta.one_stop.domain.product.service.PopularTagService;
 import com.sparta.one_stop.domain.product.service.SellerProductService;
@@ -90,6 +91,18 @@ public class SellerProductController {
     ) {
         Page<SellerProductListResponse> response =
             sellerProductService.getMyProducts(authUser.userId(), pageable);
+        return ResponseEntity.ok(ApiResponse.success(response));
+    }
+
+    // 상품 단건 상세 조회 (판매자 본인) — 미승인 상품·판매중단 옵션·재고 포함
+    @Operation(summary = "내 상품 단건 상세 조회")
+    @GetMapping("/{productId}")
+    public ResponseEntity<ApiResponse<SellerProductDetailResponse>> getMyProductDetail(
+        @AuthenticationPrincipal AuthUser authUser,
+        @PathVariable Long productId
+    ) {
+        SellerProductDetailResponse response =
+            sellerProductService.getMyProductDetail(authUser.userId(), productId);
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 

@@ -13,8 +13,11 @@ import com.sparta.one_stop.domain.product.dto.request.ProductUpdateRequest;
 import com.sparta.one_stop.domain.product.dto.response.ProductImageAddResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductImageDeleteResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductImageThumbnailResponse;
+import com.sparta.one_stop.domain.product.dto.response.SellerProductDetailResponse;
+import com.sparta.one_stop.domain.product.dto.response.SellerProductItemResponse;
 import com.sparta.one_stop.domain.product.entity.Product;
 import com.sparta.one_stop.domain.product.entity.ProductImage;
+import com.sparta.one_stop.domain.product.entity.ProductItem;
 import com.sparta.one_stop.domain.product.repository.CategoryRepository;
 import com.sparta.one_stop.domain.product.repository.ProductImageRepository;
 import com.sparta.one_stop.domain.product.repository.ProductRepository;
@@ -23,6 +26,7 @@ import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.SellerRepository;
 import com.sparta.one_stop.global.enums.order.OrderItemStatus;
 import com.sparta.one_stop.global.enums.product.ProductImageStatus;
+import com.sparta.one_stop.global.enums.product.ProductItemStatus;
 import com.sparta.one_stop.global.enums.product.ProductStatus;
 import com.sparta.one_stop.global.enums.user.UserRole;
 import com.sparta.one_stop.global.exception.CustomException;
@@ -106,6 +110,26 @@ class SellerProductServiceTest {
         }
         ReflectionTestUtils.setField(product, "id", PRODUCT_ID);
         return product;
+    }
+
+    // 상품에 옵션(ProductItem)을 매달고 id를 부여한다. stop=true면 STOP 상태로 전환
+    private ProductItem attachItem(Product product, Long id, String optionValue, long price, long stock, boolean stop) {
+        ProductItem item = ProductItem.builder()
+                .product(product)
+                .optionValue1(optionValue)
+                .optionValue2("")
+                .optionValue3("")
+                .optionValue4("")
+                .optionValue5("")
+                .price(price)
+                .stock(stock)
+                .build();
+        if (stop) {
+            item.stop();
+        }
+        ReflectionTestUtils.setField(item, "id", id);
+        product.addProductItem(item);
+        return item;
     }
 
     private ProductImage createImage(Long id, Product product, int displayOrder, String url) {
@@ -630,6 +654,100 @@ class SellerProductServiceTest {
                                     OrderItemStatus.CONFIRMED,
                                     OrderItemStatus.SHIPPING))));
             assertThat(product.getStatus()).isEqualTo(ProductStatus.APPROVED);
+        }
+    }
+
+    @Nested
+    @DisplayName("getMyProductDetail - 판매자 본인 상품 단건 상세")
+    class GetMyProductDetail {
+
+        @Test
+        @DisplayName("미승인(APPROVE_REQUESTED) 상품도 조회되며 상품 상태가 그대로 노출된다")
+        void getMyProductDetail_approveRequested_succeedsWithStatus() {
+            // given
+            Seller seller = approvedSeller(SELLER_ID);
+            Product product = createProduct(seller, ProductStatus.APPROVE_REQUESTED);
+            attachItem(product, 1L, "S", 10000L, 5L, false);
+            given(sellerRepository.findByUserId(SELLER_USER_ID)).willReturn(Optional.of(seller));
+            given(productRepository.findWithCollectionsById(PRODUCT_ID)).willReturn(Optional.of(product));
+
+            // when
+            SellerProductDetailResponse response =
+                    sellerProductService.getMyProductDetail(SELLER_USER_ID, PRODUCT_ID);
+
+            // then
+            assertThat(response.getProductId()).isEqualTo(PRODUCT_ID);
+            assertThat(response.getStatus()).isEqualTo(ProductStatus.APPROVE_REQUESTED);
+            assertThat(response.getShopName()).isEqualTo("테스트샵");
+        }
+
+        @Test
+        @DisplayName("판매중단(STOP) 옵션도 재고·상태와 함께 모두 노출된다")
+        void getMyProductDetail_includesStopOptionsWithStock() {
+            // given
+            Seller seller = approvedSeller(SELLER_ID);
+            Product product = createProduct(seller, ProductStatus.APPROVED);
+            attachItem(product, 1L, "ON", 10000L, 7L, false);
+            attachItem(product, 2L, "STOPPED", 20000L, 3L, true);
+            given(sellerRepository.findByUserId(SELLER_USER_ID)).willReturn(Optional.of(seller));
+            given(productRepository.findWithCollectionsById(PRODUCT_ID)).willReturn(Optional.of(product));
+
+            // when
+            SellerProductDetailResponse response =
+                    sellerProductService.getMyProductDetail(SELLER_USER_ID, PRODUCT_ID);
+
+            // then — STOP 옵션이 빠지지 않고 전체 2개가 그대로 노출되며 재고/상태가 포함된다
+            assertThat(response.getItems()).hasSize(2);
+            SellerProductItemResponse onSale = response.getItems().stream()
+                    .filter(i -> i.getItemId().equals(1L)).findFirst().orElseThrow();
+            SellerProductItemResponse stopped = response.getItems().stream()
+                    .filter(i -> i.getItemId().equals(2L)).findFirst().orElseThrow();
+            assertThat(onSale.getStock()).isEqualTo(7L);
+            assertThat(onSale.getStatus()).isEqualTo(ProductItemStatus.ON_SALE);
+            assertThat(stopped.getStock()).isEqualTo(3L);
+            assertThat(stopped.getStatus()).isEqualTo(ProductItemStatus.STOP);
+        }
+
+        @Test
+        @DisplayName("다른 판매자의 상품이면 PRODUCT_008 예외가 발생한다")
+        void getMyProductDetail_otherSellerProduct_throwsProduct008() {
+            // given
+            Seller requester = approvedSeller(SELLER_ID);
+            Seller owner = approvedSeller(OTHER_SELLER_ID);
+            Product product = createProduct(owner, ProductStatus.APPROVED);
+            given(sellerRepository.findByUserId(SELLER_USER_ID)).willReturn(Optional.of(requester));
+            given(productRepository.findWithCollectionsById(PRODUCT_ID)).willReturn(Optional.of(product));
+
+            // when & then
+            assertThatThrownBy(() -> sellerProductService.getMyProductDetail(SELLER_USER_ID, PRODUCT_ID))
+                    .isInstanceOf(CustomException.class)
+                    .extracting("errorCode").isEqualTo(ErrorCode.PRODUCT_008);
+        }
+
+        @Test
+        @DisplayName("productId에 해당하는 상품이 없으면 PRODUCT_001 예외가 발생한다")
+        void getMyProductDetail_productNotFound_throwsProduct001() {
+            // given
+            Seller seller = approvedSeller(SELLER_ID);
+            given(sellerRepository.findByUserId(SELLER_USER_ID)).willReturn(Optional.of(seller));
+            given(productRepository.findWithCollectionsById(PRODUCT_ID)).willReturn(Optional.empty());
+
+            // when & then
+            assertThatThrownBy(() -> sellerProductService.getMyProductDetail(SELLER_USER_ID, PRODUCT_ID))
+                    .isInstanceOf(CustomException.class)
+                    .extracting("errorCode").isEqualTo(ErrorCode.PRODUCT_001);
+        }
+
+        @Test
+        @DisplayName("판매자 정보가 없으면 SELLER_001 예외가 발생한다")
+        void getMyProductDetail_sellerNotFound_throwsSeller001() {
+            // given
+            given(sellerRepository.findByUserId(SELLER_USER_ID)).willReturn(Optional.empty());
+
+            // when & then
+            assertThatThrownBy(() -> sellerProductService.getMyProductDetail(SELLER_USER_ID, PRODUCT_ID))
+                    .isInstanceOf(CustomException.class)
+                    .extracting("errorCode").isEqualTo(ErrorCode.SELLER_001);
         }
     }
 

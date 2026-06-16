@@ -9,6 +9,7 @@ import com.sparta.one_stop.domain.product.dto.response.ProductDetailResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductImageAddResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductImageDeleteResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductImageThumbnailResponse;
+import com.sparta.one_stop.domain.product.dto.response.SellerProductDetailResponse;
 import com.sparta.one_stop.domain.product.dto.response.SellerProductListResponse;
 import com.sparta.one_stop.domain.product.entity.Category;
 import com.sparta.one_stop.domain.product.entity.Product;
@@ -104,6 +105,22 @@ public class SellerProductService {
 
         Page<Product> products = productRepository.findAllBySellerId(seller.getId(), pageable);
         return SellerProductListResponse.from(products);
+    }
+
+    // 상품 단건 상세 조회 (판매자 본인)
+    // 구매자용 상세와 달리 미승인(APPROVE_REQUESTED) 상품·판매중단(STOP) 옵션·재고를 모두 노출한다.
+    public SellerProductDetailResponse getMyProductDetail(Long userId, Long productId) {
+        Seller seller = sellerRepository.findByUserId(userId)
+            .orElseThrow(() -> new CustomException(ErrorCode.SELLER_001));
+
+        Product product = productRepository.findWithCollectionsById(productId)
+            .orElseThrow(() -> new CustomException(ErrorCode.PRODUCT_001));
+
+        if (!product.getSeller().getId().equals(seller.getId())) {
+            throw new CustomException(ErrorCode.PRODUCT_008, "다른 판매자의 상품은 조회할 수 없습니다");
+        }
+
+        return SellerProductDetailResponse.from(product);
     }
 
     // 상품 수정
