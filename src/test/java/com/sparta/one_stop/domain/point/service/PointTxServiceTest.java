@@ -97,6 +97,10 @@ class PointTxServiceTest {
 
         if (balance > 0) {
             point.increaseBalance(balance);
+
+            // increaseBalance()는 flush 후 version+1을 기준으로 무결성 해시를 만든다.
+            // 단위 테스트에는 JPA flush가 없으므로 영속화 이후 상태를 직접 재현한다.
+            setField(point, "version", 1);
         }
 
         return point;

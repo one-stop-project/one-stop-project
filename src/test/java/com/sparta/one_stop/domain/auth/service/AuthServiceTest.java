@@ -197,18 +197,41 @@ class AuthServiceTest {
         @Test
         @DisplayName("신규 기기 계정 제한 초과 시 기기 등록 전에 차단한다")
         void new_device_rate_limit_is_checked_before_registration() {
+            // given
             LoginRequest request = new LoginRequest(EMAIL, PASSWORD);
             given(authQueryService.authenticate(request, DUMMY_HASH)).willReturn(testUser);
             given(deviceLimitService.isNewDevice(USER_ID, DEVICE_ID)).willReturn(true);
-            doThrow(new CustomException(ErrorCode.AUTH_013))
-                .when(rateLimitService).tryConsume(
-                    RateLimitPolicy.DEVICE_REGISTER_PER_ACCOUNT, String.valueOf(USER_ID));
 
-            assertThatThrownBy(() -> authService.login(request, DEVICE_ID, USER_AGENT, CLIENT_IP))
+            // 로그인 과정의 다른 Rate Limit은 통과시키고,
+            // 신규 기기 계정 제한에 도달했을 때만 예외를 발생시킨다.
+            org.mockito.Mockito.doAnswer(invocation -> {
+                RateLimitPolicy policy = invocation.getArgument(0);
+                if (policy == RateLimitPolicy.DEVICE_REGISTER_PER_ACCOUNT) {
+                    throw new CustomException(ErrorCode.AUTH_013);
+                }
+                return null;
+            }).when(rateLimitService).tryConsume(any(RateLimitPolicy.class), anyString());
+
+            // when & then
+            assertThatThrownBy(() ->
+                authService.login(request, DEVICE_ID, USER_AGENT, CLIENT_IP)
+            )
                 .isInstanceOf(CustomException.class);
 
-            verify(deviceLimitService, never()).registerDevice(USER_ID, DEVICE_ID);
-            verify(redisTokenService, never()).saveRefreshToken(anyLong(), anyString(), anyString(), anyLong());
+            verify(deviceLimitService).isNewDevice(USER_ID, DEVICE_ID);
+            verify(rateLimitService).tryConsume(
+                RateLimitPolicy.DEVICE_REGISTER_PER_ACCOUNT,
+                String.valueOf(USER_ID)
+            );
+
+            // 핵심: 제한에 걸린 이후의 부수효과는 발생하지 않아야 한다.
+            verify(jwtTokenProvider, never()).createAccessToken(anyLong(), any(), anyInt());
+            verify(jwtTokenProvider, never()).createRefreshToken(anyLong(), anyString());
+            verify(deviceLimitService, never()).registerDevice(anyLong(), anyString());
+            verify(redisTokenService, never()).saveRefreshToken(
+                anyLong(), anyString(), anyString(), anyLong());
+            verify(deviceContextService, never()).bindContext(
+                anyLong(), anyString(), anyString(), anyString());
         }
 
         @Test

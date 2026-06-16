@@ -14,6 +14,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.util.Optional;
 
@@ -29,6 +30,7 @@ class AdminUserServiceTest {
 
     @Mock private UserRepository userRepository;
     @Mock private AdminActionHistoryRepository adminActionHistoryRepository;
+    @Mock private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private AdminUserService adminUserService;

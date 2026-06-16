@@ -22,6 +22,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -117,11 +118,9 @@ class PointExpireBatchConfigTest {
 
         verify(freshPoint).decreaseBalance(250);
         verify(pointRepository).saveAll(List.of(freshPoint));
-        verify(pointHistoryRepository).saveAll(List.of(freshTarget));
-
         @SuppressWarnings("unchecked")
         ArgumentCaptor<List<PointHistory>> captor = ArgumentCaptor.forClass(List.class);
-        verify(pointHistoryRepository).saveAll(captor.capture());
+        verify(pointHistoryRepository, org.mockito.Mockito.times(2)).saveAll(captor.capture());
 
         List<PointHistory> savedExpireHistories = captor.getAllValues().stream()
             .filter(list -> !list.isEmpty() && list.get(0) != freshTarget)
@@ -143,11 +142,13 @@ class PointExpireBatchConfigTest {
         Point freshPoint = mock(Point.class);
         PointHistory alreadyExpiredTarget = mock(PointHistory.class);
 
-        when(freshPoint.getId()).thenReturn(10L);
-        when(alreadyExpiredTarget.getId()).thenReturn(100L);
-        when(alreadyExpiredTarget.expireRemainingAmount()).thenReturn(0);
-        when(pointRepository.findAllById(anyCollection())).thenReturn(List.of(freshPoint));
-        when(pointHistoryRepository.findAllById(anyCollection()))
+        // 멱등성 경로에서는 구현 세부에 따라 일부 조회용 stub이 사용되지 않을 수 있다.
+        // 핵심 검증은 이미 만료된 원본으로 잔액과 EXPIRE 이력이 다시 생성되지 않는지다.
+        lenient().when(freshPoint.getId()).thenReturn(10L);
+        lenient().when(alreadyExpiredTarget.getId()).thenReturn(100L);
+        lenient().when(pointRepository.findAllById(anyCollection()))
+            .thenReturn(List.of(freshPoint));
+        lenient().when(pointHistoryRepository.findAllById(anyCollection()))
             .thenReturn(List.of(alreadyExpiredTarget));
 
         writer.write(new Chunk<>(List.of(
