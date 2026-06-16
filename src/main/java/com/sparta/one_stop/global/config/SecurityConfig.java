@@ -127,8 +127,6 @@ public class SecurityConfig {
                 .requestMatchers("/api/carts/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/subscriptions/plans").permitAll()
                 .requestMatchers("/swagger-ui/**", "/v3/api-docs/**").permitAll()
-                .requestMatchers("/actuator/health", "/actuator/info").permitAll()
-                .requestMatchers("/actuator/**").hasAnyRole("ADMIN", "SUPER_ADMIN")
 
                 // 구매자만 접근가능
                 .requestMatchers("/api/orders/**").hasRole("BUYER")
