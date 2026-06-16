@@ -12,9 +12,9 @@ import static org.mockito.Mockito.verify;
 import com.sparta.one_stop.domain.product.dto.request.ProductUpdateRequest;
 import com.sparta.one_stop.domain.product.dto.response.ProductImageAddResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductImageDeleteResponse;
+import com.sparta.one_stop.domain.product.dto.response.ProductDetailResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductImageThumbnailResponse;
-import com.sparta.one_stop.domain.product.dto.response.SellerProductDetailResponse;
-import com.sparta.one_stop.domain.product.dto.response.SellerProductItemResponse;
+import com.sparta.one_stop.domain.product.dto.response.ProductItemResponse;
 import com.sparta.one_stop.domain.product.entity.Product;
 import com.sparta.one_stop.domain.product.entity.ProductImage;
 import com.sparta.one_stop.domain.product.entity.ProductItem;
@@ -672,7 +672,7 @@ class SellerProductServiceTest {
             given(productRepository.findWithCollectionsById(PRODUCT_ID)).willReturn(Optional.of(product));
 
             // when
-            SellerProductDetailResponse response =
+            ProductDetailResponse response =
                     sellerProductService.getMyProductDetail(SELLER_USER_ID, PRODUCT_ID);
 
             // then
@@ -693,14 +693,14 @@ class SellerProductServiceTest {
             given(productRepository.findWithCollectionsById(PRODUCT_ID)).willReturn(Optional.of(product));
 
             // when
-            SellerProductDetailResponse response =
+            ProductDetailResponse response =
                     sellerProductService.getMyProductDetail(SELLER_USER_ID, PRODUCT_ID);
 
             // then — STOP 옵션이 빠지지 않고 전체 2개가 그대로 노출되며 재고/상태가 포함된다
             assertThat(response.getItems()).hasSize(2);
-            SellerProductItemResponse onSale = response.getItems().stream()
+            ProductItemResponse onSale = response.getItems().stream()
                     .filter(i -> i.getItemId().equals(1L)).findFirst().orElseThrow();
-            SellerProductItemResponse stopped = response.getItems().stream()
+            ProductItemResponse stopped = response.getItems().stream()
                     .filter(i -> i.getItemId().equals(2L)).findFirst().orElseThrow();
             assertThat(onSale.getStock()).isEqualTo(7L);
             assertThat(onSale.getStatus()).isEqualTo(ProductItemStatus.ON_SALE);
