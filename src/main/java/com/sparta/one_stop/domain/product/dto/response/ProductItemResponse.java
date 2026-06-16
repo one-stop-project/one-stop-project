@@ -1,12 +1,15 @@
 package com.sparta.one_stop.domain.product.dto.response;
 
 import com.sparta.one_stop.domain.product.entity.ProductItem;
+import com.sparta.one_stop.global.enums.product.ProductItemStatus;
 import lombok.Builder;
 import lombok.Getter;
 
 import java.util.ArrayList;
 import java.util.List;
 
+// 판매자/관리자용 옵션 응답 — 재고 수량(stock)과 옵션 상태(STOP 포함)를 노출한다.
+// (구매자용 BuyerProductItemResponse는 stock을 숨기고 품절 여부만 노출)
 @Getter
 @Builder
 public class ProductItemResponse {
@@ -15,6 +18,7 @@ public class ProductItemResponse {
     private String optionName;
     private Long price;
     private Long stock;
+    private ProductItemStatus status;
 
     public static ProductItemResponse from(ProductItem item) {
         return ProductItemResponse.builder()
@@ -22,6 +26,7 @@ public class ProductItemResponse {
             .optionName(buildOptionName(item))
             .price(item.getPrice())
             .stock(item.getStock())
+            .status(item.getStatus())
             .build();
     }
 

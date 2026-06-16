@@ -12,7 +12,7 @@ import java.util.Comparator;
 import java.util.List;
 
 // 구매자용 상품 상세 응답 — 옵션 재고 수량(stock)을 노출하지 않는다(BuyerProductItemResponse = 품절 여부만).
-// 판매자/관리자용 상세는 ProductDetailResponse(stock 포함)를 그대로 사용한다.
+// 판매자/관리자용 상세는 ProductDetailResponse(상품 상태·STOP 옵션·stock 포함)를 사용한다.
 // @Jacksonized: Redis 캐시(productDetail) 역직렬화를 위해 빌더 기반 생성자를 노출한다.
 @Getter
 @Builder
