@@ -8,6 +8,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.springframework.data.redis.RedisConnectionFailureException;
+import org.springframework.data.redis.RedisSystemException;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
 
@@ -18,7 +19,9 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -125,6 +128,38 @@ class RateLimitServiceTest {
     }
 
     @Test
+    @DisplayName("tryConsume 성공 - RedisSystemException 발생 시 Fail-Open으로 예외 없이 통과한다")
+    void tryConsume_success_whenRedisSystemExceptionOccurs() {
+        // given
+        RateLimitPolicy policy = RateLimitPolicy.PAYMENT_APPROVE_PER_USER;
+        String identifier = "1";
+        String redisKey = policy.buildKey(identifier);
+
+        when(redisTemplate.execute(
+            any(RedisScript.class),
+            eq(List.of(redisKey)),
+            eq(String.valueOf(policy.getWindowSeconds())),
+            eq(String.valueOf(policy.getLimit()))
+        )).thenThrow(new RedisSystemException(
+            "Redis system error",
+            new RuntimeException("redis down")
+        ));
+
+        // when & then
+        assertThatCode(() -> rateLimitService.tryConsume(
+            policy,
+            identifier
+        )).doesNotThrowAnyException();
+
+        verify(redisTemplate).execute(
+            any(RedisScript.class),
+            eq(List.of(redisKey)),
+            eq(String.valueOf(policy.getWindowSeconds())),
+            eq(String.valueOf(policy.getLimit()))
+        );
+    }
+
+    @Test
     @DisplayName("isAllowed 성공 - 제한 횟수 이내이면 true를 반환한다")
     void isAllowed_success_whenWithinLimit() {
         // given
@@ -172,6 +207,37 @@ class RateLimitServiceTest {
 
         // then
         assertThat(result).isFalse();
+    }
+
+    @Test
+    @DisplayName("isAllowed 실패 - COMMON_009가 아닌 CustomException은 그대로 전파한다")
+    void isAllowed_fail_whenCustomExceptionIsNotRateLimitException() {
+        // given
+        RateLimitPolicy policy = RateLimitPolicy.PAYMENT_APPROVE_PER_USER;
+        String identifier = "1";
+
+        RateLimitService spyRateLimitService = spy(rateLimitService);
+
+        CustomException customException = new CustomException(ErrorCode.COMMON_010);
+
+        doThrow(customException)
+            .when(spyRateLimitService)
+            .tryConsume(
+                policy,
+                identifier
+            );
+
+        // when & then
+        assertThatThrownBy(() -> spyRateLimitService.isAllowed(
+            policy,
+            identifier
+        ))
+            .isSameAs(customException);
+
+        verify(spyRateLimitService).tryConsume(
+            policy,
+            identifier
+        );
     }
 
 }

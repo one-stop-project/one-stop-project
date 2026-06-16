@@ -1,6 +1,7 @@
 package com.sparta.one_stop.domain.ai.dto;
 
 import java.util.List;
+import java.util.Set;
 
 /**
  * AI 리뷰 요약 응답 구조체.
@@ -15,6 +16,8 @@ public record ReviewSummary(
         String sentiment
 ) {
 
+    private static final Set<String> VALID_SENTIMENTS = Set.of("POSITIVE", "NEUTRAL", "NEGATIVE");
+
     /** Circuit Breaker fallback 또는 AI 오류 시 반환하는 기본값 */
     public static ReviewSummary unavailable() {
         return new ReviewSummary(
@@ -26,6 +29,6 @@ public record ReviewSummary(
     }
 
     public boolean isUnavailable() {
-        return "UNAVAILABLE".equals(sentiment);
+        return sentiment == null || !VALID_SENTIMENTS.contains(sentiment);
     }
 }
