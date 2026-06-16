@@ -20,6 +20,7 @@ import java.lang.reflect.Field;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.doThrow;
@@ -95,6 +96,63 @@ class OutboxEventPublishExecutorTest {
         assertThat(savedEvent.getStatus()).isEqualTo(OutboxEventStatus.PUBLISHED);
         assertThat(savedEvent.getProcessedAt()).isNotNull();
         assertThat(savedEvent.getRetryCount()).isEqualTo(0);
+    }
+
+    @Test
+    @DisplayName("execute 성공 - DEAD 전이 후 Slack 알림 예외가 발생해도 외부로 전파하지 않는다")
+    void execute_success_whenSlackDeadAlertThrowsException_thenDoesNotPropagate() {
+        // given
+        OutboxEvent pendingEvent = pendingOutboxEvent(1L);
+        OutboxEvent processingEvent = processingOutboxEvent(1L);
+        setField(processingEvent, "retryCount", 3);
+
+        when(outboxEventRepository.updateStatusByIdAndStatus(
+            1L,
+            OutboxEventStatus.PENDING,
+            OutboxEventStatus.PROCESSING
+        )).thenReturn(1);
+
+        when(outboxEventRepository.findById(1L))
+            .thenReturn(Optional.of(processingEvent));
+
+        doThrow(new RuntimeException("kafka error"))
+            .when(outboxKafkaProducer)
+            .send(
+                processingEvent.getTopic(),
+                processingEvent.getPartitionKey(),
+                processingEvent.getPayload()
+            );
+
+        doThrow(new RuntimeException("Slack alert failed"))
+            .when(slackAlertService)
+            .sendOutboxDeadAlert(any(OutboxEvent.class));
+
+        // when
+        outboxEventPublishExecutor.execute(pendingEvent);
+
+        ArgumentCaptor<OutboxEvent> captor =
+            ArgumentCaptor.forClass(OutboxEvent.class);
+
+        verify(outboxEventRepository).save(captor.capture());
+
+        OutboxEvent savedEvent = captor.getValue();
+
+        // then
+        assertThat(savedEvent.getStatus()).isEqualTo(OutboxEventStatus.DEAD);
+        assertThat(savedEvent.getRetryCount()).isEqualTo(4);
+        assertThat(savedEvent.getLastErrorMessage()).contains("kafka error");
+        assertThat(savedEvent.getProcessedAt()).isNotNull();
+
+        // execute 직후에는 아직 Slack 알림이 전송되면 안 됨
+        verify(slackAlertService, never()).sendOutboxDeadAlert(any(OutboxEvent.class));
+
+        // 트랜잭션 커밋 이후 Slack 알림 예외가 발생해도 외부로 전파되면 안 됨
+        assertThatCode(() ->
+            TransactionSynchronizationManager.getSynchronizations()
+                .forEach(TransactionSynchronization::afterCommit)
+        ).doesNotThrowAnyException();
+
+        verify(slackAlertService).sendOutboxDeadAlert(savedEvent);
     }
 
     @Test
