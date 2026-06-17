@@ -9,6 +9,7 @@ import com.sparta.one_stop.domain.product.entity.ProductItem;
 import com.sparta.one_stop.domain.product.repository.InventoryHistoryRepository;
 import com.sparta.one_stop.domain.product.repository.ProductItemRepository;
 import com.sparta.one_stop.global.enums.product.InventoryHistoryType;
+import com.sparta.one_stop.global.enums.user.SellerStatus;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -51,6 +52,7 @@ public class SellerItemService {
                 .orElseThrow(() -> new CustomException(ErrorCode.PRODUCT_001));
 
         validateOwner(item, userId);
+        validateSellerApproved(item);
         validateParentStatus(item);
 
         Long beforeStock = null;
@@ -87,6 +89,7 @@ public class SellerItemService {
                 .orElseThrow(() -> new CustomException(ErrorCode.PRODUCT_001));
 
         validateOwner(item, userId);
+        validateSellerApproved(item);
         validateParentStatus(item);
 
         long previousStock = item.getStock();
@@ -116,6 +119,13 @@ public class SellerItemService {
         Long ownerId = item.getProduct().getSeller().getUser().getId();
         if (!ownerId.equals(userId)) {
             throw new CustomException(ErrorCode.PRODUCT_008);
+        }
+    }
+
+    // 승인된 판매자만 옵션 쓰기 가능 (SellerProductService와 동일 정책)
+    private void validateSellerApproved(ProductItem item) {
+        if (item.getProduct().getSeller().getStatus() != SellerStatus.APPROVED) {
+            throw new CustomException(ErrorCode.SELLER_003);
         }
     }
 

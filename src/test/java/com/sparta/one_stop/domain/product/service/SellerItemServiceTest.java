@@ -22,6 +22,7 @@ import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.global.enums.product.InventoryHistoryType;
 import com.sparta.one_stop.global.enums.product.ProductItemStatus;
 import com.sparta.one_stop.global.enums.product.ProductStatus;
+import com.sparta.one_stop.global.enums.user.SellerStatus;
 import com.sparta.one_stop.global.enums.user.UserRole;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
@@ -60,6 +61,12 @@ class SellerItemServiceTest {
     // 실제 엔티티 그래프(User-Seller-Product-ProductItem)를 만들어 반환
     private ProductItem createItem(Long ownerUserId, ProductStatus productStatus,
                                    long price, long stock) {
+        return createItem(ownerUserId, productStatus, SellerStatus.APPROVED, price, stock);
+    }
+
+    // sellerStatus를 지정해 판매자 상태별(승인/반려 등) 옵션을 만든다
+    private ProductItem createItem(Long ownerUserId, ProductStatus productStatus,
+                                   SellerStatus sellerStatus, long price, long stock) {
         User user = User.builder()
                 .email("seller@test.com")
                 .password("password")
@@ -74,6 +81,7 @@ class SellerItemServiceTest {
                 .businessNumber("1234567890")
                 .build();
         ReflectionTestUtils.setField(seller, "id", 100L);
+        applySellerStatus(seller, sellerStatus);
 
         Product product = Product.builder()
                 .seller(seller)
@@ -93,6 +101,16 @@ class SellerItemServiceTest {
                 .build();
         ReflectionTestUtils.setField(item, "id", ITEM_ID);
         return item;
+    }
+
+    private void applySellerStatus(Seller seller, SellerStatus status) {
+        switch (status) {
+            case APPROVED -> seller.approve();
+            case REJECTED -> seller.reject();
+            default -> {
+                // PENDING/SUSPENDED: 빌더 기본값(PENDING) 유지
+            }
+        }
     }
 
     private void applyProductStatus(Product product, ProductStatus status) {
@@ -284,6 +302,23 @@ class SellerItemServiceTest {
                     .isInstanceOf(CustomException.class)
                     .extracting("errorCode").isEqualTo(ErrorCode.INVENTORY_003);
         }
+
+        @Test
+        @DisplayName("판매자가 승인 상태가 아니면(반려) SELLER_003 예외가 발생하고 이력을 남기지 않는다")
+        void updateItem_sellerNotApproved_throwsSeller003() {
+            // given
+            ProductItem item = createItem(SELLER_USER_ID, ProductStatus.APPROVED,
+                    SellerStatus.REJECTED, 1000L, 50L);
+            mockFindItem(item);
+            ItemUpdateRequest request = new ItemUpdateRequest(2000L, null, null);
+
+            // when & then
+            assertThatThrownBy(
+                    () -> sellerItemService.updateItem(SELLER_USER_ID, ITEM_ID, request))
+                    .isInstanceOf(CustomException.class)
+                    .extracting("errorCode").isEqualTo(ErrorCode.SELLER_003);
+            verify(inventoryHistoryRepository, never()).save(any());
+        }
     }
 
     @Nested
@@ -427,6 +462,23 @@ class SellerItemServiceTest {
                     () -> sellerItemService.inbound(SELLER_USER_ID, ITEM_ID, request))
                     .isInstanceOf(CustomException.class)
                     .extracting("errorCode").isEqualTo(ErrorCode.INVENTORY_003);
+        }
+
+        @Test
+        @DisplayName("판매자가 승인 상태가 아니면(반려) SELLER_003 예외가 발생하고 이력을 남기지 않는다")
+        void inbound_sellerNotApproved_throwsSeller003() {
+            // given
+            ProductItem item = createItem(SELLER_USER_ID, ProductStatus.APPROVED,
+                    SellerStatus.REJECTED, 1000L, 80L);
+            mockFindItemForUpdate(item);
+            InboundRequest request = new InboundRequest(50L, null);
+
+            // when & then
+            assertThatThrownBy(
+                    () -> sellerItemService.inbound(SELLER_USER_ID, ITEM_ID, request))
+                    .isInstanceOf(CustomException.class)
+                    .extracting("errorCode").isEqualTo(ErrorCode.SELLER_003);
+            verify(inventoryHistoryRepository, never()).save(any());
         }
     }
 }
