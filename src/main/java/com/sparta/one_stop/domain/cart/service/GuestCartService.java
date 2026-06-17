@@ -331,6 +331,10 @@ public class GuestCartService {
         ProductItem productItem = productItemRepository.findById(itemId)
             .orElseThrow(() -> new CustomException(ErrorCode.PRODUCT_001));
 
+        if (!productItem.isOnSale()) {
+            throw new CustomException(ErrorCode.CART_001);
+        }
+
         validateQuantityLimit(
             productItem,
             request.quantity()

@@ -392,6 +392,8 @@ class GuestCartServiceTest {
 
         ProductItem productItem = org.mockito.Mockito.mock(ProductItem.class);
 
+        when(productItem.isOnSale()).thenReturn(true);
+
         when(hashOperations.hasKey(REDIS_KEY, "101"))
             .thenReturn(true);
         when(productItemRepository.findById(itemId))
@@ -434,6 +436,35 @@ class GuestCartServiceTest {
         ))
             .isInstanceOf(CustomException.class)
             .hasMessage("재고가 부족합니다");
+
+        verify(hashOperations, never()).put(any(), any(), any());
+        verify(redisTemplate, never()).expire(anyString(), any());
+        verify(guestCartCookieProvider, never()).refreshCookie(anyString(), any());
+    }
+
+    @Test
+    @DisplayName("updateCartItemQuantity 실패 - STOP 상품은 수량을 변경할 수 없다")
+    void updateCartItemQuantity_fail_whenProductItemIsStop() {
+        // given
+        Long itemId = 101L;
+        UpdateCartItemRequest request = new UpdateCartItemRequest(2);
+        ProductItem productItem = stopProductItem();
+
+        when(hashOperations.hasKey(REDIS_KEY, "101"))
+            .thenReturn(true);
+
+        when(productItemRepository.findById(itemId))
+            .thenReturn(Optional.of(productItem));
+
+        // when & then
+        assertThatThrownBy(() -> guestCartService.updateCartItemQuantity(
+            GUEST_CART_ID,
+            response,
+            itemId,
+            request
+        ))
+            .isInstanceOf(CustomException.class)
+            .hasMessage("장바구니에 담을 수 없는 상품입니다");
 
         verify(hashOperations, never()).put(any(), any(), any());
         verify(redisTemplate, never()).expire(anyString(), any());
@@ -1008,6 +1039,7 @@ class GuestCartServiceTest {
     private ProductItem productItemForQuantityUpdate(Long stock) {
         ProductItem productItem = org.mockito.Mockito.mock(ProductItem.class);
 
+        when(productItem.isOnSale()).thenReturn(true);
         when(productItem.getStock()).thenReturn(stock);
 
         return productItem;
