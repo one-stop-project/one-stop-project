@@ -56,6 +56,17 @@ public class ProductViewCountService {
         return remaining
         """, Long.class);
 
+    // 주간 리셋용 — dirty 셋의 각 상품 카운터 키와 dirty 셋 자체를 원자적으로 삭제하고 정리한 상품 수 반환
+    // 카운터 키는 recordView가 INCR과 동시에 dirty 셋에 SADD하므로 dirty 멤버 순회로 모두 도달한다
+    private static final RedisScript<Long> RESET_ALL_COUNTERS_SCRIPT = RedisScript.of("""
+        local members = redis.call('SMEMBERS', KEYS[1])
+        for _, pid in ipairs(members) do
+            redis.call('DEL', ARGV[1] .. pid)
+        end
+        redis.call('DEL', KEYS[1])
+        return #members
+        """, Long.class);
+
     private final RedisTemplate<String, String> redisTemplate;
 
     // Redis 장애가 상품 조회 자체를 막지 않도록 catch 후 skip
@@ -120,5 +131,16 @@ public class ProductViewCountService {
             productId.toString(),
             String.valueOf(count)
         );
+    }
+
+    // 주간 리셋용 — 누적 카운터 키 전체와 dirty 셋을 정리하고 정리한 상품 수를 반환
+    // DB view_count 초기화와 함께 호출해야 다음 sync가 잔여 카운터를 DB로 되돌리지 않는다
+    public long clearAllCounters() {
+        Long cleared = redisTemplate.execute(
+            RESET_ALL_COUNTERS_SCRIPT,
+            List.of(DIRTY_KEY),
+            COUNTER_KEY_PREFIX
+        );
+        return cleared == null ? 0L : cleared;
     }
 }

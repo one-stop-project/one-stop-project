@@ -59,11 +59,13 @@ public class ProductViewCountScheduler {
         log.info("[ViewCount] sync done (success={}, failure={})", success, failure);
     }
 
-    // 매주 월요일 00:00 (KST) — product.view_count 일괄 0 초기화
-    // Redis에 남은 카운터는 건드리지 않음 — 아직 반영 안 된 분은 다음 주차로 이어 집계됨
+    // 매주 월요일 00:00 (KST) — Redis 잔여 카운터·dirty 셋 정리 후 product.view_count 일괄 0 초기화
+    // Redis를 먼저 비워야 동시에 도는 sync가 잔여 카운트를 DB로 되돌리는 창을 줄임
+    // (Redis를 안 비우면 다음 sync가 잔여 카운트를 되돌려 리셋이 무효화됨)
     @Scheduled(cron = "0 0 0 ? * MON", zone = "Asia/Seoul")
     public void weeklyReset() {
+        long cleared = viewCountService.clearAllCounters();
         int reset = syncService.resetAllViewCounts();
-        log.info("[ViewCount] weekly reset done (rows={})", reset);
+        log.info("[ViewCount] weekly reset done (redisCleared={}, rows={})", cleared, reset);
     }
 }
