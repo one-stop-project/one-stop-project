@@ -38,12 +38,25 @@ public class PointAuditWriter {
     @Async("eventExecutor")
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void persist(AdminAuditLog auditLog) {
+        persistInternal(auditLog, "비동기");
+    }
+
+    /**
+     * 비동기 executor가 작업을 거부한 경우 요청 스레드에서 최후의 수단으로 저장한다.
+     * 별도 Bean 프록시를 통해 호출되므로 REQUIRES_NEW가 적용된다.
+     */
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void persistSynchronously(AdminAuditLog auditLog) {
+        persistInternal(auditLog, "동기 fallback");
+    }
+
+    private void persistInternal(AdminAuditLog auditLog, String mode) {
         try {
             auditRepository.save(auditLog);
         } catch (Exception e) {
-            // 감사 저장 실패가 본 흐름에 영향 주지 않도록 (Fail-Safe)
-            log.error("[POINT_AUDIT] 비동기 저장 실패 — action={}, result={}",
-                auditLog.getAction(), auditLog.getResult(), e);
+            // 감사 저장 실패가 비즈니스 흐름을 깨뜨리지는 않되, 운영 로그에는 반드시 남긴다.
+            log.error("[POINT_AUDIT] {} 저장 실패 — action={}, result={}",
+                mode, auditLog.getAction(), auditLog.getResult(), e);
         }
     }
 }

@@ -146,6 +146,7 @@ public class User extends BaseEntity {
             throw new CustomException(ErrorCode.MEMBER_011);  // 탈퇴자는 정지 못 함
         }
         this.status = UserStatus.SUSPENDED;
+        this.increaseTokenVersion();
     }
 
     // 정지 해제
@@ -181,7 +182,10 @@ public class User extends BaseEntity {
     }
 
     public void updateRole(UserRole newRole) {
-        this.role = newRole;
+        if (this.role != newRole) {
+            this.role = newRole;
+            this.increaseTokenVersion(); // 권한 변경 시 무조건 기존 토큰 무효화
+        }
     }
 
     // 본인검증 / → AuthUser.verifyOwnership(targetUserId)로 호출 권장

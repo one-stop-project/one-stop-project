@@ -107,7 +107,7 @@ public class PointExpireScheduler {
     public String runManually(LocalDate targetDate) {
         if (targetDate.isAfter(LocalDate.now(KST))) {
             throw new IllegalArgumentException(
-                "targetDate는 오늘 이전 날짜여야 합니다:" + targetDate
+                "targetDate는 오늘 또는 이전 날짜여야 합니다: " + targetDate
             );
         }
 

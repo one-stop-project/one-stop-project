@@ -10,6 +10,7 @@ import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.annotation.AfterReturning;
 import org.aspectj.lang.annotation.AfterThrowing;
 import org.aspectj.lang.annotation.Aspect;
+import org.springframework.core.task.TaskRejectedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -103,7 +104,13 @@ public class PointAuditAspect {
                 .occurredAt(LocalDateTime.now())
                 .build();
 
-            pointAuditWriter.persist(auditLog);
+            try {
+                pointAuditWriter.persist(auditLog);
+            } catch (TaskRejectedException rejected) {
+                log.warn("[AUDIT_ASPECT] 비동기 감사 큐 포화 — 동기 fallback 실행: action={}, result={}",
+                    action, result);
+                pointAuditWriter.persistSynchronously(auditLog);
+            }
         } catch (Exception e) {
             log.error("[AUDIT_ASPECT] 감사 로그 기록 실패 — action={}, result={}, cause={}",
                 action, result, e.getMessage(), e);

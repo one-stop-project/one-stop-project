@@ -50,14 +50,14 @@ public interface PointHistoryRepository extends JpaRepository<PointHistory, Long
     );
 
     // 만료 처리 대상 포인트 이력 조회
-    // 스케줄러 또는 배치에서 expireAt이 오늘 이전 또는 오늘이고 remainingAmount가 남아 있는 이력을 조회한다
+    // 정책: expireAt 당일은 23:59:59까지 사용 가능하므로 오늘보다 이전인 이력만 조회한다.
     // 조회된 이력은 remainingAmount를 0으로 변경하고 EXPIRE 이력을 생성하는 데 사용한다
     @Query("""
         select ph
         from PointHistory ph
         where ph.type in :types
           and ph.remainingAmount > 0
-          and ph.expireAt <= :today
+          and ph.expireAt < :today
         order by ph.expireAt asc, ph.createdAt asc
     """)
     List<PointHistory> findExpireTargetHistories(

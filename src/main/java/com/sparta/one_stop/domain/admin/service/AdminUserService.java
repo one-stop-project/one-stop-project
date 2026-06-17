@@ -3,6 +3,7 @@ package com.sparta.one_stop.domain.admin.service;
 import com.sparta.one_stop.domain.admin.dto.AdminUserResponse;
 import com.sparta.one_stop.domain.admin.entity.AdminActionHistory;
 import com.sparta.one_stop.domain.admin.repository.AdminActionHistoryRepository;
+import com.sparta.one_stop.domain.auth.event.AllDevicesLogoutEvent;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.UserRepository;
 import com.sparta.one_stop.global.enums.admin.AdminActionTarget;
@@ -11,6 +12,7 @@ import com.sparta.one_stop.global.enums.user.UserRole;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -25,6 +27,7 @@ public class AdminUserService {
 
     private final UserRepository userRepository;
     private final AdminActionHistoryRepository adminActionHistoryRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     public Page<AdminUserResponse> getAdminUsers(Pageable pageable) {
         return userRepository.findAllByRoleIn(List.of(UserRole.ADMIN, UserRole.SUPER_ADMIN), pageable)
@@ -48,6 +51,12 @@ public class AdminUserService {
         }
 
         target.updateRole(UserRole.ADMIN);
+
+        // role 변경은 기존 AT의 role 클레임을 즉시 무효화해야 함 (필터는 클레임 role을 신뢰)
+        //   - increaseTokenVersion: DB 영속 무효화 (Redis 장애에도 유지)
+        //   - AllDevicesLogoutEvent: 커밋 후 Listener가 iat-cutoff 등록 + tokenVersion 캐시 evict + RT 정리
+        // 효과: 대상자의 구 AT 거부 → 재로그인 시 새 role(ADMIN) 반영
+        eventPublisher.publishEvent(new AllDevicesLogoutEvent(targetUserId, "ADMIN_GRANTED"));
 
         adminActionHistoryRepository.save(AdminActionHistory.builder()
             .actorId(actorId)
@@ -73,6 +82,10 @@ public class AdminUserService {
         }
 
         target.updateRole(UserRole.BUYER);
+
+        // 권한 회수의 핵심 — 구 AT는 여전히 role=ADMIN이므로 즉시 무효화 필수
+        //   (이 케이스는 status 변경이 없어 verifyActiveByCache로는 안 잡힘 → 토큰 무효화에 전적으로 의존)
+        eventPublisher.publishEvent(new AllDevicesLogoutEvent(targetUserId, "ADMIN_REVOKED"));
 
         adminActionHistoryRepository.save(AdminActionHistory.builder()
             .actorId(actorId)

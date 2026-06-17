@@ -1,5 +1,9 @@
 package com.sparta.one_stop.global.config;
 
+import com.sparta.one_stop.global.oauth2.CustomOAuth2UserService;
+import com.sparta.one_stop.global.oauth2.HttpCookieOAuth2AuthorizationRequestRepository;
+import com.sparta.one_stop.global.oauth2.OAuth2FailureHandler;
+import com.sparta.one_stop.global.oauth2.OAuth2SuccessHandler;
 import com.sparta.one_stop.global.security.JwtAccessDeniedHandler;
 import com.sparta.one_stop.global.security.JwtAuthenticationEntryPoint;
 import com.sparta.one_stop.global.security.JwtAuthenticationFilter;
@@ -22,7 +26,6 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
-
 // 필터 체인 순서
 // 1. CORS -> Preflight OPTIONS 먼저 통과시켜야 함
 // 2. 헤더 -> 모든 응답에 보안 헤더 적용(CORS 응답)
@@ -42,6 +45,12 @@ public class SecurityConfig {
     private final JwtAccessDeniedHandler jwtAccessDeniedHandler;
     private final UrlBasedCorsConfigurationSource corsConfigurationSource;
     private final SecurityHeaderConfig securityHeadersConfig;
+
+    // ── OAuth2 (소셜 로그인) ──
+    private final CustomOAuth2UserService customOAuth2UserService;
+    private final OAuth2SuccessHandler oAuth2SuccessHandler;
+    private final OAuth2FailureHandler oAuth2FailureHandler;
+    private final HttpCookieOAuth2AuthorizationRequestRepository cookieAuthRequestRepository;
 
 
     @Bean
@@ -88,6 +97,8 @@ public class SecurityConfig {
             .httpBasic(AbstractHttpConfigurer::disable)
 
             // Session 비활성화 (JWT Stateless 방식)
+            //   ※ oauth2Login의 인가요청 state는 세션 대신 쿠키 저장소로 보존한다.
+            //     (아래 authorizationRequestRepository 참고 — STATELESS와의 충돌 해소)
             .sessionManagement(session ->
                 session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 
@@ -126,6 +137,12 @@ public class SecurityConfig {
                     "/mypage/**", "/seller/**", "/admin/**"
                 ).permitAll()
 
+                // OAuth2(소셜 로그인) 진입/콜백 경로 허용
+                //   /oauth2/authorization/{provider}  : 인가요청 시작
+                //   /login/oauth2/code/{provider}      : Provider 콜백 (state 검증 → 토큰 발급)
+                //   ※ /login은 위에서 '정확 매칭' permitAll이라 콜백 하위경로를 덮지 못하므로 별도 명시
+                .requestMatchers("/oauth2/**", "/login/oauth2/code/**").permitAll()
+
                 // logout — permitAll (만료된 AT로도 로그아웃 가능해야 함)
                 //   인증 필터에서 막으면 AT 만료 시 RT/기기 정리 경로가 영원히 차단됨(데드락)
                 //   컨트롤러가 getUserIdAllowExpired로 만료 토큰도 파싱해 best-effort 정리
@@ -134,6 +151,7 @@ public class SecurityConfig {
                 // 인증 없이 접근 가능
                 // AUTH부분은 정책 변경 소요 대비 분리 작성
                 .requestMatchers("/api/auth/signup", "/api/auth/login", "/api/auth/refresh").permitAll()
+                .requestMatchers(HttpMethod.POST, "/api/auth/oauth2/exchange").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/products/**").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/categories/**").permitAll()
                 .requestMatchers("/api/carts/**").permitAll()
@@ -145,6 +163,7 @@ public class SecurityConfig {
                 .requestMatchers("/api/reviews/**").hasRole("BUYER")
                 .requestMatchers("/api/subscriptions/**").hasRole("BUYER")
                 .requestMatchers("/api/coupons/**").hasRole("BUYER")
+                .requestMatchers(HttpMethod.POST, "/api/users/me/points/charge").hasAnyRole("ADMIN", "SUPER_ADMIN") // 테스트 충전 방어
                 .requestMatchers("/api/users/me/points", "/api/users/me/points/**").hasRole("BUYER")
 
                 // User 공통(BUYER + SELLER 모두 접근 가능)
@@ -161,9 +180,23 @@ public class SecurityConfig {
                 .anyRequest().authenticated()
             )
 
+            // ── OAuth2 로그인 ──
+            //   흐름: 진입(/oauth2/authorization/kakao) → Provider 동의 → 콜백(/login/oauth2/code/kakao)
+            //         → CustomOAuth2UserService.loadUser(매칭/가입) → SuccessHandler(JWT 발급)
+            //   인가요청 저장소: 세션 대신 쿠키(STATELESS 충돌 해소, SameSite=Lax)
+            .oauth2Login(oauth -> oauth
+                .authorizationEndpoint(ae -> ae
+                    .authorizationRequestRepository(cookieAuthRequestRepository))
+                .userInfoEndpoint(ui -> ui
+                    .userService(customOAuth2UserService))
+                .successHandler(oAuth2SuccessHandler)
+                .failureHandler(oAuth2FailureHandler))
+
             // ── 필터 체인 등록 ── 미인증, 권한처리
             // 순서: JwtExceptionFilter → JwtAuthenticationFilter → UPAF
             // JwtExceptionFilter가 JwtAuthenticationFilter의 예외를 catch
+            //   ※ JwtAuthenticationFilter는 토큰 없으면 통과(lenient)하므로
+            //     OAuth 콜백(헤더 없는 리다이렉트)은 걸리지 않는다.
             .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
             .addFilterBefore(jwtExceptionFilter, JwtAuthenticationFilter.class);
 

@@ -145,6 +145,7 @@ class AuthServiceTest {
             // given
             LoginRequest request = new LoginRequest(EMAIL, PASSWORD);
             given(authQueryService.authenticate(request, DUMMY_HASH)).willReturn(testUser);
+            given(deviceLimitService.isNewDevice(USER_ID, DEVICE_ID)).willReturn(true);
 
             // [수정됨] createAccessToken 파라미터 3개로 변경 (userId, role, tokenVersion)
             given(jwtTokenProvider.createAccessToken(USER_ID, UserRole.BUYER, 0)).willReturn(ACCESS_TOKEN);
@@ -160,6 +161,8 @@ class AuthServiceTest {
             verify(rateLimitService).tryConsume(RateLimitPolicy.LOGIN_PER_ACCOUNT, EMAIL);
             verify(rateLimitService).tryConsume(RateLimitPolicy.LOGIN_PER_IP, CLIENT_IP);
             verify(rateLimitService).tryConsume(RateLimitPolicy.LOGIN_PER_GLOBAL, "all");
+            verify(rateLimitService).tryConsume(
+                RateLimitPolicy.DEVICE_REGISTER_PER_ACCOUNT, String.valueOf(USER_ID));
 
             // [수정됨] verify에도 3번째 파라미터 0 추가
             verify(jwtTokenProvider).createAccessToken(USER_ID, UserRole.BUYER, 0);
@@ -192,11 +195,52 @@ class AuthServiceTest {
         }
 
         @Test
+        @DisplayName("신규 기기 계정 제한 초과 시 기기 등록 전에 차단한다")
+        void new_device_rate_limit_is_checked_before_registration() {
+            // given
+            LoginRequest request = new LoginRequest(EMAIL, PASSWORD);
+            given(authQueryService.authenticate(request, DUMMY_HASH)).willReturn(testUser);
+            given(deviceLimitService.isNewDevice(USER_ID, DEVICE_ID)).willReturn(true);
+
+            // 로그인 과정의 다른 Rate Limit은 통과시키고,
+            // 신규 기기 계정 제한에 도달했을 때만 예외를 발생시킨다.
+            org.mockito.Mockito.doAnswer(invocation -> {
+                RateLimitPolicy policy = invocation.getArgument(0);
+                if (policy == RateLimitPolicy.DEVICE_REGISTER_PER_ACCOUNT) {
+                    throw new CustomException(ErrorCode.AUTH_013);
+                }
+                return null;
+            }).when(rateLimitService).tryConsume(any(RateLimitPolicy.class), anyString());
+
+            // when & then
+            assertThatThrownBy(() ->
+                authService.login(request, DEVICE_ID, USER_AGENT, CLIENT_IP)
+            )
+                .isInstanceOf(CustomException.class);
+
+            verify(deviceLimitService).isNewDevice(USER_ID, DEVICE_ID);
+            verify(rateLimitService).tryConsume(
+                RateLimitPolicy.DEVICE_REGISTER_PER_ACCOUNT,
+                String.valueOf(USER_ID)
+            );
+
+            // 핵심: 제한에 걸린 이후의 부수효과는 발생하지 않아야 한다.
+            verify(jwtTokenProvider, never()).createAccessToken(anyLong(), any(), anyInt());
+            verify(jwtTokenProvider, never()).createRefreshToken(anyLong(), anyString());
+            verify(deviceLimitService, never()).registerDevice(anyLong(), anyString());
+            verify(redisTokenService, never()).saveRefreshToken(
+                anyLong(), anyString(), anyString(), anyLong());
+            verify(deviceContextService, never()).bindContext(
+                anyLong(), anyString(), anyString(), anyString());
+        }
+
+        @Test
         @DisplayName("LRU 추방 발생 — registerDevice가 추방 기기를 반환하면 흐름은 계속 진행된다")
         void login_with_lru_eviction() {
             // given
             LoginRequest request = new LoginRequest(EMAIL, PASSWORD);
             given(authQueryService.authenticate(request, DUMMY_HASH)).willReturn(testUser);
+            given(deviceLimitService.isNewDevice(USER_ID, DEVICE_ID)).willReturn(true);
 
             // [수정됨] createAccessToken 파라미터 3개 (0)
             given(jwtTokenProvider.createAccessToken(USER_ID, UserRole.BUYER, 0)).willReturn(ACCESS_TOKEN);
@@ -213,6 +257,7 @@ class AuthServiceTest {
             assertThat(result.refreshToken()).isEqualTo(REFRESH_TOKEN);
             verify(redisTokenService).saveRefreshToken(USER_ID, DEVICE_ID, REFRESH_TOKEN, 604_800L);
             verify(redisTokenService).deleteRefreshToken(USER_ID, "old-device");
+            verify(deviceContextService).removeContext(USER_ID, "old-device");
         }
     }
 
