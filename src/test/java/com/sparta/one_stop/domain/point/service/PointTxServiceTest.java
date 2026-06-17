@@ -25,6 +25,9 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 
 import java.lang.reflect.Field;
 import java.time.LocalDate;
@@ -148,6 +151,185 @@ class PointTxServiceTest {
         } catch (NoSuchFieldException | IllegalAccessException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    @Test
+    @DisplayName("getMyPoints 성공 - 포인트 계정이 없으면 빈 응답을 반환한다")
+    void getMyPoints_success_whenPointDoesNotExist() {
+        // given
+        Long userId = 1L;
+        Pageable pageable = PageRequest.of(0, 10);
+
+        when(pointRepository.findByUserId(userId))
+            .thenReturn(Optional.empty());
+
+        // when
+        var response = pointTxService.getMyPoints(
+            userId,
+            null,
+            pageable
+        );
+
+        // then
+        assertThat(response.balance()).isZero();
+        assertThat(response.expiringSoon().amount()).isZero();
+        assertThat(response.expiringSoon().expireAt()).isNull();
+
+        assertThat(response.history().content()).isEmpty();
+        assertThat(response.history().page()).isEqualTo(0);
+        assertThat(response.history().size()).isEqualTo(10);
+        assertThat(response.history().totalElements()).isZero();
+        assertThat(response.history().totalPages()).isZero();
+
+        verify(pointHistoryRepository, never()).findAllByUserId(anyLong(), any());
+        verify(pointHistoryRepository, never()).findAllByUserIdAndType(anyLong(), any(), any());
+        verify(pointHistoryRepository, never()).sumExpiringSoonAmount(any(), any(), any(), any());
+        verify(pointHistoryRepository, never()).findNearestExpiringDate(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("getMyPoints 성공 - type이 null이면 전체 포인트 이력을 조회한다")
+    void getMyPoints_success_findAllHistory_whenTypeIsNull() {
+        // given
+        Long userId = 1L;
+        Pageable pageable = PageRequest.of(0, 10);
+
+        User user = mockUser(userId);
+        Point point = createPointWithBalance(
+            user,
+            5000
+        );
+        setField(point, "id", 100L);
+
+        PointHistory history = PointHistory.charge(
+            point,
+            5000,
+            "테스트 충전",
+            LocalDate.now().plusYears(1)
+        );
+
+        when(pointRepository.findByUserId(userId))
+            .thenReturn(Optional.of(point));
+
+        when(pointHistoryRepository.findAllByUserId(
+            userId,
+            pageable
+        )).thenReturn(new PageImpl<>(
+            List.of(history),
+            pageable,
+            1
+        ));
+
+        when(pointHistoryRepository.sumExpiringSoonAmount(
+            any(),
+            any(),
+            any(),
+            any()
+        )).thenReturn(3000L);
+
+        when(pointHistoryRepository.findNearestExpiringDate(
+            any(),
+            any(),
+            any(),
+            any()
+        )).thenReturn(Optional.of(LocalDate.now().plusDays(7)));
+
+        // when
+        var response = pointTxService.getMyPoints(
+            userId,
+            null,
+            pageable
+        );
+
+        // then
+        assertThat(response.balance()).isEqualTo(5000);
+
+        assertThat(response.history().content()).hasSize(1);
+        assertThat(response.history().page()).isEqualTo(0);
+        assertThat(response.history().size()).isEqualTo(10);
+        assertThat(response.history().totalElements()).isEqualTo(1);
+        assertThat(response.history().totalPages()).isEqualTo(1);
+
+        assertThat(response.expiringSoon().amount()).isEqualTo(3000);
+        assertThat(response.expiringSoon().expireAt()).isEqualTo(LocalDate.now().plusDays(7));
+
+        verify(pointHistoryRepository).findAllByUserId(
+            userId,
+            pageable
+        );
+        verify(pointHistoryRepository, never()).findAllByUserIdAndType(anyLong(), any(), any());
+    }
+
+    @Test
+    @DisplayName("getMyPoints 성공 - type이 있으면 해당 타입 이력만 조회한다")
+    void getMyPoints_success_findHistoryByType_whenTypeExists() {
+        // given
+        Long userId = 1L;
+        Pageable pageable = PageRequest.of(0, 10);
+        PointHistoryType type = PointHistoryType.CHARGE;
+
+        User user = mockUser(userId);
+        Point point = createPointWithBalance(
+            user,
+            5000
+        );
+        setField(point, "id", 100L);
+
+        PointHistory history = PointHistory.charge(
+            point,
+            5000,
+            "테스트 충전",
+            LocalDate.now().plusYears(1)
+        );
+
+        when(pointRepository.findByUserId(userId))
+            .thenReturn(Optional.of(point));
+
+        when(pointHistoryRepository.findAllByUserIdAndType(
+            userId,
+            type,
+            pageable
+        )).thenReturn(new PageImpl<>(
+            List.of(history),
+            pageable,
+            1
+        ));
+
+        when(pointHistoryRepository.sumExpiringSoonAmount(
+            any(),
+            any(),
+            any(),
+            any()
+        )).thenReturn(0L);
+
+        when(pointHistoryRepository.findNearestExpiringDate(
+            any(),
+            any(),
+            any(),
+            any()
+        )).thenReturn(Optional.empty());
+
+        // when
+        var response = pointTxService.getMyPoints(
+            userId,
+            type,
+            pageable
+        );
+
+        // then
+        assertThat(response.balance()).isEqualTo(5000);
+        assertThat(response.history().content()).hasSize(1);
+        assertThat(response.history().content().get(0).type()).isEqualTo(PointHistoryType.CHARGE);
+
+        assertThat(response.expiringSoon().amount()).isZero();
+        assertThat(response.expiringSoon().expireAt()).isNull();
+
+        verify(pointHistoryRepository, never()).findAllByUserId(anyLong(), any());
+        verify(pointHistoryRepository).findAllByUserIdAndType(
+            userId,
+            type,
+            pageable
+        );
     }
 
     @Test
@@ -741,6 +923,265 @@ class PointTxServiceTest {
             any(),
             any()
         );
+    }
+
+    @Test
+    @DisplayName("earnPointByDelivery 성공 - 모든 주문 상품이 배송 완료가 아니면 적립하지 않는다")
+    void earnPointByDelivery_success_skip_whenNotAllOrderItemsDelivered() {
+        // given
+        Long orderId = 1L;
+
+        when(orderItemRepository.isAllDelivered(orderId))
+            .thenReturn(false);
+
+        // when
+        pointTxService.earnPointByDelivery(orderId);
+
+        // then
+        verify(orderRepository, never()).findById(anyLong());
+        verify(pointHistoryRepository, never()).findAllByOrderIdAndType(anyLong(), any());
+        verify(pointRepository, never()).findByUserId(anyLong());
+        verify(pointHistoryRepository, never()).save(any(PointHistory.class));
+    }
+
+    @Test
+    @DisplayName("earnPointByDelivery 성공 - 이미 EARN 이력이 있으면 중복 적립하지 않는다")
+    void earnPointByDelivery_success_skip_whenEarnHistoryAlreadyExists() {
+        // given
+        Long orderId = 1L;
+        Order order = mock(Order.class);
+        PointHistory existingEarnHistory = mock(PointHistory.class);
+
+        when(orderItemRepository.isAllDelivered(orderId))
+            .thenReturn(true);
+
+        when(orderRepository.findById(orderId))
+            .thenReturn(Optional.of(order));
+
+        when(pointHistoryRepository.findAllByOrderIdAndType(
+            orderId,
+            PointHistoryType.EARN
+        )).thenReturn(List.of(existingEarnHistory));
+
+        // when
+        pointTxService.earnPointByDelivery(orderId);
+
+        // then
+        verify(pointRepository, never()).findByUserId(anyLong());
+        verify(pointRepository, never()).save(any(Point.class));
+        verify(pointHistoryRepository, never()).save(any(PointHistory.class));
+    }
+
+    @Test
+    @DisplayName("earnPointByDelivery 성공 - Point 계정이 없으면 자동 생성 후 적립한다")
+    void earnPointByDelivery_success_createPoint_whenPointDoesNotExist() {
+        // given
+        Long orderId = 1L;
+        Long userId = 1L;
+
+        User user = mockUser(userId);
+        Order order = mock(Order.class);
+
+        when(order.getUser()).thenReturn(user);
+        when(order.getTotalPrice()).thenReturn(10_000L);
+        when(order.getDiscountPrice()).thenReturn(1_000L);
+        when(order.getUsedPoint()).thenReturn(0);
+
+        when(orderItemRepository.isAllDelivered(orderId))
+            .thenReturn(true);
+
+        when(orderRepository.findById(orderId))
+            .thenReturn(Optional.of(order));
+
+        when(pointHistoryRepository.findAllByOrderIdAndType(
+            orderId,
+            PointHistoryType.EARN
+        )).thenReturn(List.of());
+
+        when(pointRepository.findByUserId(userId))
+            .thenReturn(Optional.empty());
+
+        when(pointRepository.save(any(Point.class)))
+            .thenAnswer(invocation -> invocation.getArgument(0));
+
+        // when
+        pointTxService.earnPointByDelivery(orderId);
+
+        // then
+        ArgumentCaptor<Point> pointCaptor =
+            ArgumentCaptor.forClass(Point.class);
+
+        verify(pointRepository).save(pointCaptor.capture());
+
+        Point savedPoint = pointCaptor.getValue();
+
+        assertThat(savedPoint.getUser()).isSameAs(user);
+        assertThat(savedPoint.getBalance()).isEqualTo(90);
+
+        ArgumentCaptor<PointHistory> historyCaptor =
+            ArgumentCaptor.forClass(PointHistory.class);
+
+        verify(pointHistoryRepository).save(historyCaptor.capture());
+
+        PointHistory savedHistory = historyCaptor.getValue();
+
+        assertThat(savedHistory.getPoint()).isSameAs(savedPoint);
+        assertThat(savedHistory.getUser()).isSameAs(user);
+        assertThat(savedHistory.getOrder()).isSameAs(order);
+        assertThat(savedHistory.getAmount()).isEqualTo(90);
+        assertThat(savedHistory.getRemainingAmount()).isEqualTo(90);
+        assertThat(savedHistory.getType()).isEqualTo(PointHistoryType.EARN);
+        assertThat(savedHistory.getExpireAt()).isEqualTo(LocalDate.now().plusYears(1));
+    }
+
+    @Test
+    @DisplayName("earnPointByDelivery 성공 - 적립 기준 금액이 0 이하이면 적립하지 않는다")
+    void earnPointByDelivery_success_skip_whenBaseAmountIsZeroOrLess() {
+        // given
+        Long orderId = 1L;
+        Long userId = 1L;
+
+        User user = mockUser(userId);
+        Point point = createPointWithBalance(
+            user,
+            0
+        );
+        setField(point, "id", 100L);
+
+        Order order = mock(Order.class);
+
+        when(order.getUser()).thenReturn(user);
+        when(order.getTotalPrice()).thenReturn(1_000L);
+        when(order.getDiscountPrice()).thenReturn(1_000L);
+        when(order.getUsedPoint()).thenReturn(0);
+
+        when(orderItemRepository.isAllDelivered(orderId))
+            .thenReturn(true);
+
+        when(orderRepository.findById(orderId))
+            .thenReturn(Optional.of(order));
+
+        when(pointHistoryRepository.findAllByOrderIdAndType(
+            orderId,
+            PointHistoryType.EARN
+        )).thenReturn(List.of());
+
+        when(pointRepository.findByUserId(userId))
+            .thenReturn(Optional.of(point));
+
+        // when
+        pointTxService.earnPointByDelivery(orderId);
+
+        // then
+        assertThat(point.getBalance()).isZero();
+
+        verify(pointRepository, never()).save(any(Point.class));
+        verify(pointHistoryRepository, never()).save(any(PointHistory.class));
+    }
+
+    @Test
+    @DisplayName("earnPointByDelivery 성공 - 적립 포인트가 0 이하이면 적립하지 않는다")
+    void earnPointByDelivery_success_skip_whenEarnAmountIsZeroOrLess() {
+        // given
+        Long orderId = 1L;
+        Long userId = 1L;
+
+        User user = mockUser(userId);
+        Point point = createPointWithBalance(
+            user,
+            0
+        );
+        setField(point, "id", 100L);
+
+        Order order = mock(Order.class);
+
+        when(order.getUser()).thenReturn(user);
+        when(order.getTotalPrice()).thenReturn(99L);
+        when(order.getDiscountPrice()).thenReturn(0L);
+        when(order.getUsedPoint()).thenReturn(0);
+
+        when(orderItemRepository.isAllDelivered(orderId))
+            .thenReturn(true);
+
+        when(orderRepository.findById(orderId))
+            .thenReturn(Optional.of(order));
+
+        when(pointHistoryRepository.findAllByOrderIdAndType(
+            orderId,
+            PointHistoryType.EARN
+        )).thenReturn(List.of());
+
+        when(pointRepository.findByUserId(userId))
+            .thenReturn(Optional.of(point));
+
+        // when
+        pointTxService.earnPointByDelivery(orderId);
+
+        // then
+        assertThat(point.getBalance()).isZero();
+
+        verify(pointRepository, never()).save(any(Point.class));
+        verify(pointHistoryRepository, never()).save(any(PointHistory.class));
+    }
+
+    @Test
+    @DisplayName("earnPointByDelivery 성공 - 정상 적립 시 EARN 이력을 저장하고 balance를 증가시킨다")
+    void earnPointByDelivery_success_saveEarnHistoryAndIncreaseBalance() {
+        // given
+        Long orderId = 1L;
+        Long userId = 1L;
+
+        User user = mockUser(userId);
+        Point point = createPointWithBalance(
+            user,
+            1000
+        );
+        setField(point, "id", 100L);
+
+        Order order = mock(Order.class);
+
+        when(order.getUser()).thenReturn(user);
+        when(order.getTotalPrice()).thenReturn(10_000L);
+        when(order.getDiscountPrice()).thenReturn(0L);
+        when(order.getUsedPoint()).thenReturn(0);
+
+        when(orderItemRepository.isAllDelivered(orderId))
+            .thenReturn(true);
+
+        when(orderRepository.findById(orderId))
+            .thenReturn(Optional.of(order));
+
+        when(pointHistoryRepository.findAllByOrderIdAndType(
+            orderId,
+            PointHistoryType.EARN
+        )).thenReturn(List.of());
+
+        when(pointRepository.findByUserId(userId))
+            .thenReturn(Optional.of(point));
+
+        // when
+        pointTxService.earnPointByDelivery(orderId);
+
+        // then
+        assertThat(point.getBalance()).isEqualTo(1100);
+
+        verify(pointRepository, never()).save(any(Point.class));
+
+        ArgumentCaptor<PointHistory> historyCaptor =
+            ArgumentCaptor.forClass(PointHistory.class);
+
+        verify(pointHistoryRepository).save(historyCaptor.capture());
+
+        PointHistory savedHistory = historyCaptor.getValue();
+
+        assertThat(savedHistory.getPoint()).isSameAs(point);
+        assertThat(savedHistory.getUser()).isSameAs(user);
+        assertThat(savedHistory.getOrder()).isSameAs(order);
+        assertThat(savedHistory.getAmount()).isEqualTo(100);
+        assertThat(savedHistory.getRemainingAmount()).isEqualTo(100);
+        assertThat(savedHistory.getType()).isEqualTo(PointHistoryType.EARN);
+        assertThat(savedHistory.getDescription()).isEqualTo("주문 #1 배송 완료 적립 (1%)");
+        assertThat(savedHistory.getExpireAt()).isEqualTo(LocalDate.now().plusYears(1));
     }
 
 }
