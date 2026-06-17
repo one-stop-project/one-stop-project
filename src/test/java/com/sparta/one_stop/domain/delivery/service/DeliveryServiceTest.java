@@ -20,6 +20,7 @@ import com.sparta.one_stop.domain.user.entity.Seller;
 import com.sparta.one_stop.domain.user.repository.SellerRepository;
 import com.sparta.one_stop.global.enums.delivery.DeliveryStatus;
 import com.sparta.one_stop.global.enums.order.OrderItemStatus;
+import com.sparta.one_stop.global.enums.order.OrderStatus;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.outbox.service.OutboxEventService;
 import org.junit.jupiter.api.DisplayName;
@@ -185,6 +186,11 @@ class DeliveryServiceTest {
         when(otherItem.getStatus()).thenReturn(OrderItemStatus.ORDERED);
         when(orderItemRepository.findAllByOrderId(100L))
             .thenReturn(List.of(orderItem, otherItem));
+
+        when(orderRepository.findByIdWithLock(100L))
+            .thenReturn(Optional.of(order));
+
+        when(order.getStatus()).thenReturn(OrderStatus.PAID);
 
         deliveryService.rejectOrder(
             1L, userId,

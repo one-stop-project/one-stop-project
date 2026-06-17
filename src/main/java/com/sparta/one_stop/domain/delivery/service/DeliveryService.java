@@ -30,6 +30,7 @@ import com.sparta.one_stop.global.enums.delivery.DeliveryStatus;
 import com.sparta.one_stop.global.enums.order.CancelActorType;
 import com.sparta.one_stop.global.enums.order.OrderCancelType;
 import com.sparta.one_stop.global.enums.order.OrderItemStatus;
+import com.sparta.one_stop.global.enums.order.OrderStatus;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import com.sparta.one_stop.global.outbox.service.OutboxEventService;
@@ -282,15 +283,24 @@ public class DeliveryService {
 
     /**
      * 해당 주문의 모든 OrderItem이 REJECTED 상태이면 주문 자동 취소 처리
+     * - 동시 거절 시 자동 취소 누락 방지를 위해 Order 비관적 락 획득
+     * - 락 획득 후 이미 취소된 주문이면 중복 처리하지 않음
      */
     private boolean checkAndAutoCancelOrder(Order order) {
-        List<OrderItem> allItems = orderItemRepository.findAllByOrderId(order.getId());
+        Order lockedOrder = orderRepository.findByIdWithLock(order.getId())
+            .orElseThrow(() -> new CustomException(ErrorCode.ORDER_006));
+
+        if (lockedOrder.getStatus() == OrderStatus.CANCELLED) {
+            return true;
+        }
+
+        List<OrderItem> allItems = orderItemRepository.findAllByOrderId(lockedOrder.getId());
 
         boolean allRejected = allItems.stream()
             .allMatch(oi -> oi.getStatus() == OrderItemStatus.REJECTED);
 
         if (allRejected) {
-            orderCommandService.autoCancelByFullRejection(order);
+            orderCommandService.autoCancelByFullRejection(lockedOrder);
             return true;
         }
 
