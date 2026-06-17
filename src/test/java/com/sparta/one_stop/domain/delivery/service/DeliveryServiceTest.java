@@ -8,9 +8,13 @@ import com.sparta.one_stop.domain.delivery.entity.Delivery;
 import com.sparta.one_stop.domain.delivery.entity.DeliveryHistory;
 import com.sparta.one_stop.domain.delivery.repository.DeliveryHistoryRepository;
 import com.sparta.one_stop.domain.delivery.repository.DeliveryRepository;
+import com.sparta.one_stop.domain.order.entity.Order;
+import com.sparta.one_stop.domain.order.entity.OrderCancelHistory;
 import com.sparta.one_stop.domain.order.entity.OrderItem;
+import com.sparta.one_stop.domain.order.repository.OrderCancelHistoryRepository;
 import com.sparta.one_stop.domain.order.repository.OrderItemRepository;
 import com.sparta.one_stop.domain.order.repository.OrderRepository;
+import com.sparta.one_stop.domain.order.service.OrderCommandService;
 import com.sparta.one_stop.domain.product.entity.ProductItem;
 import com.sparta.one_stop.domain.user.entity.Seller;
 import com.sparta.one_stop.domain.user.repository.SellerRepository;
@@ -25,6 +29,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -56,6 +61,12 @@ class DeliveryServiceTest {
 
     @Mock
     private ObjectMapper objectMapper;
+
+    @Mock
+    private OrderCommandService orderCommandService;
+
+    @Mock
+    private OrderCancelHistoryRepository orderCancelHistoryRepository;
 
     @InjectMocks
     private DeliveryService deliveryService;
@@ -137,10 +148,10 @@ class DeliveryServiceTest {
         Long userId = 1L;
 
         Seller seller = mock(Seller.class);
-
         OrderItem orderItem = mock(OrderItem.class);
-
         ProductItem productItem = mock(ProductItem.class);
+        Delivery delivery = mock(Delivery.class);
+        Order order = mock(Order.class);
 
         when(sellerRepository.findByUserId(userId))
             .thenReturn(Optional.of(seller));
@@ -150,31 +161,41 @@ class DeliveryServiceTest {
         when(orderItemRepository.findById(1L))
             .thenReturn(Optional.of(orderItem));
 
-        when(orderItem.getSeller())
-            .thenReturn(seller);
+        when(orderItem.getSeller()).thenReturn(seller);
+        when(orderItem.getProductItem()).thenReturn(productItem);
+        when(orderItem.getPrice()).thenReturn(10000L);
+        when(orderItem.getQuantity()).thenReturn(2);
+        when(orderItem.getOrder()).thenReturn(order);
+        when(order.getId()).thenReturn(100L);
 
+        // 1번째 호출: 검증 통과(ORDERED), 2번째 호출: 전체 거절 확인(REJECTED)
         when(orderItem.getStatus())
-            .thenReturn(OrderItemStatus.ORDERED);
+            .thenReturn(OrderItemStatus.ORDERED)
+            .thenReturn(OrderItemStatus.REJECTED);
 
-        when(orderItem.getProductItem())
-            .thenReturn(productItem);
+        // Delivery mock
+        when(deliveryRepository.findByOrderItemId(1L))
+            .thenReturn(Optional.of(delivery));
 
-        when(orderItem.getPrice())
-            .thenReturn(10000L);
+        when(delivery.getStatus())
+            .thenReturn(DeliveryStatus.ORDER_CANCELLED);
 
-        when(orderItem.getQuantity())
-            .thenReturn(2);
+        // 전체 거절 확인용 — 다른 아이템이 있어서 자동 취소 안 됨
+        OrderItem otherItem = mock(OrderItem.class);
+        when(otherItem.getStatus()).thenReturn(OrderItemStatus.ORDERED);
+        when(orderItemRepository.findAllByOrderId(100L))
+            .thenReturn(List.of(orderItem, otherItem));
 
         deliveryService.rejectOrder(
-            1L,
-            userId,
+            1L, userId,
             new RejectOrderRequest("재고 없음")
         );
 
         verify(orderItem).reject();
-
-        verify(productItem)
-            .increaseStock(2);
+        verify(productItem).increaseStock(2);
+        verify(delivery).cancelOrder();
+        verify(deliveryHistoryRepository).save(any(DeliveryHistory.class));
+        verify(orderCancelHistoryRepository).save(any(OrderCancelHistory.class));
     }
 
     @Test
