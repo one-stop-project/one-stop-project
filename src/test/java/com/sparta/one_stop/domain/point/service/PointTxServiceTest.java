@@ -1,6 +1,8 @@
 package com.sparta.one_stop.domain.point.service;
 
 import com.sparta.one_stop.domain.order.entity.Order;
+import com.sparta.one_stop.domain.order.repository.OrderItemRepository;
+import com.sparta.one_stop.domain.order.repository.OrderRepository;
 import com.sparta.one_stop.domain.point.dto.request.PointChargeRequest;
 import com.sparta.one_stop.domain.point.dto.response.PointChargeResponse;
 import com.sparta.one_stop.domain.point.entity.Point;
@@ -52,6 +54,12 @@ class PointTxServiceTest {
 
     @Mock
     private UserRepository userRepository;
+
+    @Mock
+    private OrderItemRepository orderItemRepository;
+
+    @Mock
+    private OrderRepository orderRepository;
 
     @InjectMocks
     private PointTxService pointTxService;
@@ -185,6 +193,7 @@ class PointTxServiceTest {
         assertThat(savedHistory.getExpireAt()).isEqualTo(LocalDate.now().plusYears(1));
 
         verify(pointRepository, never()).save(any(Point.class));
+        verify(pointRepository, never()).saveAndFlush(any(Point.class));
     }
 
     @Test
@@ -215,6 +224,7 @@ class PointTxServiceTest {
             ArgumentCaptor.forClass(Point.class);
 
         verify(pointRepository).saveAndFlush(pointCaptor.capture());
+        verify(pointRepository, never()).save(any(Point.class));
 
         Point savedPoint = pointCaptor.getValue();
 
