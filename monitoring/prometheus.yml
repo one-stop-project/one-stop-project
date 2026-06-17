@@ -11,7 +11,9 @@ scrape_configs:
   # ── Spring Boot 애플리케이션 ──
   - job_name: 'spring-boot'
     static_configs:
-      - targets: [ 'host.docker.internal:8081' ]
+      - targets:
+          - '10.0.18.198:8081'    # EC2 1 (main)
+          - '10.0.22.194:8081'    # EC2 2 (dummy)
     metrics_path: '/actuator/prometheus'
 
   # ── Prometheus 자기 자신도 모니터링 ──

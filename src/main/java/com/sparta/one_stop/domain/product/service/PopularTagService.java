@@ -11,6 +11,7 @@ import org.springframework.data.redis.core.ZSetOperations.TypedTuple;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -24,6 +25,12 @@ public class PopularTagService {
     private static final int TOP_N = 100;
     private static final long CACHE_TTL_SECONDS = 4 * 3600L;
     private static final String LOCAL_CACHE_KEY = "all";
+
+    // 정책: 사용 횟수 DESC, 동점이면 태그명 ASC.
+    // Redis ZSet(reverseRange)은 동점 멤버를 사전식 역순으로 주므로 노출 직전 이 기준으로 재정렬한다.
+    private static final Comparator<PopularTagResponse> TAG_ORDER =
+        Comparator.comparingLong(PopularTagResponse::usageCount).reversed()
+            .thenComparing(PopularTagResponse::tag);
 
     private final RedisTemplate<String, String> redisTemplate;
     private final ProductRepository productRepository;
@@ -78,39 +85,52 @@ public class PopularTagService {
     // 흐름: Redis → (예외 발생 시) 로컬 캐시 → (없으면) DB 조회
     // Redis 정상이지만 빈 경우: 로컬 캐시를 타지 않고 DB 직접 조회 (stale 데이터 방지)
     public List<PopularTagResponse> getAutocompleteTags(String prefix, int limit) {
+        // 태그는 저장 시 소문자(Locale.ROOT)로 정규화되므로 비교 prefix도 동일하게 정규화한다.
+        // (정규화하지 않으면 "Nike" 입력 시 소문자 저장된 "nike"가 매칭되지 않음)
+        String normalizedPrefix = normalizePrefix(prefix);
         try {
             Set<TypedTuple<String>> tuples = redisTemplate.opsForZSet()
                 .reverseRangeWithScores(POPULAR_TAG_KEY, 0, TOP_N - 1L);
 
             if (tuples == null || tuples.isEmpty()) {
                 // Redis 정상 + 빈 데이터 → 로컬 캐시 미사용, DB 직접 조회
-                return fallbackFromDb(prefix, limit);
+                return fallbackFromDb(normalizedPrefix, limit);
             }
 
             return tuples.stream()
                 .filter(t -> t.getValue() != null && t.getScore() != null)
-                .filter(t -> prefix == null || prefix.isBlank() || t.getValue().startsWith(prefix.trim()))
-                .limit(limit)
+                .filter(t -> normalizedPrefix == null || t.getValue().startsWith(normalizedPrefix))
                 .map(t -> new PopularTagResponse(t.getValue(), Math.round(t.getScore())))
+                .sorted(TAG_ORDER)
+                .limit(limit)
                 .toList();
         } catch (Exception e) {
             // Redis 예외(장애) → 로컬 캐시 우선 조회
             log.debug("[PopularTag] redis failed, fallback to local/db: {}", e.getMessage());
-            return fallbackFromLocalOrDb(prefix, limit);
+            return fallbackFromLocalOrDb(normalizedPrefix, limit);
         }
     }
 
-    private List<PopularTagResponse> fallbackFromLocalOrDb(String prefix, int limit) {
+    // prefix를 저장 태그와 동일하게 정규화 (trim + 소문자). null/blank이면 null(=전체 반환)
+    private String normalizePrefix(String prefix) {
+        if (prefix == null || prefix.isBlank()) {
+            return null;
+        }
+        return prefix.trim().toLowerCase(java.util.Locale.ROOT);
+    }
+
+    // prefix는 getAutocompleteTags에서 이미 정규화(trim+소문자)된 값을 받는다
+    private List<PopularTagResponse> fallbackFromLocalOrDb(String normalizedPrefix, int limit) {
         List<PopularTagResponse> cached = localCache.getIfPresent(LOCAL_CACHE_KEY);
         if (cached != null) {
             // 빈 리스트도 유효한 캐시 결과 ("태그 0건" 상태를 DB 재요청 없이 반환)
             log.debug("[PopularTag] serving from local cache (Redis unavailable)");
-            return filterAndLimit(cached, prefix, limit);
+            return filterAndLimit(cached, normalizedPrefix, limit);
         }
-        return fallbackFromDb(prefix, limit);
+        return fallbackFromDb(normalizedPrefix, limit);
     }
 
-    private List<PopularTagResponse> fallbackFromDb(String prefix, int limit) {
+    private List<PopularTagResponse> fallbackFromDb(String normalizedPrefix, int limit) {
         try {
             List<PopularTagResponse> all = productRepository.findTopTags(TOP_N).stream()
                 .map(row -> new PopularTagResponse((String) row[0], ((Number) row[1]).longValue()))
@@ -120,16 +140,18 @@ public class PopularTagService {
             localCache.put(LOCAL_CACHE_KEY, all);
             log.debug("[PopularTag] local cache populated from DB fallback. tags={}", all.size());
 
-            return filterAndLimit(all, prefix, limit);
+            return filterAndLimit(all, normalizedPrefix, limit);
         } catch (Exception e) {
             log.warn("[PopularTag] DB fallback failed: {}", e.getMessage());
             return List.of();
         }
     }
 
-    private List<PopularTagResponse> filterAndLimit(List<PopularTagResponse> all, String prefix, int limit) {
+    // normalizedPrefix는 이미 trim+소문자 정규화된 값 (null이면 전체 반환)
+    private List<PopularTagResponse> filterAndLimit(List<PopularTagResponse> all, String normalizedPrefix, int limit) {
         return all.stream()
-            .filter(r -> prefix == null || prefix.isBlank() || r.tag().startsWith(prefix.trim()))
+            .filter(r -> normalizedPrefix == null || r.tag().startsWith(normalizedPrefix))
+            .sorted(TAG_ORDER)
             .limit(limit)
             .toList();
     }

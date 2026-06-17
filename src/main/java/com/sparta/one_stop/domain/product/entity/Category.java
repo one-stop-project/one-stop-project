@@ -6,10 +6,10 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
-import jakarta.persistence.Index;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import com.sparta.one_stop.global.entity.BaseEntity;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -18,8 +18,11 @@ import lombok.NoArgsConstructor;
 
 @Entity
 @Table(name = "category",
-        indexes = {
-                @Index(name = "idx_category_parent_name", columnList = "parent_id, name")
+        uniqueConstraints = {
+                // 같은 부모 아래 카테고리명 중복 방지 (앱 레벨 검증 + DB 최후 방어선)
+                // ⚠️ MySQL은 (parent_id, name)에서 parent_id NULL(루트)을 다중 허용하므로
+                //    루트 카테고리 중복은 이 제약이 막지 못한다 → 루트는 앱 레벨 검증(+trim)만 보장
+                @UniqueConstraint(name = "uk_category_parent_name", columnNames = {"parent_id", "name"})
         })
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)

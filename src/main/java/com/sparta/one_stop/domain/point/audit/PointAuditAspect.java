@@ -10,7 +10,6 @@ import org.aspectj.lang.JoinPoint;
 import org.aspectj.lang.annotation.AfterReturning;
 import org.aspectj.lang.annotation.AfterThrowing;
 import org.aspectj.lang.annotation.Aspect;
-import org.springframework.core.task.TaskRejectedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -38,7 +37,7 @@ public class PointAuditAspect {
     private static final int MAX_ERROR_DETAIL_LENGTH = 500;
     private static final int MAX_USER_AGENT_LENGTH = 255;
     private static final int MAX_METHOD_NAME_LENGTH = 200;
-    private static final int MAX_CLIENT_IP_LENGTH = 45;  // ★ 추가 — IPv6 호환
+    private static final int MAX_CLIENT_IP_LENGTH = 45; // IPv6 최대 길이
     private final ClientIpExtractor clientIpExtractor;
     private final PointAuditWriter pointAuditWriter;
 
@@ -99,18 +98,13 @@ public class PointAuditAspect {
                 .args(truncate(safeArgs(jp.getArgs()), MAX_ARGS_LENGTH))
                 .result(result)
                 .errorDetail(truncate(errorDetail, MAX_ERROR_DETAIL_LENGTH))
-                .clientIp(truncate(clientIp, MAX_CLIENT_IP_LENGTH))         // ★ 추가
+                .clientIp(truncate(clientIp, MAX_CLIENT_IP_LENGTH))
                 .userAgent(truncate(userAgent, MAX_USER_AGENT_LENGTH))
                 .occurredAt(LocalDateTime.now())
                 .build();
 
-            try {
-                pointAuditWriter.persist(auditLog);
-            } catch (TaskRejectedException rejected) {
-                log.warn("[AUDIT_ASPECT] 비동기 감사 큐 포화 — 동기 fallback 실행: action={}, result={}",
-                    action, result);
-                pointAuditWriter.persistSynchronously(auditLog);
-            }
+            pointAuditWriter.persist(auditLog);
+
         } catch (Exception e) {
             log.error("[AUDIT_ASPECT] 감사 로그 기록 실패 — action={}, result={}, cause={}",
                 action, result, e.getMessage(), e);

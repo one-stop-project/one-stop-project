@@ -130,6 +130,7 @@ public class PaymentService {
 
     /**
      * 결제 가능 여부 검증
+     * - 결제 대기 상태(PENDING_PAYMENT) 주문만 결제 승인 가능
      * - 이미 결제 완료된 주문 재결제 방지
      * - 취소된 주문 결제 방지
      * - 동일 주문에 대한 중복 결제 데이터 생성 방지
@@ -145,6 +146,10 @@ public class PaymentService {
 
         if (order.getStatus() == OrderStatus.CANCELLED) {
             throw new CustomException(ErrorCode.PAYMENT_008);
+        }
+
+        if (order.getStatus() != OrderStatus.PENDING_PAYMENT) {
+            throw new CustomException(ErrorCode.PAYMENT_011);
         }
 
         if (paymentRepository.existsByOrderId(order.getId())) {
@@ -180,7 +185,8 @@ public class PaymentService {
      * - 결제 승인 완료 후 Kafka 발행 대신 Outbox 테이블에 이벤트를 저장한다
      * - eventId는 payment ID 기반으로 생성하여 동일 결제에 대한 중복 이벤트를 방지한다
      * - payload 직렬화 실패 시 예외를 전파하지 않고 로그만 기록한다
-     * - Outbox 저장 실패도 예외를 전파하지 않도록 방어한다
+     * - Outbox 저장은 REQUIRES_NEW 트랜잭션으로 격리되어 결제 트랜잭션을 rollback-only로 오염시키지 않는다
+     * - Outbox 저장 실패도 결제 성공의 필수 조건이 아니므로 예외를 전파하지 않는다
      */
     private void savePaymentApprovedOutboxEvent(
         Long userId,

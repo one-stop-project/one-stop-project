@@ -18,13 +18,19 @@ import com.sparta.one_stop.domain.delivery.event.DeliveryCompletedEventPayload;
 import com.sparta.one_stop.domain.delivery.repository.DeliveryHistoryRepository;
 import com.sparta.one_stop.domain.delivery.repository.DeliveryRepository;
 import com.sparta.one_stop.domain.order.entity.Order;
+import com.sparta.one_stop.domain.order.entity.OrderCancelHistory;
 import com.sparta.one_stop.domain.order.entity.OrderItem;
+import com.sparta.one_stop.domain.order.repository.OrderCancelHistoryRepository;
 import com.sparta.one_stop.domain.order.repository.OrderItemRepository;
 import com.sparta.one_stop.domain.order.repository.OrderRepository;
+import com.sparta.one_stop.domain.order.service.OrderCommandService;
 import com.sparta.one_stop.domain.user.entity.Seller;
 import com.sparta.one_stop.domain.user.repository.SellerRepository;
 import com.sparta.one_stop.global.enums.delivery.DeliveryStatus;
+import com.sparta.one_stop.global.enums.order.CancelActorType;
+import com.sparta.one_stop.global.enums.order.OrderCancelType;
 import com.sparta.one_stop.global.enums.order.OrderItemStatus;
+import com.sparta.one_stop.global.enums.order.OrderStatus;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import com.sparta.one_stop.global.outbox.service.OutboxEventService;
@@ -52,6 +58,8 @@ public class DeliveryService {
     private final SellerRepository sellerRepository;
     private final OutboxEventService outboxEventService;
     private final ObjectMapper objectMapper;
+    private final OrderCommandService orderCommandService;
+    private final OrderCancelHistoryRepository orderCancelHistoryRepository;
 
     // userId → Seller 조회 헬퍼
     private Seller findSellerByUserId(Long userId) {
@@ -204,12 +212,13 @@ public class DeliveryService {
         );
     }
 
-    // 주문 거절 (ORDERED → REJECTED)
     /**
      * 주문 거절 — 판매자가 이행 불가한 주문을 거절 (발주 확인 전 단계)
-     * - OrderItem이 ORDERED(배송 ACCEPT) 상태일 때만 가능. confirm/ship 이전.
-     * - 결제 완료 이후 단계이므로 재고는 즉시 복구한다.
-     * - order_item: ORDERED → REJECTED
+     * - OrderItem이 ORDERED(배송 ACCEPT) 상태일 때만 가능
+     * - 재고 즉시 복구
+     * - Delivery → ORDER_CANCELLED 전이 + DeliveryHistory 저장
+     * - OrderCancelHistory에 거절 이력 저장 (거절 사유 포함)
+     * - 해당 주문의 모든 OrderItem이 REJECTED이면 주문 자동 취소 처리
      */
     @Transactional
     public RejectOrderResponse rejectOrder(Long orderItemId,
@@ -229,16 +238,73 @@ public class DeliveryService {
             throw new CustomException(ErrorCode.SELLER_008);
         }
 
+        // OrderItem 상태 변경 + 재고 복구
         orderItem.reject();
         orderItem.getProductItem().increaseStock(orderItem.getQuantity());
 
-        Long refundAmount = orderItem.getPrice() * orderItem.getQuantity();
+        // Delivery → ORDER_CANCELLED + DeliveryHistory 저장
+        Delivery delivery = deliveryRepository.findByOrderItemId(orderItemId)
+            .orElseThrow(() -> new CustomException(ErrorCode.SHIPPING_005));
+
+        delivery.cancelOrder();
+
+        deliveryHistoryRepository.save(
+            new DeliveryHistory(delivery, DeliveryStatus.ORDER_CANCELLED)
+        );
+
+        // 거절 금액 계산 (정보성)
+        Long rejectedPrice = orderItem.getPrice() * orderItem.getQuantity();
+
+        // OrderCancelHistory 저장 (아이템 단위 거절 이력)
+        orderCancelHistoryRepository.save(
+            new OrderCancelHistory(
+                orderItem.getOrder(),
+                orderItem,
+                CancelActorType.SELLER,
+                userId,
+                OrderCancelType.SELLER_REJECT,
+                request.reason(),
+                rejectedPrice,
+                0
+            )
+        );
+
+        // 전체 거절 확인 → 자동 주문 취소
+        boolean orderAutoCancelled = checkAndAutoCancelOrder(orderItem.getOrder());
 
         return RejectOrderResponse.of(
             orderItemId,
-            refundAmount,
-            orderItem.getQuantity()
+            delivery.getStatus(),
+            rejectedPrice,
+            orderItem.getQuantity(),
+            orderAutoCancelled
         );
+    }
+
+    /**
+     * 해당 주문의 모든 OrderItem이 REJECTED 상태이면 주문 자동 취소 처리
+     * - 동시 거절 시 자동 취소 누락 방지를 위해 Order 비관적 락 획득
+     * - 락 획득 후 이미 취소된 주문이면 중복 처리하지 않음
+     */
+    private boolean checkAndAutoCancelOrder(Order order) {
+        Order lockedOrder = orderRepository.findByIdWithLock(order.getId())
+            .orElseThrow(() -> new CustomException(ErrorCode.ORDER_006));
+
+        if (lockedOrder.getStatus() == OrderStatus.CANCELLED) {
+            return true;
+        }
+
+        List<OrderItem> allItems = orderItemRepository.findAllByOrderId(lockedOrder.getId());
+
+        boolean allRejected = allItems.stream()
+            .allMatch(oi -> oi.getStatus() == OrderItemStatus.REJECTED);
+
+        if (allRejected) {
+            orderCommandService.autoCancelByFullRejection(lockedOrder);
+            return true;
+        }
+
+        return false;
     }
 
     // 운송장 등록 (INSTRUCT → DEPARTURE)

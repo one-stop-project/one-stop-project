@@ -280,6 +280,37 @@ public class OrderCommandService {
     }
 
     /**
+     * 전체 거절 시 자동 주문 취소
+     * - 해당 주문의 모든 order_item이 REJECTED 상태일 때 DeliveryService에서 호출
+     * - 재고 복구, OrderItem 상태 변경, Delivery 취소는 이미 거절 시점에 처리 완료
+     * - Payment 취소, 쿠폰 복구, 포인트 복구, Order 상태 변경만 수행
+     * - OrderCancelHistory는 주문 전체 단위로 저장 (SYSTEM 자동 처리)
+     */
+    public void autoCancelByFullRejection(Order order) {
+
+        cancelPaymentIfPaidOrder(order);
+
+        couponCommandService.restoreCouponByOrder(order);
+
+        order.cancel();
+
+        Integer restoredPoint = pointService.refundPointByOrder(order);
+
+        OrderCancelHistory cancelHistory = new OrderCancelHistory(
+            order,
+            null,
+            CancelActorType.SYSTEM,
+            null,
+            OrderCancelType.SELLER_REJECT,
+            "전체 주문 상품 거절로 자동 취소",
+            order.getFinalPrice(),
+            restoredPoint
+        );
+
+        orderCancelHistoryRepository.save(cancelHistory);
+    }
+
+    /**
      * 주문 유형 검증
      * - DIRECT: items 필수
      * - CART: cartItemIds 필수
