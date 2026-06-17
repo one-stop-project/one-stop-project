@@ -199,7 +199,7 @@ class PointTxServiceTest {
             .thenReturn(Optional.of(user));
         when(pointRepository.findByUserId(userId))
             .thenReturn(Optional.empty());
-        when(pointRepository.save(any(Point.class)))
+        when(pointRepository.saveAndFlush(any(Point.class)))
             .thenAnswer(invocation -> invocation.getArgument(0));
 
         // when
@@ -214,7 +214,7 @@ class PointTxServiceTest {
         ArgumentCaptor<Point> pointCaptor =
             ArgumentCaptor.forClass(Point.class);
 
-        verify(pointRepository).save(pointCaptor.capture());
+        verify(pointRepository).saveAndFlush(pointCaptor.capture());
 
         Point savedPoint = pointCaptor.getValue();
 

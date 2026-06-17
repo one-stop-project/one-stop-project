@@ -131,7 +131,7 @@ public class PointTxService {
                 existing.verifyIntegrity();
                 return existing;
             })
-            .orElseGet(() -> pointRepository.save(Point.createInitial(user)));
+            .orElseGet(() -> pointRepository.saveAndFlush(Point.createInitial(user)));
 
         Integer amount = request.amount();
         LocalDate expireAt = LocalDate.now().plusYears(1);
@@ -320,7 +320,7 @@ public class PointTxService {
             })
             .orElseGet(() -> {
                 User user = order.getUser();
-                return pointRepository.save(Point.createInitial(user));
+                return pointRepository.saveAndFlush(Point.createInitial(user));
             });
 
         // 적립 기준 금액 = 상품금액 - 쿠폰할인 - 사용포인트 (배송비 제외)
