@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
@@ -17,6 +19,7 @@ import com.sparta.one_stop.domain.product.repository.CategoryRepository;
 import com.sparta.one_stop.domain.product.repository.ProductCategoryMappingRepository;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import com.sparta.one_stop.global.exception.CustomException;
+import org.springframework.dao.DataIntegrityViolationException;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
@@ -169,6 +172,52 @@ class CategoryServiceTest {
                     .isInstanceOf(CustomException.class)
                     .extracting("errorCode").isEqualTo(ErrorCode.CATEGORY_002);
         }
+
+        @Test
+        @DisplayName("이름 앞뒤 공백은 제거되어 검증·저장된다 (\" 전자기기 \" → \"전자기기\")")
+        void create_trimsName() {
+            // given — 공백 제거된 이름으로 중복 검사·저장이 이뤄져야 한다
+            given(categoryRepository.existsByParentIsNullAndName("전자기기")).willReturn(false);
+            mockSaveReturns(category(1L, "전자기기", null));
+
+            // when
+            CategoryResponse response =
+                    categoryService.create(new CategoryCreateRequest("  전자기기  ", null));
+
+            // then
+            assertThat(response.name()).isEqualTo("전자기기");
+            verify(categoryRepository).existsByParentIsNullAndName("전자기기");
+            verify(categoryRepository).save(argThat(c -> "전자기기".equals(c.getName())));
+        }
+
+        @Test
+        @DisplayName("동시 생성 경합으로 DB 유니크 제약 위반 시 CATEGORY_002로 매핑된다")
+        void create_dbUniqueViolation_throwsCategory002() {
+            // given — 앱 레벨 검사는 통과했으나 동시 INSERT 경합으로 DB 제약이 막은 경우
+            given(categoryRepository.existsByParentIsNullAndName("전자기기")).willReturn(false);
+            given(categoryRepository.save(any(Category.class)))
+                    .willThrow(new DataIntegrityViolationException("uk_category_parent_name"));
+
+            // when & then
+            assertThatThrownBy(
+                    () -> categoryService.create(new CategoryCreateRequest("전자기기", null)))
+                    .isInstanceOf(CustomException.class)
+                    .extracting("errorCode").isEqualTo(ErrorCode.CATEGORY_002);
+        }
+
+        @Test
+        @DisplayName("이름 유니크 외 다른 무결성 위반은 CATEGORY_002로 가리지 않고 그대로 전파된다")
+        void create_otherIntegrityViolation_rethrows() {
+            // given — uk_category_parent_name이 아닌 다른 제약 위반
+            given(categoryRepository.existsByParentIsNullAndName("전자기기")).willReturn(false);
+            given(categoryRepository.save(any(Category.class)))
+                    .willThrow(new DataIntegrityViolationException("Column 'name' cannot be null"));
+
+            // when & then — CustomException(CATEGORY_002)이 아니라 원래 예외가 전파돼야 한다
+            assertThatThrownBy(
+                    () -> categoryService.create(new CategoryCreateRequest("전자기기", null)))
+                    .isInstanceOf(DataIntegrityViolationException.class);
+        }
     }
 
     @Nested
@@ -233,6 +282,44 @@ class CategoryServiceTest {
             mockFindCategory(child);
             given(categoryRepository.existsByParentIdAndNameAndIdNot(1L, "태블릿", 2L))
                     .willReturn(true);
+
+            // when & then
+            assertThatThrownBy(
+                    () -> categoryService.updateName(2L, new CategoryUpdateRequest("태블릿")))
+                    .isInstanceOf(CustomException.class)
+                    .extracting("errorCode").isEqualTo(ErrorCode.CATEGORY_002);
+        }
+
+        @Test
+        @DisplayName("수정 이름 앞뒤 공백은 제거되어 검증·반영된다")
+        void updateName_trimsName() {
+            // given
+            Category root = category(1L, "전자기기", null);
+            Category child = category(2L, "노트북", root);
+            mockFindCategory(child);
+            given(categoryRepository.existsByParentIdAndNameAndIdNot(1L, "랩탑", 2L))
+                    .willReturn(false);
+
+            // when
+            CategoryResponse response =
+                    categoryService.updateName(2L, new CategoryUpdateRequest("  랩탑  "));
+
+            // then
+            assertThat(response.name()).isEqualTo("랩탑");
+            verify(categoryRepository).existsByParentIdAndNameAndIdNot(1L, "랩탑", 2L);
+        }
+
+        @Test
+        @DisplayName("동시 수정 경합으로 DB 유니크 제약 위반(flush) 시 CATEGORY_002로 매핑된다")
+        void updateName_dbUniqueViolation_throwsCategory002() {
+            // given
+            Category root = category(1L, "전자기기", null);
+            Category child = category(2L, "노트북", root);
+            mockFindCategory(child);
+            given(categoryRepository.existsByParentIdAndNameAndIdNot(1L, "태블릿", 2L))
+                    .willReturn(false);
+            willThrow(new DataIntegrityViolationException("uk_category_parent_name"))
+                    .given(categoryRepository).flush();
 
             // when & then
             assertThatThrownBy(

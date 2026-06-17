@@ -126,12 +126,14 @@ public class PointTxService {
             .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_001));
 
         // 포인트 계정 조회, 없으면 생성
+        // 신규 지갑 생성 시에는 첫 충전 동시 요청에서 user_id UNIQUE 제약 위반을
+        // 메서드 내부에서 즉시 감지하여 재시도 대상 예외로 처리하기 위해 saveAndFlush를 사용한다.
         Point point = pointRepository.findByUserId(userId)
             .map(existing -> {
                 existing.verifyIntegrity();
                 return existing;
             })
-            .orElseGet(() -> pointRepository.save(Point.createInitial(user)));
+            .orElseGet(() -> pointRepository.saveAndFlush(Point.createInitial(user)));
 
         Integer amount = request.amount();
         LocalDate expireAt = LocalDate.now().plusYears(1);
@@ -313,6 +315,7 @@ public class PointTxService {
         Long userId = order.getUser().getId();
 
         // Point 계정 없으면 새로 생성
+        // 배송 완료 적립 경로는 첫 충전 재시도 목적의 즉시 flush가 필요하지 않으므로 save를 사용한다.
         Point point = pointRepository.findByUserId(userId)
             .map(existing -> {
                 existing.verifyIntegrity();
