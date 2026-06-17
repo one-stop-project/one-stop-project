@@ -100,6 +100,42 @@ class PopularTagServiceTest {
 
             assertThat(result).extracting(PopularTagResponse::tag).containsExactly("nike");
         }
+
+        @Test
+        @DisplayName("동점(같은 사용 횟수)이면 태그명 오름차순으로 반환한다 — Redis 역순 보정 (#487)")
+        void tiedTags_sortedByTagAsc() {
+            given(redisTemplate.opsForZSet()).willReturn(zSetOperations);
+            // Redis ZSet은 동점 멤버를 사전식 역순(banana→apple)으로 준다고 가정한다
+            Set<TypedTuple<String>> redisOrder = new LinkedHashSet<>();
+            redisOrder.add(new DefaultTypedTuple<>("cherry", 10.0));
+            redisOrder.add(new DefaultTypedTuple<>("banana", 5.0));
+            redisOrder.add(new DefaultTypedTuple<>("apple", 5.0));
+            given(zSetOperations.reverseRangeWithScores(anyString(), anyLong(), anyLong()))
+                .willReturn(redisOrder);
+
+            List<PopularTagResponse> result = popularTagService.getAutocompleteTags(null, 10);
+
+            // 사용 횟수 DESC, 동점이면 태그명 ASC → cherry, apple, banana
+            assertThat(result).extracting(PopularTagResponse::tag)
+                .containsExactly("cherry", "apple", "banana");
+        }
+
+        @Test
+        @DisplayName("limit 경계가 동점을 자르면 태그명 ASC 우선순위가 적용된다 (#487)")
+        void tieAtLimitBoundary_keepsTagAscPriority() {
+            given(redisTemplate.opsForZSet()).willReturn(zSetOperations);
+            Set<TypedTuple<String>> redisOrder = new LinkedHashSet<>();
+            redisOrder.add(new DefaultTypedTuple<>("cherry", 10.0));
+            redisOrder.add(new DefaultTypedTuple<>("banana", 5.0));
+            redisOrder.add(new DefaultTypedTuple<>("apple", 5.0));
+            given(zSetOperations.reverseRangeWithScores(anyString(), anyLong(), anyLong()))
+                .willReturn(redisOrder);
+
+            List<PopularTagResponse> result = popularTagService.getAutocompleteTags(null, 2);
+
+            // 동점(5) 중 태그명 ASC로 apple이 banana보다 우선 → [cherry, apple]
+            assertThat(result).extracting(PopularTagResponse::tag).containsExactly("cherry", "apple");
+        }
     }
 
     @Nested
@@ -117,6 +153,22 @@ class PopularTagServiceTest {
             List<PopularTagResponse> result = popularTagService.getAutocompleteTags("NIKE", 10);
 
             assertThat(result).extracting(PopularTagResponse::tag).containsExactly("nike");
+        }
+
+        @Test
+        @DisplayName("DB 폴백에서도 동점이면 태그명 오름차순으로 반환한다 (#487)")
+        void tiedTags_sortedByTagAsc_inDbFallback() {
+            given(redisTemplate.opsForZSet()).willThrow(new RuntimeException("redis down"));
+            // 입력이 동점을 사전식 역순(banana→apple)으로 줘도 정책 순서로 보정되어야 한다
+            given(productRepository.findTopTags(anyInt())).willReturn(List.of(
+                new Object[]{"cherry", 10L},
+                new Object[]{"banana", 5L},
+                new Object[]{"apple", 5L}));
+
+            List<PopularTagResponse> result = popularTagService.getAutocompleteTags(null, 10);
+
+            assertThat(result).extracting(PopularTagResponse::tag)
+                .containsExactly("cherry", "apple", "banana");
         }
     }
 }

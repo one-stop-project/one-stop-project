@@ -11,6 +11,7 @@ import org.springframework.data.redis.core.ZSetOperations.TypedTuple;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -24,6 +25,12 @@ public class PopularTagService {
     private static final int TOP_N = 100;
     private static final long CACHE_TTL_SECONDS = 4 * 3600L;
     private static final String LOCAL_CACHE_KEY = "all";
+
+    // 정책: 사용 횟수 DESC, 동점이면 태그명 ASC.
+    // Redis ZSet(reverseRange)은 동점 멤버를 사전식 역순으로 주므로 노출 직전 이 기준으로 재정렬한다.
+    private static final Comparator<PopularTagResponse> TAG_ORDER =
+        Comparator.comparingLong(PopularTagResponse::usageCount).reversed()
+            .thenComparing(PopularTagResponse::tag);
 
     private final RedisTemplate<String, String> redisTemplate;
     private final ProductRepository productRepository;
@@ -93,8 +100,9 @@ public class PopularTagService {
             return tuples.stream()
                 .filter(t -> t.getValue() != null && t.getScore() != null)
                 .filter(t -> normalizedPrefix == null || t.getValue().startsWith(normalizedPrefix))
-                .limit(limit)
                 .map(t -> new PopularTagResponse(t.getValue(), Math.round(t.getScore())))
+                .sorted(TAG_ORDER)
+                .limit(limit)
                 .toList();
         } catch (Exception e) {
             // Redis 예외(장애) → 로컬 캐시 우선 조회
@@ -143,6 +151,7 @@ public class PopularTagService {
     private List<PopularTagResponse> filterAndLimit(List<PopularTagResponse> all, String normalizedPrefix, int limit) {
         return all.stream()
             .filter(r -> normalizedPrefix == null || r.tag().startsWith(normalizedPrefix))
+            .sorted(TAG_ORDER)
             .limit(limit)
             .toList();
     }
