@@ -1,13 +1,21 @@
 package com.sparta.one_stop.domain.admin.service;
 
 import com.sparta.one_stop.domain.admin.repository.AdminActionHistoryRepository;
+import com.sparta.one_stop.domain.coupon.service.CouponCommandService;
+import com.sparta.one_stop.domain.order.entity.Order;
+import com.sparta.one_stop.domain.order.entity.OrderCancelHistory;
+import com.sparta.one_stop.domain.order.entity.OrderItem;
 import com.sparta.one_stop.domain.order.repository.OrderCancelHistoryRepository;
 import com.sparta.one_stop.domain.order.repository.OrderItemRepository;
+import com.sparta.one_stop.domain.point.service.PointService;
+import com.sparta.one_stop.domain.product.entity.ProductItem;
 import com.sparta.one_stop.domain.product.repository.ProductRepository;
 import com.sparta.one_stop.domain.user.entity.Seller;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.SellerRepository;
 import com.sparta.one_stop.domain.user.service.UserStatusCacheService;
+import com.sparta.one_stop.global.enums.order.OrderItemStatus;
+import com.sparta.one_stop.global.enums.order.OrderStatus;
 import com.sparta.one_stop.global.enums.user.SellerStatus;
 import com.sparta.one_stop.global.enums.user.UserRole;
 import com.sparta.one_stop.global.exception.CustomException;
@@ -17,6 +25,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -28,7 +37,10 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
@@ -44,6 +56,8 @@ class AdminSellerServiceTest {
     @Mock private OrderCancelHistoryRepository orderCancelHistoryRepository;
     @Mock private ApplicationEventPublisher eventPublisher;
     @Mock private UserStatusCacheService userStatusCacheService;
+    @Mock private PointService pointService;
+    @Mock private CouponCommandService couponCommandService;
     @InjectMocks
     private AdminSellerService adminSellerService;
     private User user;
@@ -156,6 +170,99 @@ class AdminSellerServiceTest {
 
             assertThat(seller.getStatus()).isEqualTo(SellerStatus.SUSPENDED);
             verify(adminActionHistoryRepository).save(any());
+        }
+
+        @Test
+        @DisplayName("판매자 상품 취소로 주문 전체가 취소되면 포인트와 쿠폰을 한 번 복구한다")
+        void suspend_restores_order_benefits_when_order_becomes_fully_cancelled() {
+            seller.approve();
+
+            Order order = mock(Order.class);
+            OrderItem orderItem = mock(OrderItem.class);
+            ProductItem productItem = mock(ProductItem.class);
+
+            given(sellerRepository.findById(SELLER_ID)).willReturn(Optional.of(seller));
+            given(order.getId()).willReturn(100L);
+            given(order.getStatus()).willReturn(OrderStatus.PAID);
+            given(orderItem.getOrder()).willReturn(order);
+            given(orderItem.getProductItem()).willReturn(productItem);
+            given(orderItem.getQuantity()).willReturn(2);
+            given(orderItem.getPrice()).willReturn(1_000L);
+            given(orderItem.getStatus()).willReturn(OrderItemStatus.CANCELLED);
+            given(orderItemRepository.findBySellerIdAndStatusIn(anyLong(), any()))
+                .willReturn(List.of(orderItem));
+            given(orderItemRepository.findAllByOrderId(100L))
+                .willReturn(List.of(orderItem));
+            given(pointService.refundPointByOrder(order)).willReturn(300);
+
+            adminSellerService.forceInactiveSeller(SELLER_ID, ACTOR_ID, "정책 위반");
+
+            verify(productItem).increaseStock(2);
+            verify(orderItem).cancel();
+            verify(couponCommandService).restoreCouponByOrder(order);
+            verify(order).cancel();
+            verify(pointService).refundPointByOrder(order);
+
+            ArgumentCaptor<OrderCancelHistory> historyCaptor =
+                ArgumentCaptor.forClass(OrderCancelHistory.class);
+            verify(orderCancelHistoryRepository).save(historyCaptor.capture());
+            assertThat(historyCaptor.getValue().getRestoredPoint()).isEqualTo(300);
+        }
+
+        @Test
+        @DisplayName("다른 판매자 상품이 남은 부분 취소 주문은 포인트와 쿠폰을 복구하지 않는다")
+        void suspend_does_not_restore_order_benefits_when_order_is_partially_cancelled() {
+            seller.approve();
+
+            Order order = mock(Order.class);
+            OrderItem sellerItem = mock(OrderItem.class);
+            OrderItem otherSellerItem = mock(OrderItem.class);
+            ProductItem productItem = mock(ProductItem.class);
+
+            given(sellerRepository.findById(SELLER_ID))
+                .willReturn(Optional.of(seller));
+
+            given(order.getId()).willReturn(100L);
+
+            // 삭제
+            // given(order.getStatus()).willReturn(OrderStatus.PAID);
+
+            given(sellerItem.getOrder()).willReturn(order);
+            given(sellerItem.getProductItem()).willReturn(productItem);
+            given(sellerItem.getQuantity()).willReturn(1);
+            given(sellerItem.getPrice()).willReturn(1_000L);
+            given(sellerItem.getStatus()).willReturn(OrderItemStatus.CANCELLED);
+            given(otherSellerItem.getStatus()).willReturn(OrderItemStatus.ORDERED);
+
+            given(orderItemRepository.findBySellerIdAndStatusIn(anyLong(), any()))
+                .willReturn(List.of(sellerItem));
+
+            given(orderItemRepository.findAllByOrderId(100L))
+                .willReturn(List.of(sellerItem, otherSellerItem));
+
+            adminSellerService.forceInactiveSeller(
+                SELLER_ID,
+                ACTOR_ID,
+                "정책 위반"
+            );
+
+            verify(couponCommandService, never())
+                .restoreCouponByOrder(any());
+
+            verify(pointService, never())
+                .refundPointByOrder(any());
+
+            verify(order, never())
+                .cancel();
+
+            ArgumentCaptor<OrderCancelHistory> historyCaptor =
+                ArgumentCaptor.forClass(OrderCancelHistory.class);
+
+            verify(orderCancelHistoryRepository)
+                .save(historyCaptor.capture());
+
+            assertThat(historyCaptor.getValue().getRestoredPoint())
+                .isZero();
         }
 
         @Test

@@ -3,10 +3,13 @@ package com.sparta.one_stop.domain.admin.service;
 import com.sparta.one_stop.domain.admin.entity.AdminActionHistory;
 import com.sparta.one_stop.domain.admin.repository.AdminActionHistoryRepository;
 import com.sparta.one_stop.domain.auth.event.AllDevicesLogoutEvent;
+import com.sparta.one_stop.domain.coupon.service.CouponCommandService;
+import com.sparta.one_stop.domain.order.entity.Order;
 import com.sparta.one_stop.domain.order.entity.OrderCancelHistory;
 import com.sparta.one_stop.domain.order.entity.OrderItem;
 import com.sparta.one_stop.domain.order.repository.OrderCancelHistoryRepository;
 import com.sparta.one_stop.domain.order.repository.OrderItemRepository;
+import com.sparta.one_stop.domain.point.service.PointService;
 import com.sparta.one_stop.domain.product.repository.ProductRepository;
 import com.sparta.one_stop.domain.user.entity.Seller;
 import com.sparta.one_stop.domain.user.repository.SellerRepository;
@@ -16,6 +19,7 @@ import com.sparta.one_stop.global.enums.admin.AdminActionType;
 import com.sparta.one_stop.global.enums.order.CancelActorType;
 import com.sparta.one_stop.global.enums.order.OrderCancelType;
 import com.sparta.one_stop.global.enums.order.OrderItemStatus;
+import com.sparta.one_stop.global.enums.order.OrderStatus;
 import com.sparta.one_stop.global.enums.product.ProductStatus;
 import com.sparta.one_stop.global.enums.user.SellerStatus;
 import com.sparta.one_stop.global.exception.CustomException;
@@ -24,7 +28,9 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -41,6 +47,8 @@ public class AdminSellerService {
     private final OrderCancelHistoryRepository orderCancelHistoryRepository;
     private final org.springframework.context.ApplicationEventPublisher eventPublisher;
     private final UserStatusCacheService userStatusCacheService;
+    private final PointService pointService;
+    private final CouponCommandService couponCommandService;
 
     // 대기 중인 판매자 목록 조회
     public List<Seller> getPendingSellers() {
@@ -154,15 +162,66 @@ public class AdminSellerService {
     }
 
     // 판매자 정지 시 ORDERED/CONFIRMED 상태 주문 자동 취소 및 재고 복구
+    // 주문의 모든 OrderItem이 CANCELLED가 된 경우에만 주문 단위 혜택을 한 번 복구한다
+    // 일부 OrderItem만 취소된 부분 취소 주문은 포인트·쿠폰을 복구하지 않는다.
     private void cancelActiveOrdersBySeller(Long sellerId, Long actorId) {
         List<OrderItem> activeItems = orderItemRepository.findBySellerIdAndStatusIn(
             sellerId,
             List.of(OrderItemStatus.ORDERED, OrderItemStatus.CONFIRMED)
         );
 
-        for (OrderItem orderItem : activeItems) {
-            orderItem.getProductItem().increaseStock(orderItem.getQuantity());
-            orderItem.cancel();
+        Map<Long, List<OrderItem>> itemsByOrderId = activeItems.stream()
+            .collect(java.util.stream.Collectors.groupingBy(
+                item -> item.getOrder().getId(),
+                LinkedHashMap::new,
+                java.util.stream.Collectors.toList()
+            ));
+
+        for (List<OrderItem> sellerOrderItems : itemsByOrderId.values()) {
+            Order order = sellerOrderItems.get(0).getOrder();
+
+            for (OrderItem orderItem : sellerOrderItems) {
+                orderItem.getProductItem().increaseStock(orderItem.getQuantity());
+                orderItem.cancel();
+            }
+
+            int restoredPoint = restoreBenefitsWhenFullyCancelled(order);
+            saveCancelHistories(sellerOrderItems, actorId, restoredPoint);
+        }
+    }
+
+    /**
+     * 주문 전체가 취소된 경우에만 주문 단위 포인트와 쿠폰을 복구한다.
+     * 이미 CANCELLED인 주문은 재처리하지 않아 중복 복구를 방지한다.
+     */
+    private int restoreBenefitsWhenFullyCancelled(Order order) {
+        List<OrderItem> allOrderItems = orderItemRepository.findAllByOrderId(order.getId());
+
+        boolean fullyCancelled = !allOrderItems.isEmpty()
+            && allOrderItems.stream()
+            .allMatch(item -> item.getStatus() == OrderItemStatus.CANCELLED);
+
+        if (!fullyCancelled || order.getStatus() == OrderStatus.CANCELLED) {
+            return NOT_RESTORED_POINT;
+        }
+
+        couponCommandService.restoreCouponByOrder(order);
+        order.cancel();
+        return pointService.refundPointByOrder(order);
+    }
+
+    /**
+     * 취소 이력은 기존처럼 OrderItem 단위로 남긴다.
+     * 주문 단위 포인트 복구액은 중복 합산을 피하기 위해 첫 번째 이력에만 기록한다.
+     */
+    private void saveCancelHistories(
+        List<OrderItem> cancelledItems,
+        Long actorId,
+        int restoredPoint
+    ) {
+        for (int index = 0; index < cancelledItems.size(); index++) {
+            OrderItem orderItem = cancelledItems.get(index);
+            int historyRestoredPoint = index == 0 ? restoredPoint : NOT_RESTORED_POINT;
 
             orderCancelHistoryRepository.save(new OrderCancelHistory(
                 orderItem.getOrder(),
@@ -172,7 +231,7 @@ public class AdminSellerService {
                 OrderCancelType.ADMIN_CANCEL,
                 SELLER_SUSPEND_CANCEL_REASON,
                 orderItem.getPrice() * orderItem.getQuantity(),
-                NOT_RESTORED_POINT
+                historyRestoredPoint
             ));
         }
     }
