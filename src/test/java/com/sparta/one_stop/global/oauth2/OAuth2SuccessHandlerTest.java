@@ -4,7 +4,9 @@ import com.sparta.one_stop.domain.auth.service.DeviceContextService;
 import com.sparta.one_stop.domain.auth.service.DeviceLimitService;
 import com.sparta.one_stop.domain.auth.service.RedisTokenService;
 import com.sparta.one_stop.domain.user.entity.User;
+import com.sparta.one_stop.global.enums.ratelimit.RateLimitPolicy;
 import com.sparta.one_stop.global.enums.user.UserRole;
+import com.sparta.one_stop.global.ratelimit.RateLimitService;
 import com.sparta.one_stop.global.security.JwtTokenProvider;
 import com.sparta.one_stop.global.util.ClientIpExtractor;
 import com.sparta.one_stop.global.util.CookieUtil;
@@ -23,79 +25,186 @@ import java.util.Map;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class OAuth2SuccessHandlerTest {
 
-    @Mock JwtTokenProvider jwtTokenProvider;
-    @Mock RedisTokenService redisTokenService;
-    @Mock DeviceLimitService deviceLimitService;
-    @Mock DeviceContextService deviceContextService;
-    @Mock ClientIpExtractor clientIpExtractor;
-    @Mock CookieUtil cookieUtil;
-    @Mock Authentication authentication;
+    private static final Long USER_ID = 1L;
+    private static final String ACCESS_TOKEN = "access";
+    private static final String REFRESH_TOKEN = "refresh";
+    private static final long REFRESH_TTL_SECONDS = 604_800L;
+    private static final String CLIENT_IP = "127.0.0.1";
+    private static final String USER_AGENT = "test-agent";
+
+    @Mock
+    private JwtTokenProvider jwtTokenProvider;
+
+    @Mock
+    private RedisTokenService redisTokenService;
+
+    @Mock
+    private DeviceLimitService deviceLimitService;
+
+    @Mock
+    private DeviceContextService deviceContextService;
+
+    @Mock
+    private RateLimitService rateLimitService;
+
+    @Mock
+    private ClientIpExtractor clientIpExtractor;
+
+    @Mock
+    private CookieUtil cookieUtil;
+
+    @Mock
+    private Authentication authentication;
 
     private OAuth2SuccessHandler handler;
     private User user;
 
     @BeforeEach
     void setUp() {
-        handler = new OAuth2SuccessHandler(jwtTokenProvider, redisTokenService, deviceLimitService,
-            deviceContextService, clientIpExtractor, cookieUtil);
+        handler = new OAuth2SuccessHandler(
+            jwtTokenProvider,
+            redisTokenService,
+            deviceLimitService,
+            deviceContextService,
+            rateLimitService,
+            clientIpExtractor,
+            cookieUtil
+        );
+
         ReflectionTestUtils.setField(handler, "redirectBase", "http://localhost:3001");
 
-        user = User.builder().email("oauth@test.com").password("encoded").name("oauth")
-            .role(UserRole.BUYER).build();
-        ReflectionTestUtils.setField(user, "id", 1L);
+        user = User.builder()
+            .email("oauth@test.com")
+            .password("encoded")
+            .name("oauth")
+            .role(UserRole.BUYER)
+            .build();
+        ReflectionTestUtils.setField(user, "id", USER_ID);
 
-        CustomOAuth2User principal = new CustomOAuth2User(user, Map.of(), mock(OAuth2UserInfo.class));
+        CustomOAuth2User principal = new CustomOAuth2User(
+            user,
+            Map.of(),
+            mock(OAuth2UserInfo.class)
+        );
+
         when(authentication.getPrincipal()).thenReturn(principal);
-        when(jwtTokenProvider.createAccessToken(1L, UserRole.BUYER, 0)).thenReturn("access");
-        when(jwtTokenProvider.getRefreshTokenExpirySeconds()).thenReturn(604800L);
-        when(clientIpExtractor.extract(org.mockito.ArgumentMatchers.any())).thenReturn("127.0.0.1");
-        when(cookieUtil.createHttpOnlyCookie(anyString(), anyString(), org.mockito.ArgumentMatchers.anyLong(), anyString()))
-            .thenAnswer(inv -> inv.getArgument(0) + "=" + inv.getArgument(1));
+        when(jwtTokenProvider.createAccessToken(USER_ID, UserRole.BUYER, 0))
+            .thenReturn(ACCESS_TOKEN);
+        when(jwtTokenProvider.getRefreshTokenExpirySeconds())
+            .thenReturn(REFRESH_TTL_SECONDS);
+        when(clientIpExtractor.extract(any()))
+            .thenReturn(CLIENT_IP);
+        when(cookieUtil.createHttpOnlyCookie(anyString(), anyString(), anyLong(), anyString()))
+            .thenAnswer(invocation -> invocation.getArgument(0) + "=" + invocation.getArgument(1));
     }
 
     @Test
     void registers_device_context_and_reuses_existing_device_cookie() throws Exception {
         String deviceId = UUID.randomUUID().toString();
-        MockHttpServletRequest request = new MockHttpServletRequest();
-        request.setCookies(new Cookie("device_id", deviceId));
-        request.addHeader("User-Agent", "test-agent");
+        MockHttpServletRequest request = requestWithDeviceCookie(deviceId);
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        when(jwtTokenProvider.createRefreshToken(1L, deviceId)).thenReturn("refresh");
-        when(deviceLimitService.registerDevice(1L, deviceId))
+        when(deviceLimitService.isNewDevice(USER_ID, deviceId)).thenReturn(false);
+        when(jwtTokenProvider.createRefreshToken(USER_ID, deviceId)).thenReturn(REFRESH_TOKEN);
+        when(deviceLimitService.registerDevice(USER_ID, deviceId))
             .thenReturn(new DeviceLimitService.DeviceRegistrationResult(false, null, 1, false));
 
         handler.onAuthenticationSuccess(request, response, authentication);
 
-        verify(deviceContextService).bindContext(1L, deviceId, "test-agent", "127.0.0.1");
-        verify(redisTokenService).saveRefreshToken(1L, deviceId, "refresh", 604800L);
-        verify(redisTokenService).saveOAuth2Code(anyString(), org.mockito.ArgumentMatchers.eq(deviceId), org.mockito.ArgumentMatchers.eq("access"));
-        assertThat(response.getRedirectedUrl()).startsWith("http://localhost:3001/oauth2/callback?code=");
+        verify(rateLimitService).tryConsume(RateLimitPolicy.DEVICE_REGISTER_PER_IP, CLIENT_IP);
+        verify(rateLimitService, never()).tryConsume(
+            RateLimitPolicy.DEVICE_REGISTER_PER_ACCOUNT,
+            String.valueOf(USER_ID)
+        );
+        verify(deviceContextService).bindContext(USER_ID, deviceId, USER_AGENT, CLIENT_IP);
+        verify(redisTokenService).saveRefreshToken(
+            USER_ID,
+            deviceId,
+            REFRESH_TOKEN,
+            REFRESH_TTL_SECONDS
+        );
+        verify(redisTokenService).saveOAuth2Code(anyString(), eq(deviceId), eq(ACCESS_TOKEN));
+        verify(cookieUtil).createHttpOnlyCookie(
+            "refresh_token",
+            REFRESH_TOKEN,
+            REFRESH_TTL_SECONDS,
+            "/api/auth"
+        );
+        verify(cookieUtil).createHttpOnlyCookie(
+            "device_id",
+            deviceId,
+            REFRESH_TTL_SECONDS,
+            "/"
+        );
+
+        assertThat(response.getRedirectedUrl())
+            .startsWith("http://localhost:3001/oauth2/callback?code=");
+    }
+
+    @Test
+    void applies_account_rate_limit_before_registering_new_device() throws Exception {
+        String deviceId = UUID.randomUUID().toString();
+        MockHttpServletRequest request = requestWithDeviceCookie(deviceId);
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        when(deviceLimitService.isNewDevice(USER_ID, deviceId)).thenReturn(true);
+        when(jwtTokenProvider.createRefreshToken(USER_ID, deviceId)).thenReturn(REFRESH_TOKEN);
+        when(deviceLimitService.registerDevice(USER_ID, deviceId))
+            .thenReturn(new DeviceLimitService.DeviceRegistrationResult(true, null, 1, false));
+
+        handler.onAuthenticationSuccess(request, response, authentication);
+
+        var ordered = inOrder(rateLimitService, deviceLimitService);
+        ordered.verify(rateLimitService)
+            .tryConsume(RateLimitPolicy.DEVICE_REGISTER_PER_IP, CLIENT_IP);
+        ordered.verify(deviceLimitService)
+            .isNewDevice(USER_ID, deviceId);
+        ordered.verify(rateLimitService)
+            .tryConsume(RateLimitPolicy.DEVICE_REGISTER_PER_ACCOUNT, String.valueOf(USER_ID));
+        ordered.verify(deviceLimitService)
+            .registerDevice(USER_ID, deviceId);
     }
 
     @Test
     void removes_refresh_token_and_context_for_lru_evicted_device() throws Exception {
         String deviceId = UUID.randomUUID().toString();
-        String evicted = "old-device";
-        MockHttpServletRequest request = new MockHttpServletRequest();
-        request.setCookies(new Cookie("device_id", deviceId));
+        String evictedDeviceId = "old-device";
+        MockHttpServletRequest request = requestWithDeviceCookie(deviceId);
         MockHttpServletResponse response = new MockHttpServletResponse();
 
-        when(jwtTokenProvider.createRefreshToken(1L, deviceId)).thenReturn("refresh");
-        when(deviceLimitService.registerDevice(1L, deviceId))
-            .thenReturn(new DeviceLimitService.DeviceRegistrationResult(true, evicted, 5, false));
+        when(deviceLimitService.isNewDevice(USER_ID, deviceId)).thenReturn(true);
+        when(jwtTokenProvider.createRefreshToken(USER_ID, deviceId)).thenReturn(REFRESH_TOKEN);
+        when(deviceLimitService.registerDevice(USER_ID, deviceId))
+            .thenReturn(new DeviceLimitService.DeviceRegistrationResult(
+                true,
+                evictedDeviceId,
+                5,
+                false
+            ));
 
         handler.onAuthenticationSuccess(request, response, authentication);
 
-        verify(redisTokenService).deleteRefreshToken(1L, evicted);
-        verify(deviceContextService).removeContext(1L, evicted);
+        verify(redisTokenService).deleteRefreshToken(USER_ID, evictedDeviceId);
+        verify(deviceContextService).removeContext(USER_ID, evictedDeviceId);
+    }
+
+    private MockHttpServletRequest requestWithDeviceCookie(String deviceId) {
+        MockHttpServletRequest request = new MockHttpServletRequest();
+        request.setCookies(new Cookie("device_id", deviceId));
+        request.addHeader("User-Agent", USER_AGENT);
+        return request;
     }
 }

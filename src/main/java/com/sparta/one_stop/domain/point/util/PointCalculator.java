@@ -14,8 +14,8 @@ public class PointCalculator {
 
     public static final BigDecimal EARN_RATE = new BigDecimal("0.01");
 
-    // 최대 적립한도 1억(test용)
-    private static final int SAFE_MAX_AMOUNT = 100_000_000; // 1억 (실용 상한)
+    // 최대 적립 기준 금액 1억
+    private static final BigDecimal SAFE_MAX_AMOUNT = new BigDecimal("100000000");
 
 
     // 적립 포인트 계산
@@ -38,7 +38,7 @@ public class PointCalculator {
         validateBaseAmount(baseAmount);
         validateRate(rate);
 
-        if (baseAmount.compareTo(BigDecimal.ZERO) == 0) {
+        if (baseAmount.signum() == 0) {
             return 0;
         }
 
@@ -73,10 +73,13 @@ public class PointCalculator {
 
     //----------------------검증-----------------------
     private static void validateBaseAmount(BigDecimal amount) {
-        if (amount.compareTo(BigDecimal.ZERO) < 0) {
+        if (amount == null) {
+            throw new CustomException(ErrorCode.POINT_003, "포인트 금액은 null일 수 없습니다.");
+        }
+        if (amount.signum() < 0) {
             throw new CustomException(ErrorCode.POINT_003, "포인트 금액은 0 이상이어야 합니다.");
         }
-        if (amount.compareTo(new BigDecimal(SAFE_MAX_AMOUNT)) > 0) {
+        if (amount.compareTo(SAFE_MAX_AMOUNT) > 0) {
             throw new CustomException(ErrorCode.POINT_003, "포인트 금액이 최대 한도를 초과했습니다.");
         }
     }

@@ -3,6 +3,8 @@ package com.sparta.one_stop.global.oauth2;
 import com.sparta.one_stop.domain.auth.service.DeviceContextService;
 import com.sparta.one_stop.domain.auth.service.DeviceLimitService;
 import com.sparta.one_stop.domain.auth.service.RedisTokenService;
+import com.sparta.one_stop.global.enums.ratelimit.RateLimitPolicy;
+import com.sparta.one_stop.global.ratelimit.RateLimitService;
 import com.sparta.one_stop.global.security.JwtTokenProvider;
 import com.sparta.one_stop.global.util.ClientIpExtractor;
 import com.sparta.one_stop.global.util.CookieUtil;
@@ -25,16 +27,16 @@ import java.util.UUID;
 /**
  * OAuth2 로그인 성공 핸들러.
  *
- * <p>일반 로그인과 동일한 기기 정책을 적용한다.</p>
+ * <p>일반 로그인과 동일한 신규 기기 제한 및 기기 수명주기 정책을 적용한다.</p>
  * <ul>
  *   <li>기존 device_id 쿠키가 유효하면 재사용</li>
+ *   <li>기기 등록 전 IP/계정 단위 Rate Limit 선검증</li>
  *   <li>기기 ZSET 등록 및 최대 기기 수 초과 시 LRU 추방</li>
- *   <li>Refresh Token 저장</li>
- *   <li>DeviceContext 등록</li>
+ *   <li>Refresh Token 및 DeviceContext 저장</li>
  *   <li>추방된 기기의 Refresh Token 및 DeviceContext 제거</li>
  * </ul>
  *
- * <p>Access Token은 URL에 노출하지 않고 1회용 교환 코드로 전달한다.</p>
+ * <p>Access Token은 URL에 직접 노출하지 않고 1회용 교환 코드로 전달한다.</p>
  */
 @Slf4j
 @Component
@@ -43,12 +45,14 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
 
     private static final String DEVICE_ID_COOKIE = "device_id";
     private static final String REFRESH_TOKEN_COOKIE = "refresh_token";
-    private static final String AUTH_COOKIE_PATH = "/api/auth";
+    private static final String REFRESH_TOKEN_COOKIE_PATH = "/api/auth";
+    private static final String DEVICE_ID_COOKIE_PATH = "/";
 
     private final JwtTokenProvider jwtTokenProvider;
     private final RedisTokenService redisTokenService;
     private final DeviceLimitService deviceLimitService;
     private final DeviceContextService deviceContextService;
+    private final RateLimitService rateLimitService;
     private final ClientIpExtractor clientIpExtractor;
     private final CookieUtil cookieUtil;
 
@@ -68,6 +72,17 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
         String userAgent = request.getHeader(HttpHeaders.USER_AGENT);
         String clientIp = clientIpExtractor.extract(request);
 
+        // 일반 로그인과 동일하게 실제 기기 등록 전에 제한을 검증한다.
+        rateLimitService.tryConsume(RateLimitPolicy.DEVICE_REGISTER_PER_IP, clientIp);
+
+        boolean isNewDevice = deviceLimitService.isNewDevice(user.getId(), deviceId);
+        if (isNewDevice) {
+            rateLimitService.tryConsume(
+                RateLimitPolicy.DEVICE_REGISTER_PER_ACCOUNT,
+                String.valueOf(user.getId())
+            );
+        }
+
         String accessToken = jwtTokenProvider.createAccessToken(
             user.getId(),
             user.getRole(),
@@ -85,7 +100,6 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
             jwtTokenProvider.getRefreshTokenExpirySeconds()
         );
 
-        // Refresh 단계의 컨텍스트 검증 기준점을 OAuth2 로그인에서도 반드시 등록한다.
         deviceContextService.bindContext(
             user.getId(),
             deviceId,
@@ -94,7 +108,6 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
         );
 
         cleanupEvictedDevice(user.getId(), registration.evictedDeviceId());
-
         addAuthenticationCookies(response, refreshToken, deviceId);
 
         String code = UUID.randomUUID().toString().replace("-", "");
@@ -130,7 +143,6 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
             return;
         }
 
-        // ZSET에서는 이미 제거됐지만 RT와 기기 컨텍스트는 별도 키이므로 명시 정리한다.
         redisTokenService.deleteRefreshToken(userId, evictedDeviceId);
         deviceContextService.removeContext(userId, evictedDeviceId);
     }
@@ -148,25 +160,22 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
                 REFRESH_TOKEN_COOKIE,
                 refreshToken,
                 refreshTokenTtl,
-                AUTH_COOKIE_PATH
+                REFRESH_TOKEN_COOKIE_PATH
             )
         );
 
+        // OAuth2 callback(/login/oauth2/code/*)에서도 기존 device_id를 재사용할 수 있도록 Path=/ 적용.
         response.addHeader(
             HttpHeaders.SET_COOKIE,
             cookieUtil.createHttpOnlyCookie(
                 DEVICE_ID_COOKIE,
                 deviceId,
                 refreshTokenTtl,
-                AUTH_COOKIE_PATH
+                DEVICE_ID_COOKIE_PATH
             )
         );
     }
 
-    /**
-     * 기존 device_id가 정상 UUID면 재사용한다.
-     * OAuth2 로그인 때마다 새 ID를 만들면 동일 브라우저가 기기 슬롯을 계속 소비할 수 있다.
-     */
     private String resolveDeviceId(HttpServletRequest request) {
         Cookie[] cookies = request.getCookies();
         if (cookies != null) {

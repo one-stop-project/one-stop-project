@@ -56,7 +56,6 @@ public class AdminUserService {
         //   - increaseTokenVersion: DB 영속 무효화 (Redis 장애에도 유지)
         //   - AllDevicesLogoutEvent: 커밋 후 Listener가 iat-cutoff 등록 + tokenVersion 캐시 evict + RT 정리
         // 효과: 대상자의 구 AT 거부 → 재로그인 시 새 role(ADMIN) 반영
-        target.increaseTokenVersion();
         eventPublisher.publishEvent(new AllDevicesLogoutEvent(targetUserId, "ADMIN_GRANTED"));
 
         adminActionHistoryRepository.save(AdminActionHistory.builder()
