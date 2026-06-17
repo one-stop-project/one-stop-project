@@ -168,6 +168,7 @@ public enum ErrorCode {
     PAYMENT_008(HttpStatus.BAD_REQUEST, "PAYMENT_008", "취소된 주문은 결제할 수 없습니다"),
     PAYMENT_009(HttpStatus.NOT_FOUND, "PAYMENT_009", "결제 정보를 찾을 수 없습니다"),
     PAYMENT_010(HttpStatus.CONFLICT, "PAYMENT_010", "결제 처리 중입니다. 잠시 후 다시 시도해주세요."),
+    PAYMENT_011(HttpStatus.BAD_REQUEST, "PAYMENT_011", "결제 대기 상태의 주문만 결제할 수 있습니다."),
 
     // ===== PAYMENT - 결제 엔티티 검증 =====
     PAYMENT_020(HttpStatus.BAD_REQUEST, "PAYMENT_020", "주문 정보는 필수입니다"),
