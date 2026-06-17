@@ -68,7 +68,7 @@ public class CategoryService {
                 .build());
             return CategoryResponse.from(saved);
         } catch (DataIntegrityViolationException e) {
-            throw new CustomException(ErrorCode.CATEGORY_002);
+            throw toDuplicateNameOrRethrow(e);
         }
     }
 
@@ -89,9 +89,23 @@ public class CategoryService {
             // 변경(UPDATE)을 지금 강제 flush해 동시 수정 경합을 커밋 전에 유니크 위반으로 잡는다
             categoryRepository.flush();
         } catch (DataIntegrityViolationException e) {
-            throw new CustomException(ErrorCode.CATEGORY_002);
+            throw toDuplicateNameOrRethrow(e);
         }
         return CategoryResponse.from(category);
+    }
+
+    // (parent_id, name) 유니크 제약(uk_category_parent_name) 위반만 CATEGORY_002로 변환하고,
+    // 그 외 무결성 위반은 원인을 숨기지 않도록 그대로 던진다 (AuthCommandService 동일 패턴).
+    // 반환 타입을 RuntimeException으로 둬 호출부에서 throw로 흐름을 끊을 수 있게 한다.
+    private RuntimeException toDuplicateNameOrRethrow(DataIntegrityViolationException e) {
+        Throwable cause = e.getMostSpecificCause();
+        String message = cause != null ? cause.getMessage() : null;
+        // 제약명 매칭은 대소문자 무시 — MySQL은 소문자로, H2는 대문자로 제약명을 내보낸다
+        if (message != null
+            && message.toLowerCase(java.util.Locale.ROOT).contains("uk_category_parent_name")) {
+            return new CustomException(ErrorCode.CATEGORY_002);
+        }
+        return e;
     }
 
     // 카테고리 삭제 (하위 전체 일괄 삭제, 상품 매핑 있으면 거부)

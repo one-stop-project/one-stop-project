@@ -204,6 +204,20 @@ class CategoryServiceTest {
                     .isInstanceOf(CustomException.class)
                     .extracting("errorCode").isEqualTo(ErrorCode.CATEGORY_002);
         }
+
+        @Test
+        @DisplayName("이름 유니크 외 다른 무결성 위반은 CATEGORY_002로 가리지 않고 그대로 전파된다")
+        void create_otherIntegrityViolation_rethrows() {
+            // given — uk_category_parent_name이 아닌 다른 제약 위반
+            given(categoryRepository.existsByParentIsNullAndName("전자기기")).willReturn(false);
+            given(categoryRepository.save(any(Category.class)))
+                    .willThrow(new DataIntegrityViolationException("Column 'name' cannot be null"));
+
+            // when & then — CustomException(CATEGORY_002)이 아니라 원래 예외가 전파돼야 한다
+            assertThatThrownBy(
+                    () -> categoryService.create(new CategoryCreateRequest("전자기기", null)))
+                    .isInstanceOf(DataIntegrityViolationException.class);
+        }
     }
 
     @Nested
