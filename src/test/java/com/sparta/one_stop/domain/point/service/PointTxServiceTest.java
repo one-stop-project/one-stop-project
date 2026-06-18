@@ -986,6 +986,7 @@ class PointTxServiceTest {
         when(order.getTotalPrice()).thenReturn(10_000L);
         when(order.getDiscountPrice()).thenReturn(1_000L);
         when(order.getUsedPoint()).thenReturn(0);
+        when(order.getSubscriptionDiscount()).thenReturn(0L);
 
         when(orderItemRepository.isAllDelivered(orderId))
             .thenReturn(true);
@@ -1054,6 +1055,7 @@ class PointTxServiceTest {
         when(order.getTotalPrice()).thenReturn(1_000L);
         when(order.getDiscountPrice()).thenReturn(1_000L);
         when(order.getUsedPoint()).thenReturn(0);
+        when(order.getSubscriptionDiscount()).thenReturn(0L);
 
         when(orderItemRepository.isAllDelivered(orderId))
             .thenReturn(true);
@@ -1099,6 +1101,7 @@ class PointTxServiceTest {
         when(order.getTotalPrice()).thenReturn(99L);
         when(order.getDiscountPrice()).thenReturn(0L);
         when(order.getUsedPoint()).thenReturn(0);
+        when(order.getSubscriptionDiscount()).thenReturn(0L);
 
         when(orderItemRepository.isAllDelivered(orderId))
             .thenReturn(true);
@@ -1144,6 +1147,7 @@ class PointTxServiceTest {
         when(order.getTotalPrice()).thenReturn(10_000L);
         when(order.getDiscountPrice()).thenReturn(0L);
         when(order.getUsedPoint()).thenReturn(0);
+        when(order.getSubscriptionDiscount()).thenReturn(0L);
 
         when(orderItemRepository.isAllDelivered(orderId))
             .thenReturn(true);
@@ -1182,6 +1186,61 @@ class PointTxServiceTest {
         assertThat(savedHistory.getType()).isEqualTo(PointHistoryType.EARN);
         assertThat(savedHistory.getDescription()).isEqualTo("주문 #1 배송 완료 적립 (1%)");
         assertThat(savedHistory.getExpireAt()).isEqualTo(LocalDate.now().plusYears(1));
+    }
+
+    @Test
+    @DisplayName("earnPointByDelivery 성공 - 구독할인을 차감한 금액 기준으로 포인트를 적립한다")
+    void earnPointByDelivery_success_calculateEarnAmountWithSubscriptionDiscount() {
+        // given
+        Long orderId = 1L;
+        Long userId = 1L;
+
+        User user = mockUser(userId);
+        Point point = createPointWithBalance(
+            user,
+            1000
+        );
+        setField(point, "id", 100L);
+
+        Order order = mock(Order.class);
+
+        when(order.getUser()).thenReturn(user);
+        when(order.getTotalPrice()).thenReturn(10_000L);
+        when(order.getDiscountPrice()).thenReturn(1_000L);
+        when(order.getUsedPoint()).thenReturn(1_000);
+        when(order.getSubscriptionDiscount()).thenReturn(2_000L);
+
+        when(orderItemRepository.isAllDelivered(orderId))
+            .thenReturn(true);
+
+        when(orderRepository.findById(orderId))
+            .thenReturn(Optional.of(order));
+
+        when(pointHistoryRepository.findAllByOrderIdAndType(
+            orderId,
+            PointHistoryType.EARN
+        )).thenReturn(List.of());
+
+        when(pointRepository.findByUserId(userId))
+            .thenReturn(Optional.of(point));
+
+        // when
+        pointTxService.earnPointByDelivery(orderId);
+
+        // then
+        assertThat(point.getBalance()).isEqualTo(1060);
+
+        ArgumentCaptor<PointHistory> historyCaptor =
+            ArgumentCaptor.forClass(PointHistory.class);
+
+        verify(pointHistoryRepository).save(historyCaptor.capture());
+
+        PointHistory savedHistory = historyCaptor.getValue();
+
+        assertThat(savedHistory.getAmount()).isEqualTo(60);
+        assertThat(savedHistory.getRemainingAmount()).isEqualTo(60);
+        assertThat(savedHistory.getType()).isEqualTo(PointHistoryType.EARN);
+        assertThat(savedHistory.getDescription()).isEqualTo("주문 #1 배송 완료 적립 (1%)");
     }
 
 }
