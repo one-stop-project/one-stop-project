@@ -42,6 +42,9 @@ public class AdminProductService {
         if (product.getStatus() == ProductStatus.APPROVED) {
             throw new CustomException(ErrorCode.ADMIN_008);
         }
+        if (product.getStatus() != ProductStatus.APPROVE_REQUESTED) {
+            throw new CustomException(ErrorCode.ADMIN_017);
+        }
 
         product.approve();
 
@@ -65,6 +68,9 @@ public class AdminProductService {
 
         if (product.getStatus() == ProductStatus.REJECTED) {
             throw new CustomException(ErrorCode.ADMIN_009);
+        }
+        if (product.getStatus() != ProductStatus.APPROVE_REQUESTED) {
+            throw new CustomException(ErrorCode.ADMIN_017);
         }
 
         product.reject();

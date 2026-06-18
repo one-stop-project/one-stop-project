@@ -110,6 +110,7 @@ dependencies {
 
     // Batch 처리
     implementation 'org.springframework.boot:spring-boot-starter-batch'
+    testImplementation 'org.springframework.batch:spring-batch-test'
 
     // Kafka
     implementation 'org.springframework.kafka:spring-kafka'

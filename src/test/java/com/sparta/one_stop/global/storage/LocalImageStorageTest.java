@@ -16,7 +16,7 @@ class LocalImageStorageTest {
     // 임시 디렉토리에 실제로 저장/삭제하는 어댑터 (테스트마다 @TempDir 주입)
     // bucket/region은 local 프로필에서 쓰지 않으므로 null (기본값 보정됨)
     private LocalImageStorage storageOn(Path dir) {
-        return new LocalImageStorage(new ImageStorageProperties(dir.toString(), "/images", null, null));
+        return new LocalImageStorage(new ImageStorageProperties(dir.toString(), "/images", null, null, null));
     }
 
     @Test

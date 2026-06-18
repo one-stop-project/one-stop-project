@@ -82,20 +82,7 @@ public class Review extends BaseEntity {
     public void delete() {
         this.status = ReviewStatus.DELETED;
     }
-
     public void addImage(ReviewImage image) {
         this.images.add(image);
-    }
-
-    public void validateRating() {
-        if (rating < 1 || rating > 5) {
-            throw new CustomException(ErrorCode.REVIEW_003);
-        }
-    }
-
-    public void validateContent() {
-        if (content == null || content.length() < 10 || content.length() > 1000) {
-            throw new CustomException(ErrorCode.REVIEW_004);
-        }
     }
 }

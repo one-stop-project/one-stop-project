@@ -258,6 +258,7 @@ public enum ErrorCode {
     INVENTORY_002(HttpStatus.BAD_REQUEST, "INVENTORY_002", "입고 수량은 1개 이상이어야 합니다"),
     INVENTORY_003(HttpStatus.BAD_REQUEST, "INVENTORY_003", "입고 수량이 최대 한도를 초과합니다"),
     INVENTORY_004(HttpStatus.NOT_FOUND, "INVENTORY_004", "재고 정보를 찾을 수 없습니다"),
+    INVENTORY_005(HttpStatus.BAD_REQUEST, "INVENTORY_005", "보정 재고가 최대 한도를 초과합니다"),
 
     // ===== COUPON - 쿠폰 =====
     COUPON_001(HttpStatus.BAD_REQUEST, "COUPON_001", "쿠폰이 모두 소진되었습니다"),
@@ -309,6 +310,7 @@ public enum ErrorCode {
     REVIEW_005(HttpStatus.NOT_FOUND, "REVIEW_005", "리뷰를 찾을 수 없습니다"),
     REVIEW_006(HttpStatus.FORBIDDEN, "REVIEW_006", "본인의 리뷰만 수정/삭제할 수 있습니다"),
     REVIEW_007(HttpStatus.BAD_REQUEST, "REVIEW_007", "작성 후 30일이 지나 수정할 수 없습니다"),
+    REVIEW_008(HttpStatus.BAD_REQUEST, "REVIEW_008", "리뷰 이미지는 최대 5개까지 등록할 수 있습니다"),
 
     // ===== SUBSCRIPTION - 구독 =====
     SUBSCRIPTION_001(HttpStatus.NOT_FOUND, "SUBSCRIPTION_001", "구독 정보를 찾을 수 없습니다"),
@@ -355,7 +357,8 @@ public enum ErrorCode {
     ADMIN_013(HttpStatus.FORBIDDEN, "ADMIN_013", "SUPER_ADMIN 계정의 권한은 회수할 수 없습니다"),
     ADMIN_014(HttpStatus.FORBIDDEN, "ADMIN_014", "본인 계정의 권한은 회수할 수 없습니다"),
     ADMIN_015(HttpStatus.BAD_REQUEST, "ADMIN_015", "관리자 권한이 없는 계정입니다"),
-    ADMIN_016(HttpStatus.BAD_REQUEST, "ADMIN_016", "비활성(정지/탈퇴) 상태의 회원은 관리자로 승격할 수 없습니다.");
+    ADMIN_016(HttpStatus.BAD_REQUEST, "ADMIN_016", "비활성(정지/탈퇴) 상태의 회원은 관리자로 승격할 수 없습니다."),
+    ADMIN_017(HttpStatus.BAD_REQUEST, "ADMIN_017", "승인 요청 상태의 상품만 승인/반려할 수 있습니다");
     private final HttpStatus status;
     private final String code;
     private final String message;

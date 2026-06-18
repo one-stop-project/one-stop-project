@@ -3,16 +3,15 @@ package com.sparta.one_stop.domain.review.controller;
 import com.sparta.one_stop.domain.review.dto.request.CreateReviewRequest;
 import com.sparta.one_stop.domain.review.dto.request.UpdateReviewRequest;
 import com.sparta.one_stop.domain.review.dto.response.ReviewResponse;
-import com.sparta.one_stop.domain.review.dto.response.ReviewableOrderItemResponse;
 import com.sparta.one_stop.domain.review.service.ReviewService;
 import com.sparta.one_stop.global.response.ApiResponse;
 import com.sparta.one_stop.global.security.AuthUser;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
+import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -23,21 +22,27 @@ public class ReviewController {
 
     private final ReviewService reviewService;
 
-    @PostMapping
+    @PostMapping(consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<ReviewResponse> create(
         @AuthenticationPrincipal AuthUser authUser,
-        @Valid @RequestBody CreateReviewRequest request
+        @Valid @RequestPart("request") CreateReviewRequest request,
+        @RequestPart(value = "images", required = false) List<MultipartFile> images
     ) {
-        return ApiResponse.success(reviewService.createReview(authUser, request));
+        return ApiResponse.success(
+            reviewService.createReview(authUser, request, images)
+        );
     }
 
-    @PatchMapping("/{reviewId}")
+    @PatchMapping(value = "/{reviewId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ApiResponse<ReviewResponse> update(
         @AuthenticationPrincipal AuthUser authUser,
         @PathVariable Long reviewId,
-        @Valid @RequestBody UpdateReviewRequest request
+        @Valid @RequestPart("request") UpdateReviewRequest request,
+        @RequestPart(value = "newImages", required = false) List<MultipartFile> newImages
     ) {
-        return ApiResponse.success(reviewService.updateReview(authUser, reviewId, request));
+        return ApiResponse.success(
+            reviewService.updateReview(authUser, reviewId, request, newImages)
+        );
     }
 
     @DeleteMapping("/{reviewId}")
@@ -47,20 +52,5 @@ public class ReviewController {
     ) {
         reviewService.deleteReview(authUser, reviewId);
         return ApiResponse.success();
-    }
-
-    @GetMapping("/me")
-    public ApiResponse<Page<ReviewResponse>> myReviews(
-        @AuthenticationPrincipal AuthUser authUser,
-        Pageable pageable
-    ) {
-        return ApiResponse.success(reviewService.getMyReviews(authUser, pageable));
-    }
-
-    @GetMapping("/reviewable")
-    public ApiResponse<List<ReviewableOrderItemResponse>> reviewable(
-        @AuthenticationPrincipal AuthUser authUser
-    ) {
-        return ApiResponse.success(reviewService.getReviewable(authUser));
     }
 }
