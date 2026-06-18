@@ -44,7 +44,10 @@ public class S3ImageStorage implements ImageStorage {
             throw new CustomException(ErrorCode.COMMON_007);
         }
 
-        return "https://" + properties.bucket() + ".s3." + properties.region() + ".amazonaws.com/" + key;
+        String domain = (properties.cloudfrontDomain() != null && !properties.cloudfrontDomain().isBlank())
+                ? properties.cloudfrontDomain()
+                : properties.bucket() + ".s3." + properties.region() + ".amazonaws.com";
+        return "https://" + domain + "/" + key;
     }
 
     @Override

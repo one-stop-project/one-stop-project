@@ -113,6 +113,7 @@ app:
   image:
     bucket: ${S3_BUCKET_NAME}
     region: ${AWS_REGION:ap-northeast-2}
+    cloudfront-domain: ${CLOUDFRONT_DOMAIN:}
   security:
     csp:
       policy: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data:; font-src 'self' data: https://cdn.jsdelivr.net;"
