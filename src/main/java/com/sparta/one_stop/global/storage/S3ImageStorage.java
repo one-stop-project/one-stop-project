@@ -45,7 +45,7 @@ public class S3ImageStorage implements ImageStorage {
         }
 
         String domain = (properties.cloudfrontDomain() != null && !properties.cloudfrontDomain().isBlank())
-                ? properties.cloudfrontDomain()
+                ? properties.cloudfrontDomain().replaceFirst("^https?://", "").stripTrailing().replaceAll("/+$", "")
                 : properties.bucket() + ".s3." + properties.region() + ".amazonaws.com";
         return "https://" + domain + "/" + key;
     }
