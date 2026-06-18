@@ -1,0 +1,4 @@
+load-tests-k6/.env
+load-tests-k6/results/
+*.summary.json
+/tmp/loadtest-*.sql

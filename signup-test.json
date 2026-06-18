@@ -1,0 +1,8 @@
+{
+  "email": "k6buyer99@test.com",
+  "password": "Password1!",
+  "name": "테스트구매자",
+  "phone": "010-0000-0099",
+  "address": "서울시 테스트구 99번지",
+  "role": "BUYER"
+}

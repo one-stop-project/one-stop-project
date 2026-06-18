@@ -40,6 +40,9 @@ public class Seller {
     @Column(name = "business_number", nullable = false, length = 20)
     private String businessNumber;
 
+    @Column(name = "bank_name", length = 50)
+    private String bankName;
+
     @Column(name = "bank_account", length = 50)
     private String bankAccount;
 
@@ -48,10 +51,11 @@ public class Seller {
     private SellerStatus status;
 
     @Builder
-    private Seller(User user, String shopName, String businessNumber, String bankAccount) {
+    private Seller(User user, String shopName, String businessNumber, String bankName, String bankAccount) {
         this.user = user;
         this.shopName = shopName;
         this.businessNumber = businessNumber;
+        this.bankName = bankName;
         this.bankAccount = bankAccount;
         this.status = SellerStatus.PENDING;
     }
@@ -86,3 +90,4 @@ public class Seller {
         this.status = SellerStatus.APPROVED;
     }
 }
+

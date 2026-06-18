@@ -11,7 +11,8 @@ public record UserUpdateResponse(
     Long userId,
     String name,
     String phone,
-    String address
+    String address,
+    String detailAddress
 ) {
 
     public static UserUpdateResponse from(User user) {
@@ -19,7 +20,8 @@ public record UserUpdateResponse(
             user.getId(),
             user.getName(),
             user.getPhone(),
-            user.getAddress()
+            user.getAddress(),
+            user.getDetailAddress()
         );
     }
 }

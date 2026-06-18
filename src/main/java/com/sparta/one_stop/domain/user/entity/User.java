@@ -48,8 +48,11 @@ public class User extends BaseEntity {
     @Column(name = "phone", length = 20)
     private String phone;
 
-    @Column(name = "address")
+    @Column(name = "address", length = 255)
     private String address;
+
+    @Column(name = "detail_address", length = 255)
+    private String detailAddress;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "role", nullable = false, length = 20)
@@ -86,12 +89,13 @@ public class User extends BaseEntity {
 
     @Builder
     private User(String email, String password, String name,
-                 String phone, String address, UserRole role) {
+                 String phone, String address, String detailAddress, UserRole role) {
         this.email = email;
         this.password = password;
         this.name = name;
         this.phone = phone;
         this.address = address;
+        this.detailAddress = detailAddress;
         this.role = role;
         this.status = UserStatus.ACTIVE;
         this.tokenVersion = 0;
@@ -108,10 +112,11 @@ public class User extends BaseEntity {
 
     // domain별 필요 로직
 
-    public void updateProfile(String name, String phone, String address) {
+    public void updateProfile(String name, String phone, String address, String detailAddress) {
         if (name != null) this.name = name;
         if (phone != null) this.phone = phone;
         if (address != null) this.address = address;
+        if (detailAddress != null) this.detailAddress = detailAddress;
     }
 
 

@@ -60,3 +60,9 @@ src/main/resources/application-prod.yml
 !src/main/resources/application-example.yml
 !src/main/resources/application-prod-example.yml
 !docker-compose.yml
+
+
+load-tests-k6/.env
+load-tests-k6/results/
+*.summary.json
+/tmp/loadtest-*.sql

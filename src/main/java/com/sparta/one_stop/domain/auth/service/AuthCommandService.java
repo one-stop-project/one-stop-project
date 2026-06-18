@@ -56,6 +56,7 @@ public class AuthCommandService {
             .name(request.name())
             .phone(request.phone())
             .address(request.address())
+            .detailAddress(request.detailAddress())
             .role(request.role())
             .build();
 
@@ -87,6 +88,7 @@ public class AuthCommandService {
                 .user(savedUser)  // ID 보장 (saveAndFlush 후)
                 .shopName(request.shopName())
                 .businessNumber(request.businessNumber())
+                .bankName(request.bankName())
                 .bankAccount(request.bankAccount())
                 .build();
             sellerRepository.save(seller);
