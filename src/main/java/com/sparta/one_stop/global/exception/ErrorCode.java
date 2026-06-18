@@ -258,6 +258,7 @@ public enum ErrorCode {
     INVENTORY_002(HttpStatus.BAD_REQUEST, "INVENTORY_002", "입고 수량은 1개 이상이어야 합니다"),
     INVENTORY_003(HttpStatus.BAD_REQUEST, "INVENTORY_003", "입고 수량이 최대 한도를 초과합니다"),
     INVENTORY_004(HttpStatus.NOT_FOUND, "INVENTORY_004", "재고 정보를 찾을 수 없습니다"),
+    INVENTORY_005(HttpStatus.BAD_REQUEST, "INVENTORY_005", "보정 재고가 최대 한도를 초과합니다"),
 
     // ===== COUPON - 쿠폰 =====
     COUPON_001(HttpStatus.BAD_REQUEST, "COUPON_001", "쿠폰이 모두 소진되었습니다"),

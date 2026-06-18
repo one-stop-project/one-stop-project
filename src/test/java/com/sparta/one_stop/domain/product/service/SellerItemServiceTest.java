@@ -289,18 +289,18 @@ class SellerItemServiceTest {
         }
 
         @Test
-        @DisplayName("stock 절대값이 한도(99,999)를 초과하면 INVENTORY_003 예외가 발생한다")
-        void updateItem_stockExceedsMax_throwsInventory003() {
+        @DisplayName("stock 절대값이 한도(99,999)를 초과하면 보정 전용 INVENTORY_005 예외가 발생한다")
+        void updateItem_stockExceedsMax_throwsInventory005() {
             // given
             ProductItem item = createItem(SELLER_USER_ID, ProductStatus.APPROVED, 1000L, 50L);
             mockFindItemForUpdate(item);
             ItemUpdateRequest request = new ItemUpdateRequest(null, 100_000L, null);
 
-            // when & then
+            // when & then — 보정 경로이므로 입고 문구(INVENTORY_003)가 아닌 보정 전용 메시지를 던진다
             assertThatThrownBy(
                     () -> sellerItemService.updateItem(SELLER_USER_ID, ITEM_ID, request))
                     .isInstanceOf(CustomException.class)
-                    .extracting("errorCode").isEqualTo(ErrorCode.INVENTORY_003);
+                    .extracting("errorCode").isEqualTo(ErrorCode.INVENTORY_005);
         }
 
         @Test
@@ -352,6 +352,21 @@ class SellerItemServiceTest {
             assertThat(history.getAfterStock()).isEqualTo(130L);
             assertThat(history.getQuantity()).isEqualTo(50L);
             assertThat(history.getCreatedBy()).isEqualTo(SELLER_USER_ID);
+        }
+
+        @Test
+        @DisplayName("입고 후 재고가 한도(99,999)를 초과하면 입고 전용 INVENTORY_003 예외가 발생한다")
+        void inbound_stockExceedsMax_throwsInventory003() {
+            // given
+            ProductItem item = createItem(SELLER_USER_ID, ProductStatus.APPROVED, 1000L, 99_999L);
+            mockFindItemForUpdate(item);
+            InboundRequest request = new InboundRequest(1L, null);
+
+            // when & then — 입고 경로는 기존 입고 문구(INVENTORY_003)를 유지한다
+            assertThatThrownBy(
+                    () -> sellerItemService.inbound(SELLER_USER_ID, ITEM_ID, request))
+                    .isInstanceOf(CustomException.class)
+                    .extracting("errorCode").isEqualTo(ErrorCode.INVENTORY_003);
         }
 
         @Test
