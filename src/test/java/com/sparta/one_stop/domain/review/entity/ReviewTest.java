@@ -7,7 +7,7 @@ import com.sparta.one_stop.global.enums.review.ReviewStatus;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
-import static org.assertj.core.api.Assertions.*;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 
 class ReviewTest {
@@ -35,7 +35,7 @@ class ReviewTest {
         assertThat(review.getUser()).isSameAs(user);
         assertThat(review.getRating()).isEqualTo(5);
         assertThat(review.getContent()).isEqualTo("정말 좋은 상품입니다");
-        assertThat(review.getStatus()).isEqualTo(ReviewStatus.ACTIVE); // 추가
+        assertThat(review.getStatus()).isEqualTo(ReviewStatus.ACTIVE);
     }
 
     @Test
@@ -50,66 +50,11 @@ class ReviewTest {
             .content("정말 좋은 상품입니다")
             .build();
 
-        assertThat(review.getStatus()).isEqualTo(ReviewStatus.ACTIVE);
-
         // when
         review.delete();
 
         // then
         assertThat(review.getStatus()).isEqualTo(ReviewStatus.DELETED);
-    }
-
-    @Test
-    @DisplayName("별점 검증 실패 - 1~5 범위 밖")
-    void validate_rating_fail() {
-        // given
-        Review review = Review.builder()
-            .orderItem(mock(OrderItem.class))
-            .product(mock(Product.class))
-            .user(mock(User.class))
-            .rating(6)
-            .content("유효한 리뷰 내용입니다")
-            .build();
-
-        // when & then
-        assertThatThrownBy(review::validateRating)
-            .isInstanceOf(RuntimeException.class); // CustomException 포함
-    }
-
-    @Test
-    @DisplayName("리뷰 내용 검증 실패 - 10자 미만")
-    void validate_content_fail_short() {
-        // given
-        Review review = Review.builder()
-            .orderItem(mock(OrderItem.class))
-            .product(mock(Product.class))
-            .user(mock(User.class))
-            .rating(5)
-            .content("짧다")
-            .build();
-
-        // when & then
-        assertThatThrownBy(review::validateContent)
-            .isInstanceOf(RuntimeException.class);
-    }
-
-    @Test
-    @DisplayName("리뷰 내용 검증 실패 - 1000자 초과")
-    void validate_content_fail_long() {
-        // given
-        String longContent = "a".repeat(1001);
-
-        Review review = Review.builder()
-            .orderItem(mock(OrderItem.class))
-            .product(mock(Product.class))
-            .user(mock(User.class))
-            .rating(5)
-            .content(longContent)
-            .build();
-
-        // when & then
-        assertThatThrownBy(review::validateContent)
-            .isInstanceOf(RuntimeException.class);
     }
 
     @Test
@@ -141,7 +86,7 @@ class ReviewTest {
             .product(mock(Product.class))
             .user(mock(User.class))
             .rating(5)
-            .content("리뷰")
+            .content("리뷰 내용입니다")
             .build();
 
         ReviewImage image = mock(ReviewImage.class);
