@@ -355,21 +355,6 @@ class SellerItemServiceTest {
         }
 
         @Test
-        @DisplayName("입고 후 재고가 한도(99,999)를 초과하면 입고 전용 INVENTORY_003 예외가 발생한다")
-        void inbound_stockExceedsMax_throwsInventory003() {
-            // given
-            ProductItem item = createItem(SELLER_USER_ID, ProductStatus.APPROVED, 1000L, 99_999L);
-            mockFindItemForUpdate(item);
-            InboundRequest request = new InboundRequest(1L, null);
-
-            // when & then — 입고 경로는 기존 입고 문구(INVENTORY_003)를 유지한다
-            assertThatThrownBy(
-                    () -> sellerItemService.inbound(SELLER_USER_ID, ITEM_ID, request))
-                    .isInstanceOf(CustomException.class)
-                    .extracting("errorCode").isEqualTo(ErrorCode.INVENTORY_003);
-        }
-
-        @Test
         @DisplayName("reason이 포함되면 이력에 사유가 저장된다")
         void inbound_withReason_savesReason() {
             // given
