@@ -1,7 +1,7 @@
 import http from 'k6/http';
 import { check } from 'k6';
 import { Counter } from 'k6/metrics';
-import { BASE_URL, USER_EMAIL, jsonHeaders, record, blockedCounter, thresholdBase } from '../lib/common.js';
+import { BASE_URL, USER_EMAIL, requiredEnv, jsonHeaders, record, blockedCounter, thresholdBase } from '../lib/common.js';
 
 const allowedCount = new Counter('login_allowed_count');
 const authFailCount = new Counter('login_auth_fail_count');
@@ -25,7 +25,7 @@ export const options = {
 
 export default function () {
   const email = __ENV.RATE_LIMIT_EMAIL || USER_EMAIL;
-  const wrongPassword = __ENV.WRONG_PASSWORD || 'Wrong1234!';
+  const wrongPassword = requiredEnv('WRONG_PASSWORD');
 
   const res = http.post(`${BASE_URL}/api/auth/login`, JSON.stringify({ email, password: wrongPassword }), {
     headers: jsonHeaders({ 'User-Agent': 'k6-login-rate-limit' }),

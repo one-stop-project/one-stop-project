@@ -99,8 +99,8 @@ class AuthServiceTest {
         void signup_success() {
             // given
             SignUpRequest request = new SignUpRequest(
-                EMAIL, PASSWORD, "테스트", "010-1234-5678", "서울시",
-                UserRole.BUYER, null, null, null
+                EMAIL, PASSWORD, "테스트", "010-1234-5678", "서울시", "101호",
+                UserRole.BUYER, null, null, null, null
             );
             given(authCommandService.signup(request)).willReturn(testUser);
 
@@ -118,8 +118,8 @@ class AuthServiceTest {
         void signup_blocked_by_rate_limit() {
             // given
             SignUpRequest request = new SignUpRequest(
-                EMAIL, PASSWORD, "테스트", "010-1234-5678", "서울시",
-                UserRole.BUYER, null, null, null
+                EMAIL, PASSWORD, "테스트", "010-1234-5678", "서울시", "101호",
+                UserRole.BUYER, null, null, null, null
             );
             doThrow(new CustomException(ErrorCode.AUTH_013))
                 .when(rateLimitService).tryConsume(RateLimitPolicy.SIGNUP_PER_IP, CLIENT_IP);

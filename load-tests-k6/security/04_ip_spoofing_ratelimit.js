@@ -1,7 +1,7 @@
 import http from 'k6/http';
 import { check } from 'k6';
 import { Counter } from 'k6/metrics';
-import { BASE_URL, USER_EMAIL, jsonHeaders, record, blockedCounter, thresholdBase } from '../lib/common.js';
+import { BASE_URL, USER_EMAIL, requiredEnv, jsonHeaders, record, blockedCounter, thresholdBase } from '../lib/common.js';
 
 const spoofedRequests = new Counter('spoofed_xff_requests');
 
@@ -26,7 +26,7 @@ export const options = {
 
 export default function () {
   const email = __ENV.RATE_LIMIT_EMAIL || USER_EMAIL;
-  const wrongPassword = __ENV.WRONG_PASSWORD || 'Wrong1234!';
+  const wrongPassword = requiredEnv('WRONG_PASSWORD');
   const fakeIp = `203.0.113.${(__VU + __ITER) % 250}`;
   spoofedRequests.add(1);
 

@@ -144,7 +144,7 @@ class UserServiceTest {
         @DisplayName("성공 — 이름과 전화번호가 변경된다")
         void updateMyInfo_success() {
             // given
-            UserUpdateRequest request = new UserUpdateRequest("변경된이름", "010-9999-8888", "경기도");
+            UserUpdateRequest request = new UserUpdateRequest("변경된이름", "010-9999-8888", "경기도", "101호");
             given(userRepository.findById(USER_ID)).willReturn(Optional.of(testUser));
 
             // when

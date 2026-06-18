@@ -2,8 +2,16 @@ import http from 'k6/http';
 import { check, sleep } from 'k6';
 import { Counter, Rate, Trend } from 'k6/metrics';
 
-export const BASE_URL = (__ENV.BASE_URL || 'https://onestop1.duckdns.org').replace(/\/$/, '');
-export const DEFAULT_PASSWORD = __ENV.DEFAULT_PASSWORD || 'Test1234!';
+export function requiredEnv(name) {
+  const value = __ENV[name];
+  if (!value || String(value).trim().length === 0) {
+    throw new Error(`${name} env is required`);
+  }
+  return value;
+}
+
+export const BASE_URL = requiredEnv('BASE_URL').replace(/\/$/, '');
+export const DEFAULT_PASSWORD = requiredEnv('DEFAULT_PASSWORD');
 export const USER_EMAIL = __ENV.USER_EMAIL || 'loadtest@example.com';
 export const ADMIN_EMAIL = __ENV.ADMIN_EMAIL || 'admin@example.com';
 export const ADMIN_PASSWORD = __ENV.ADMIN_PASSWORD || DEFAULT_PASSWORD;

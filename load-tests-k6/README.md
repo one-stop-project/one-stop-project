@@ -33,12 +33,13 @@ source .env
 필수값:
 
 ```bash
-export BASE_URL="https://onestop1.duckdns.org"
-export USER_EMAIL="loadtest@example.com"
-export DEFAULT_PASSWORD="Test1234!"
-export ITEM_ID="1" # stock 충분한 ProductItem ID
+export BASE_URL="https://your-domain.example.com"
+export USER_EMAIL="loadtest_auth_refresh@example.com"
+export DEFAULT_PASSWORD="<load-test-password>"
+export WRONG_PASSWORD="<wrong-load-test-password>"
+export ITEM_ID="<on-sale-product-item-id>" # stock 충분한 ProductItem ID
 export ADMIN_EMAIL="superadmin@example.com" # 포인트 배치용
-export ADMIN_PASSWORD="Test1234!"
+export ADMIN_PASSWORD="<admin-load-test-password>"
 ```
 
 ## 실행
