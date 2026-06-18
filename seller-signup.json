@@ -1,0 +1,11 @@
+{
+  "email": "k6seller@test.com",
+  "password": "Password1!",
+  "name": "부하테스트판매자",
+  "phone": "010-8888-0001",
+  "address": "서울시 테스트구",
+  "role": "SELLER",
+  "shopName": "k6 테스트샵",
+  "businessNumber": "123-45-67890",
+  "bankAccount": "국민 1234567890"
+}

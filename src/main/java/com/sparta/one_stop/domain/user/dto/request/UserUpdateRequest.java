@@ -17,6 +17,8 @@ public record UserUpdateRequest(
     @Pattern(regexp = "^010-\\d{4}-\\d{4}$", message = "전화번호 형식: 010-XXXX-XXXX")
     String phone,
 
-    String address
+    String address,
+
+    String detailAddress
 ) {
 }

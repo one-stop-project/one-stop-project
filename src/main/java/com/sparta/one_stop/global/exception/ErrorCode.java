@@ -333,6 +333,8 @@ public enum ErrorCode {
     SELLER_008(HttpStatus.BAD_REQUEST, "SELLER_008", "이미 처리된 주문입니다"),
     SELLER_010(HttpStatus.BAD_REQUEST, "SELLER_010", "판매자 상호명은 필수입니다"),
     SELLER_011(HttpStatus.BAD_REQUEST, "SELLER_011", "사업자 등록번호는 필수입니다"),
+    SELLER_012(HttpStatus.BAD_REQUEST, "SELLER_012", "은행명은 필수입니다"),
+    SELLER_013(HttpStatus.BAD_REQUEST, "SELLER_013", "계좌번호는 필수입니다"),
 
     // ===== AI - AI 서비스 =====
     AI_001(HttpStatus.SERVICE_UNAVAILABLE, "AI_001", "AI 서비스가 일시적으로 이용 불가합니다. 잠시 후 다시 시도해주세요"),

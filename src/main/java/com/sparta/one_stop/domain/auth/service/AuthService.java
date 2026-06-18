@@ -394,6 +394,12 @@ public class AuthService {
         if (request.businessNumber() == null || request.businessNumber().isBlank()) {
             throw new CustomException(ErrorCode.SELLER_011);
         }
+        if (request.bankName() == null || request.bankName().isBlank()) {
+            throw new CustomException(ErrorCode.SELLER_012);
+        }
+        if (request.bankAccount() == null || request.bankAccount().isBlank()) {
+            throw new CustomException(ErrorCode.SELLER_013);
+        }
     }
 
     // ━━━ POST /api/auth/oauth2/exchange ━━━

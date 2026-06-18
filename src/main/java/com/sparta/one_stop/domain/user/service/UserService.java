@@ -62,7 +62,7 @@ public class UserService {
     @Transactional
     public UserUpdateResponse updateMyInfo(Long userId, UserUpdateRequest request) {
         User user = findUserById(userId);
-        user.updateProfile(request.name(), request.phone(), request.address());
+        user.updateProfile(request.name(), request.phone(), request.address(), request.detailAddress());
         log.info("회원정보 수정: userId={}", userId);
         return UserUpdateResponse.from(user);
 
