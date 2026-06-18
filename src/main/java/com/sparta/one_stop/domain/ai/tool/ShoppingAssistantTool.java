@@ -12,6 +12,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Comparator;
 import java.util.List;
 
 @Component
@@ -41,6 +42,7 @@ public class ShoppingAssistantTool {
         return productRepository.search(cond, PageRequest.of(0, SEARCH_LIMIT))
             .stream()
             .map(p -> new ProductInfo(p.getId(), p.getName()))
+            .sorted(Comparator.comparing(ProductInfo::name))
             .toList();
     }
 

@@ -276,6 +276,24 @@ class ProductRepositorySearchTest {
         assertThat(stats.getPrepareStatementCount()).isEqualTo(1);
     }
 
+    @Test
+    @DisplayName("태그 검색: 대소문자·앞뒤 공백 무관하게 정규화된 태그와 매칭된다")
+    void tagSearch_isCaseAndWhitespaceInsensitive() {
+        // pA에만 태그 부여 — replaceTags가 trim+소문자 정규화하므로 "Nike"는 "nike"로 저장됨
+        Product target = productRepository.findById(pA.getId()).orElseThrow();
+        target.replaceTags(java.util.Set.of("Nike"));
+        em.flush();
+        em.clear();
+
+        // 대문자 + 앞뒤 공백 " NIKE "로 검색해도 소문자 저장 태그("nike")와 매칭되어 pA만 반환
+        ProductSearchCond cond = new ProductSearchCond(
+            ProductStatus.APPROVED, SellerStatus.APPROVED, null, null, null, null,
+            SortType.LATEST, List.of(" NIKE "));
+        Page<Product> page = productRepository.search(cond, PageRequest.of(0, 10));
+
+        assertThat(ids(page)).containsExactly(pA.getId());
+    }
+
     private ProductSearchCond cond(SortType sort, Long categoryId, Long minPrice, Long maxPrice) {
         return new ProductSearchCond(
             ProductStatus.APPROVED, SellerStatus.APPROVED, null, categoryId, minPrice, maxPrice, sort, null);
