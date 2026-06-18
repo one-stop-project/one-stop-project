@@ -58,7 +58,7 @@ public class SellerItemService {
         Long beforeStock = null;
         if (stockChanged) {
             if (request.stock() > MAX_STOCK) {
-                throw new CustomException(ErrorCode.INVENTORY_003);
+                throw new CustomException(ErrorCode.INVENTORY_005);
             }
             beforeStock = item.getStock();
         }
