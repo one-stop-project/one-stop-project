@@ -310,6 +310,7 @@ public enum ErrorCode {
     REVIEW_005(HttpStatus.NOT_FOUND, "REVIEW_005", "리뷰를 찾을 수 없습니다"),
     REVIEW_006(HttpStatus.FORBIDDEN, "REVIEW_006", "본인의 리뷰만 수정/삭제할 수 있습니다"),
     REVIEW_007(HttpStatus.BAD_REQUEST, "REVIEW_007", "작성 후 30일이 지나 수정할 수 없습니다"),
+    REVIEW_008(HttpStatus.BAD_REQUEST, "REVIEW_008", "리뷰 이미지는 최대 5개까지 등록할 수 있습니다"),
 
     // ===== SUBSCRIPTION - 구독 =====
     SUBSCRIPTION_001(HttpStatus.NOT_FOUND, "SUBSCRIPTION_001", "구독 정보를 찾을 수 없습니다"),

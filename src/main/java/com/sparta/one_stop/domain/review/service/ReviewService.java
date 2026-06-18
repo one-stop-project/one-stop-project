@@ -17,6 +17,7 @@ import com.sparta.one_stop.global.enums.review.ReviewStatus;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import com.sparta.one_stop.global.security.AuthUser;
+import com.sparta.one_stop.global.storage.ImageStorage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationEventPublisher;
@@ -24,6 +25,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.HashSet;
@@ -42,12 +44,17 @@ public class ReviewService {
     private final ReviewImageRepository reviewImageRepository;
     private final OrderItemRepository orderItemRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final ImageStorage imageStorage;
 
     /**
      * 리뷰 작성
      */
     @Transactional
-    public ReviewResponse createReview(AuthUser authUser, CreateReviewRequest request) {
+    public ReviewResponse createReview(AuthUser authUser, CreateReviewRequest request, List<MultipartFile> images) {
+
+        if (images != null && images.size() > 5) {
+            throw new CustomException(ErrorCode.REVIEW_008);
+        }
 
         OrderItem orderItem = orderItemRepository.findForReviewById(request.getOrderItemId())
             .orElseThrow(() -> new CustomException(ErrorCode.ORDER_006));
@@ -79,9 +86,20 @@ public class ReviewService {
 
         Review saved = reviewRepository.save(review);
 
-        if (request.getImageUrls() != null) {
+        if (images != null) {
             int idx = 0;
-            for (String url : request.getImageUrls()) {
+
+            for (MultipartFile image : images) {
+
+                byte[] bytes;
+                try {
+                    bytes = image.getBytes();
+                } catch (java.io.IOException e) {
+                    throw new CustomException(ErrorCode.COMMON_007);
+                }
+
+                String url = imageStorage.store(bytes, image.getContentType());
+
                 reviewImageRepository.save(
                     ReviewImage.builder()
                         .review(saved)
@@ -105,8 +123,8 @@ public class ReviewService {
      * 리뷰 수정
      */
     @Transactional
-    public ReviewResponse updateReview(AuthUser authUser, Long reviewId, UpdateReviewRequest request) {
-
+    public ReviewResponse updateReview(AuthUser authUser, Long reviewId, UpdateReviewRequest request, List<MultipartFile> newImages)
+    {
         Review review = reviewRepository.findById(reviewId)
             .orElseThrow(() -> new CustomException(ErrorCode.REVIEW_005));
 
@@ -123,38 +141,76 @@ public class ReviewService {
         }
 
         Long productId = review.getProduct().getId();
+
+        // 리뷰 기본 정보 수정
         review.update(request.getRating(), request.getContent());
 
-        List<String> requestedUrls = request.getImageUrls();
-        Set<String> requestedUrlSet = new HashSet<>(requestedUrls);
+        // 기존 이미지 유지 목록 (null = 기존 유지)
+        List<String> retained = request.getRetainedImageUrls();
+        if (retained == null) {
+            retained = review.getImages().stream()
+                .map(ReviewImage::getImageUrl)
+                .toList();
+        }
 
-        // 기존 이미지 URL → entity 맵
-        Map<String, ReviewImage> existingByUrl = review.getImages().stream()
-            .collect(Collectors.toMap(ReviewImage::getImageUrl, img -> img, (a, b) -> a));
+        Set<String> retainedSet = new HashSet<>(retained);
 
-        // 요청에 없는 기존 이미지 제거 (orphanRemoval로 자동 삭제)
-        review.getImages().removeIf(img -> !requestedUrlSet.contains(img.getImageUrl()));
+        int retainedCount = retained.size();
+        int newImageCount = newImages == null ? 0 : newImages.size();
 
-        // 요청 순서 기준으로 displayOrder 갱신 + 신규 URL 추가
-        for (int idx = 0; idx < requestedUrls.size(); idx++) {
-            String url = requestedUrls.get(idx);
-            if (existingByUrl.containsKey(url)) {
-                existingByUrl.get(url).updateDisplayOrder(idx);
-            } else {
+        if (retainedCount + newImageCount > 5) {
+            throw new CustomException(ErrorCode.REVIEW_008);
+        }
+
+        // 삭제 대상 이미지 S3 삭제
+        List<String> deleteTargets = review.getImages().stream()
+            .map(ReviewImage::getImageUrl)
+            .filter(url -> !retainedSet.contains(url))
+            .toList();
+
+        deleteTargets.forEach(imageStorage::delete);
+
+        // DB 이미지 제거
+        review.getImages().removeIf(img -> !retainedSet.contains(img.getImageUrl()));
+
+        // 순서 재정렬
+        Map<String, ReviewImage> existingMap = review.getImages().stream()
+            .collect(Collectors.toMap(ReviewImage::getImageUrl, img -> img));
+
+        int idx = 0;
+        for (String url : retained) {
+            ReviewImage img = existingMap.get(url);
+            if (img != null) {
+                img.updateDisplayOrder(idx++);
+            }
+        }
+
+        // 새 이미지 업로드 + 추가
+        if (newImages != null && !newImages.isEmpty()) {
+            for (MultipartFile file : newImages) {
+
+                String url;
+                try {
+                    url = imageStorage.store(file.getBytes(), file.getContentType());
+                } catch (Exception e) {
+                    throw new CustomException(ErrorCode.COMMON_007);
+                }
+
                 review.getImages().add(
                     ReviewImage.builder()
                         .review(review)
                         .imageUrl(url)
-                        .displayOrder(idx)
+                        .displayOrder(idx++)
                         .build()
                 );
             }
         }
 
+        // 리뷰 수정 후 상품 통계 갱신
         try {
             eventPublisher.publishEvent(new ReviewSummaryRefreshEvent(productId));
         } catch (Exception e) {
-            log.warn("[ReviewSummaryRefreshEvent] 이벤트 발행 실패 — 리뷰 수정에는 영향 없음: reviewId={}", reviewId, e);
+            log.warn("리뷰 요약 이벤트 실패: reviewId={}", reviewId, e);
         }
 
         return toResponse(review);
@@ -235,9 +291,10 @@ public class ReviewService {
         return ReviewResponse.builder()
             .reviewId(review.getId())
             .productId(review.getProduct().getId())
+            .orderItemId(review.getOrderItem().getId())
             .rating(review.getRating())
             .content(review.getContent())
-            .imageUrls(
+            .images(
                 review.getImages().stream()
                     .map(ReviewImage::getImageUrl)
                     .toList()

@@ -21,7 +21,4 @@ public class CreateReviewRequest {
     @NotBlank(message = "리뷰 내용은 필수입니다.")
     @Size(min = 10, max = 1000, message = "리뷰는 10~1000자입니다.")
     private String content;
-
-    @Size(max = 5, message = "이미지는 최대 5장까지 가능합니다.")
-    private List<String> imageUrls;
 }

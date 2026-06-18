@@ -7,12 +7,10 @@ import java.util.List;
 
 @Builder
 public record ProductReviewResponse(
-
     Long reviewId,
     String reviewerName,
     Integer rating,
     String content,
-    List<String> imageUrls,
+    List<String> images,
     LocalDateTime createdAt
-) {
-}
+) {}
