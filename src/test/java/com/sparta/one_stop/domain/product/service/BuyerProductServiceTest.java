@@ -399,6 +399,18 @@ class BuyerProductServiceTest {
             then(popularProductService).should().getPopularProductIds(anyInt());
             then(productRepository).should(never()).search(any(), any());
         }
+
+        @Test
+        @DisplayName("연산자 문자만 있는 검색어 + POPULAR도 정제 후 null이 되어 전역 랭킹을 탄다 (#508)")
+        void popularWithOperatorOnlyKeyword_usesGlobalRanking() {
+            given(popularProductService.getPopularProductIds(anyInt())).willReturn(List.of(1L));
+            given(productRepository.findAllByIdsWithItems(any())).willReturn(List.of());
+
+            buyerProductService.search("+-*\"()", null, null, null, SortType.POPULAR, pageable);
+
+            then(popularProductService).should().getPopularProductIds(anyInt());
+            then(productRepository).should(never()).search(any(), any());
+        }
     }
 
     private Product approvedProductWithOnSaleItem(Long id) {

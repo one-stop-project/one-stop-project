@@ -113,7 +113,7 @@ class ProductRepositorySearchTest {
     }
 
     @Test
-    @DisplayName("POPULAR: ON_SALE 노출 상품을 판매량(salesCount) 내림차순, 동률 id tie-break (#508)")
+    @DisplayName("POPULAR: ON_SALE 노출 상품을 판매량(salesCount) 내림차순 (#508)")
     void popular_orderBySalesCountDesc() {
         // 판매량 차등: D(100) > A(50) > B(10). 상품C는 STOP만 보유라 노출 제외
         bumpScore(pA, 0, 50);
@@ -127,6 +127,27 @@ class ProductRepositorySearchTest {
 
         assertThat(ids(page)).containsExactly(pD.getId(), pA.getId(), pB.getId());
         assertThat(page.getTotalElements()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("POPULAR: 판매량이 동률이면 id 내림차순으로 안정 정렬 (#508)")
+    void popular_tieBreak_orderByIdDesc() {
+        // 동일 판매량(500) 상품 둘 추가 — pF가 나중 생성이라 id가 더 큼
+        Product pE = persistProduct("동률E", cat1, new long[]{4000}, new long[]{});
+        Product pF = persistProduct("동률F", cat1, new long[]{4000}, new long[]{});
+        em.flush();
+        em.clear();
+        bumpScore(pE, 0, 500);
+        bumpScore(pF, 0, 500);
+        em.flush();
+        em.clear();
+
+        List<Long> ids = ids(productRepository.search(
+            cond(SortType.POPULAR, null, null, null), PageRequest.of(0, 10)));
+
+        // 판매량 최상위 동률 둘은 맨 앞, 그 사이 순서는 id 내림차순 (pF.id > pE.id → pF 먼저)
+        assertThat(ids.get(0)).isEqualTo(pF.getId());
+        assertThat(ids.get(1)).isEqualTo(pE.getId());
     }
 
     @Test
