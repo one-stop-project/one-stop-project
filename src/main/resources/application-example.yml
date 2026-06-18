@@ -188,3 +188,7 @@ slack:
   alert:
     enabled: false
     webhook-url: ${SLACK_ALERT_WEBHOOK_URL:}
+    
+server:
+  shutdown: graceful
+  forward-headers-strategy: framework
