@@ -285,7 +285,7 @@ public class PointTxService {
      * 배송 완료 후 포인트 적립
      * - 주문의 모든 OrderItem이 DELIVERED 상태일 때만 적립 (주문 단위 1회)
      * - 이미 해당 주문에 EARN 이력이 있으면 중복 적립 방지
-     * - 적립 기준 금액 = 상품금액 - 쿠폰할인 - 사용포인트 (배송비 제외)
+     * - 적립 기준 금액 = 상품금액 - 쿠폰할인 - 사용포인트 - 구독할인 (배송비 제외)
      * - 적립 포인트 = floor(적립 기준 금액 * 0.01)
      * - 적립 포인트 만료일 = 적립일 기준 1년 후
      */
@@ -326,10 +326,11 @@ public class PointTxService {
                 return pointRepository.save(Point.createInitial(user));
             });
 
-        // 적립 기준 금액 = 상품금액 - 쿠폰할인 - 사용포인트 (배송비 제외)
+        // 적립 기준 금액 = 상품금액 - 쿠폰할인 - 사용포인트 - 구독할인 (배송비 제외)
         long baseAmount = order.getTotalPrice()
             - order.getDiscountPrice()
-            - order.getUsedPoint();
+            - order.getUsedPoint()
+            - order.getSubscriptionDiscount();
 
         if (baseAmount <= 0) {
             log.info("[POINT_EARN] 적립 기준 금액이 0 이하 — orderId={}, baseAmount={}", orderId, baseAmount);
