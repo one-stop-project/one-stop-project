@@ -76,6 +76,7 @@ spring:
 
 server:
   shutdown: graceful
+  forward-headers-strategy: framework
 
 jwt:
   secret:
