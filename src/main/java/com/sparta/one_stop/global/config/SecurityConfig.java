@@ -163,6 +163,8 @@ public class SecurityConfig {
                 .requestMatchers("/api/reviews/**").hasRole("BUYER")
                 .requestMatchers("/api/subscriptions/**").hasRole("BUYER")
                 .requestMatchers("/api/coupons/**").hasRole("BUYER")
+                .requestMatchers("/api/notifications/**").hasRole("BUYER")
+                .requestMatchers(HttpMethod.GET, "/api/users/me/coupons", "/api/users/me/coupons/**").hasRole("BUYER")
                 .requestMatchers(HttpMethod.POST, "/api/users/me/points/charge").hasAnyRole("ADMIN", "SUPER_ADMIN") // 테스트 충전 방어
                 .requestMatchers("/api/users/me/points", "/api/users/me/points/**").hasRole("BUYER")
 
