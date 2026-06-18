@@ -18,6 +18,7 @@ import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 
 import java.util.List;
+import java.util.Locale;
 
 @RequiredArgsConstructor
 public class ProductRepositoryImpl implements ProductRepositoryCustom {
@@ -73,7 +74,11 @@ public class ProductRepositoryImpl implements ProductRepositoryCustom {
         if (cond.tags() != null && !cond.tags().isEmpty()) {
             BooleanBuilder tagOr = new BooleanBuilder();
             for (String tag : cond.tags()) {
-                tagOr.or(product.tags.contains(tag));
+                if (tag == null) {
+                    continue;
+                }
+                // 태그는 저장 시 trim+소문자(Locale.ROOT)로 정규화되므로 검색 입력도 동일하게 맞춰 매칭
+                tagOr.or(product.tags.contains(tag.trim().toLowerCase(Locale.ROOT)));
             }
             where.and(tagOr);
         }
