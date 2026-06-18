@@ -95,6 +95,28 @@ class AdminProductServiceTest {
         }
 
         @Test
+        @DisplayName("APPROVE_REQUESTED 아닌 상태(REJECTED) 승인 → ADMIN_017 예외")
+        void approve_not_requested_throws() {
+            product.reject();
+            given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+
+            assertThatThrownBy(() -> adminProductService.approveProduct(PRODUCT_ID, ACTOR_ID))
+                .isInstanceOf(CustomException.class)
+                .satisfies(e -> assertThat(((CustomException) e).getErrorCode()).isEqualTo(ErrorCode.ADMIN_017));
+        }
+
+        @Test
+        @DisplayName("폐기(DISCONTINUED) 상품 승인 → ADMIN_017 예외 (폐기상품 부활 방지)")
+        void approve_discontinued_throws() {
+            product.discontinue();
+            given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+
+            assertThatThrownBy(() -> adminProductService.approveProduct(PRODUCT_ID, ACTOR_ID))
+                .isInstanceOf(CustomException.class)
+                .satisfies(e -> assertThat(((CustomException) e).getErrorCode()).isEqualTo(ErrorCode.ADMIN_017));
+        }
+
+        @Test
         @DisplayName("존재하지 않는 상품 승인 → PRODUCT_001 예외")
         void approve_not_found_throws() {
             given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.empty());
@@ -133,6 +155,17 @@ class AdminProductServiceTest {
             assertThatThrownBy(() -> adminProductService.rejectProduct(PRODUCT_ID, ACTOR_ID, "사유"))
                 .isInstanceOf(CustomException.class)
                 .satisfies(e -> assertThat(((CustomException) e).getErrorCode()).isEqualTo(ErrorCode.ADMIN_009));
+        }
+
+        @Test
+        @DisplayName("APPROVE_REQUESTED 아닌 상태(APPROVED) 반려 → ADMIN_017 예외")
+        void reject_not_requested_throws() {
+            product.approve();
+            given(productRepository.findById(PRODUCT_ID)).willReturn(Optional.of(product));
+
+            assertThatThrownBy(() -> adminProductService.rejectProduct(PRODUCT_ID, ACTOR_ID, "사유"))
+                .isInstanceOf(CustomException.class)
+                .satisfies(e -> assertThat(((CustomException) e).getErrorCode()).isEqualTo(ErrorCode.ADMIN_017));
         }
     }
 
