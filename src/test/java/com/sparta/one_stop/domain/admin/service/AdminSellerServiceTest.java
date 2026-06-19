@@ -99,14 +99,14 @@ class AdminSellerServiceTest {
         }
 
         @Test
-        @DisplayName("이미 APPROVED 판매자 승인 → ADMIN_002 예외")
-        void approve_already_approved_throws() {
+        @DisplayName("PENDING이 아닌 판매자 승인 → ADMIN_018 예외")
+        void approve_non_pending_seller_throws() {
             seller.approve();
             given(sellerRepository.findById(SELLER_ID)).willReturn(Optional.of(seller));
 
             assertThatThrownBy(() -> adminSellerService.approveSeller(SELLER_ID, ACTOR_ID))
                 .isInstanceOf(CustomException.class)
-                .satisfies(e -> assertThat(((CustomException) e).getErrorCode()).isEqualTo(ErrorCode.ADMIN_002));
+                .satisfies(e -> assertThat(((CustomException) e).getErrorCode()).isEqualTo(ErrorCode.ADMIN_018));
         }
 
         @Test
@@ -140,14 +140,14 @@ class AdminSellerServiceTest {
         }
 
         @Test
-        @DisplayName("이미 REJECTED 판매자 반려 → ADMIN_003 예외")
-        void reject_already_rejected_throws() {
+        @DisplayName("PENDING이 아닌 판매자 반려 → ADMIN_018 예외")
+        void reject_non_pending_seller_throws() {
             seller.reject();
             given(sellerRepository.findById(SELLER_ID)).willReturn(Optional.of(seller));
 
             assertThatThrownBy(() -> adminSellerService.rejectSeller(SELLER_ID, ACTOR_ID, "사유"))
                 .isInstanceOf(CustomException.class)
-                .satisfies(e -> assertThat(((CustomException) e).getErrorCode()).isEqualTo(ErrorCode.ADMIN_003));
+                .satisfies(e -> assertThat(((CustomException) e).getErrorCode()).isEqualTo(ErrorCode.ADMIN_018));
         }
     }
 
@@ -266,15 +266,15 @@ class AdminSellerServiceTest {
         }
 
         @Test
-        @DisplayName("이미 정지된 판매자(User.suspended) 재정지 → ADMIN_004 예외")
-        void suspend_already_suspended_user_throws() {
+        @DisplayName("이미 SUSPENDED 판매자 재정지 → ADMIN_019 예외")
+        void suspend_already_suspended_seller_throws() {
             seller.approve();
-            user.suspend();
+            seller.suspend();
             given(sellerRepository.findById(SELLER_ID)).willReturn(Optional.of(seller));
 
             assertThatThrownBy(() -> adminSellerService.forceInactiveSeller(SELLER_ID, ACTOR_ID, "사유"))
                 .isInstanceOf(CustomException.class)
-                .satisfies(e -> assertThat(((CustomException) e).getErrorCode()).isEqualTo(ErrorCode.ADMIN_004));
+                .satisfies(e -> assertThat(((CustomException) e).getErrorCode()).isEqualTo(ErrorCode.ADMIN_019));
         }
     }
 
