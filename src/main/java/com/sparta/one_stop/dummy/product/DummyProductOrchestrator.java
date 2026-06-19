@@ -9,6 +9,7 @@ import com.sparta.one_stop.dummy.grouping.GroupedProduct;
 import com.sparta.one_stop.dummy.grouping.NaverVariantGrouper;
 import com.sparta.one_stop.dummy.naver.NaverShopClient;
 import com.sparta.one_stop.dummy.naver.dto.NaverShopItem;
+import com.sparta.one_stop.dummy.seed.CategorySearchKeyword;
 import com.sparta.one_stop.dummy.seed.CategorySeeder;
 import com.sparta.one_stop.dummy.seed.DummySellerSeeder;
 import com.sparta.one_stop.dummy.source.DummyProductSourceGroupRepository;
@@ -19,6 +20,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
@@ -40,6 +42,7 @@ public class DummyProductOrchestrator {
 
     private final DummySellerSeeder sellerSeeder;
     private final CategorySeeder categorySeeder;
+    private final CategorySearchKeyword searchKeyword;
     private final CategoryRepository categoryRepository;
     private final NaverShopClient naverShopClient;
     private final ProductDeduplicator deduplicator;
@@ -71,12 +74,19 @@ public class DummyProductOrchestrator {
             }
             try {
                 List<Long> categoryIds = categoryChain(leaf);
-                List<NaverShopItem> items = naverShopClient.search(leaf.getName(), properties.display(), START, SORT);
+                String keyword = searchKeyword.resolve(categoryPathNames(leaf));
+                if (keyword == null || keyword.isBlank()) {
+                    log.warn("[더미시드] 빈 카테고리 — 검색어 해석 실패 (category={})", leaf.getName());
+                    continue;
+                }
+                List<NaverShopItem> items = naverShopClient.search(keyword, properties.display(), START, SORT);
                 List<NaverShopItem> deduped = deduplicator.dedup(items);
                 if (deduped.isEmpty()) {
+                    log.warn("[더미시드] 빈 카테고리 — 검색·중복제거 후 0건 (category={}, keyword={})", leaf.getName(), keyword);
                     continue;
                 }
                 List<GroupedProduct> groups = grouper.group(deduped, categoryIds, leaf.getName());
+                int leafProcessed = 0;
                 for (GroupedProduct group : groups) {
                     // 신규 그룹일 때만 이미지 다운로드 (기존 그룹은 가격만 갱신 → 매 실행 받아 버려지는 orphan 누적 방지)
                     boolean newGroup = !sourceGroupRepository.existsBySourceAndBaseSourceKey(SOURCE, group.baseSourceKey());
@@ -85,9 +95,9 @@ public class DummyProductOrchestrator {
                         GroupedProduct toWrite = (thumbnail != null) ? withThumbnail(group, thumbnail) : group;
                         DummyWriteResult result = writer.write(seller, toWrite);
                         switch (result) {
-                            case CREATED -> created++;
-                            case UPDATED -> updated++;
-                            case SKIPPED -> skipped++;
+                            case CREATED -> { created++; leafProcessed++; }
+                            case UPDATED -> { updated++; leafProcessed++; }
+                            case SKIPPED -> { skipped++; leafProcessed++; }
                             default -> log.warn("[더미시드] 미처리 결과 상태: {}", result);
                         }
                     } catch (Exception e) {
@@ -98,6 +108,10 @@ public class DummyProductOrchestrator {
                         log.warn("[더미시드] 상품 저장 실패 (category={}, base={})",
                                 leaf.getName(), group.baseSourceKey(), e);
                     }
+                }
+                if (leafProcessed == 0) {
+                    log.warn("[더미시드] 빈 카테고리 — 처리된 상품 0건 (category={}, keyword={}, 그룹수={})",
+                            leaf.getName(), keyword, groups.size());
                 }
             } catch (Exception e) {
                 log.warn("[더미시드] 카테고리 처리 실패 (category={})", leaf.getName(), e);
@@ -133,6 +147,16 @@ public class DummyProductOrchestrator {
             current = current.getParent();
         }
         return ids;
+    }
+
+    // 잎 → 루트까지 이름을 모아 루트→잎 순으로 반환 (검색어 경로 키 매칭용)
+    private List<String> categoryPathNames(Category leaf) {
+        List<String> names = new ArrayList<>();
+        for (Category current = leaf; current != null; current = current.getParent()) {
+            names.add(current.getName());
+        }
+        Collections.reverse(names);
+        return names;
     }
 
     private GroupedProduct withThumbnail(GroupedProduct group, String thumbnailUrl) {
