@@ -113,6 +113,71 @@ class ProductRepositorySearchTest {
     }
 
     @Test
+    @DisplayName("POPULAR: ON_SALE 노출 상품을 판매량(salesCount) 내림차순 (#508)")
+    void popular_orderBySalesCountDesc() {
+        // 판매량 차등: D(100) > A(50) > B(10). 상품C는 STOP만 보유라 노출 제외
+        bumpScore(pA, 0, 50);
+        bumpScore(pB, 0, 10);
+        bumpScore(pD, 0, 100);
+        em.flush();
+        em.clear();
+
+        Page<Product> page = productRepository.search(
+            cond(SortType.POPULAR, null, null, null), PageRequest.of(0, 10));
+
+        assertThat(ids(page)).containsExactly(pD.getId(), pA.getId(), pB.getId());
+        assertThat(page.getTotalElements()).isEqualTo(3);
+    }
+
+    @Test
+    @DisplayName("POPULAR: 판매량이 동률이면 id 내림차순으로 안정 정렬 (#508)")
+    void popular_tieBreak_orderByIdDesc() {
+        // 동일 판매량(500) 상품 둘 추가 — pF가 나중 생성이라 id가 더 큼
+        Product pE = persistProduct("동률E", cat1, new long[]{4000}, new long[]{});
+        Product pF = persistProduct("동률F", cat1, new long[]{4000}, new long[]{});
+        em.flush();
+        em.clear();
+        bumpScore(pE, 0, 500);
+        bumpScore(pF, 0, 500);
+        em.flush();
+        em.clear();
+
+        List<Long> ids = ids(productRepository.search(
+            cond(SortType.POPULAR, null, null, null), PageRequest.of(0, 10)));
+
+        // 판매량 최상위 동률 둘은 맨 앞, 그 사이 순서는 id 내림차순 (pF.id > pE.id → pF 먼저)
+        assertThat(ids.get(0)).isEqualTo(pF.getId());
+        assertThat(ids.get(1)).isEqualTo(pE.getId());
+    }
+
+    @Test
+    @DisplayName("POPULAR + 카테고리 필터: 타 카테고리 인기상품은 제외하고 해당 카테고리 안에서만 판매량순 (#508 — 전역 인기상품 아님)")
+    void popular_withCategoryFilter_ordersBySalesWithinCategory() {
+        // cat2에 판매량 최상위(200) ON_SALE 상품 추가 → 무필터면 1위, cat1 필터엔 안 잡혀야 함
+        Product hotCat2 = persistProduct("cat2_인기상품", cat2, new long[]{7000}, new long[]{});
+        em.flush();
+        em.clear();
+        bumpScore(pA, 0, 50);
+        bumpScore(pB, 0, 10);
+        bumpScore(pD, 0, 100);
+        bumpScore(hotCat2, 0, 200);
+        em.flush();
+        em.clear();
+
+        // 무필터: 판매량순 hotCat2(200) > D(100) > A(50) > B(10)
+        Page<Product> all = productRepository.search(
+            cond(SortType.POPULAR, null, null, null), PageRequest.of(0, 10));
+        assertThat(ids(all)).containsExactly(hotCat2.getId(), pD.getId(), pA.getId(), pB.getId());
+
+        // cat1 필터: 판매량 1위 hotCat2(cat2)는 제외되고 cat1 내 D > A > B
+        Page<Product> cat1Page = productRepository.search(
+            cond(SortType.POPULAR, cat1.getId(), null, null), PageRequest.of(0, 10));
+        assertThat(ids(cat1Page)).containsExactly(pD.getId(), pA.getId(), pB.getId());
+        assertThat(ids(cat1Page)).doesNotContain(hotCat2.getId());
+        assertThat(cat1Page.getTotalElements()).isEqualTo(3);
+    }
+
+    @Test
     @DisplayName("카테고리 필터: 해당 카테고리 매핑 상품만 반환")
     void categoryFilter_returnsOnlyMatching() {
         Page<Product> page = productRepository.search(

@@ -41,7 +41,7 @@ public class BuyerProductService {
     private final ProductViewCountService viewCountService;
     private final PopularProductService popularProductService;
 
-    // 인기순 정렬은 랭킹 순서 그대로 반환 (keyword/categoryId/가격 필터 미적용)
+    // 인기순은 필터(검색어/카테고리/가격)가 없을 때만 전역 랭킹을 반환하고, 필터가 있으면 그 결과를 판매량 순으로 정렬한다 (#508)
     // 응답 캐시 5분 — 키는 모든 필터 조합
     // Page는 그대로 캐시 직렬화가 안 돼서 CacheableProductList에 담아 저장
     @Cacheable(
@@ -64,7 +64,12 @@ public class BuyerProductService {
     private Page<ProductSummaryResponse> doSearch(
         String keyword, Long categoryId, Long minPrice, Long maxPrice, SortType sort, Pageable pageable
     ) {
-        if (sort == SortType.POPULAR) {
+        String cleanedKeyword = sanitizeKeyword(keyword);
+        boolean hasFilter = cleanedKeyword != null || categoryId != null || minPrice != null || maxPrice != null;
+
+        // 필터가 없는 인기순만 전역 인기 랭킹을 반환한다.
+        // 필터가 있으면 검색 결과 안에서 판매량 순으로 정렬한다 (#508 — 검색어 무시하고 전역 랭킹 반환하던 버그).
+        if (sort == SortType.POPULAR && !hasFilter) {
             return searchPopular(pageable);
         }
 
@@ -72,7 +77,7 @@ public class BuyerProductService {
         Pageable plainPage = PageRequest.of(pageable.getPageNumber(), pageable.getPageSize());
         ProductSearchCond cond = new ProductSearchCond(
             ProductStatus.APPROVED, SellerStatus.APPROVED,
-            sanitizeKeyword(keyword), categoryId, minPrice, maxPrice, sort, null
+            cleanedKeyword, categoryId, minPrice, maxPrice, sort, null
         );
         return productRepository.search(cond, plainPage).map(ProductSummaryResponse::from);
     }

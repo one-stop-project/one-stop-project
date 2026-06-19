@@ -336,6 +336,81 @@ class BuyerProductServiceTest {
             assertThat(result.content()).isEmpty();
             then(productRepository).should(never()).findApproved(any(), any(), any());
         }
+
+        @Test
+        @DisplayName("검색어가 있으면 POPULAR라도 전역 랭킹이 아니라 repository 검색(판매량 정렬)을 탄다 (#508)")
+        void popularWithKeyword_usesRepositorySearch() {
+            given(productRepository.search(any(), any())).willReturn(Page.empty(pageable));
+
+            buyerProductService.search("키보드", null, null, null, SortType.POPULAR, pageable);
+
+            then(productRepository).should().search(
+                argThat(cond -> "키보드".equals(cond.keyword()) && cond.sort() == SortType.POPULAR),
+                any(Pageable.class));
+            then(popularProductService).should(never()).getPopularProductIds(anyInt());
+        }
+
+        @Test
+        @DisplayName("카테고리 필터가 있으면 POPULAR라도 repository 검색을 탄다 (#508)")
+        void popularWithCategory_usesRepositorySearch() {
+            given(productRepository.search(any(), any())).willReturn(Page.empty(pageable));
+
+            buyerProductService.search(null, 5L, null, null, SortType.POPULAR, pageable);
+
+            then(productRepository).should().search(
+                argThat(cond -> cond.categoryId() == 5L && cond.sort() == SortType.POPULAR),
+                any(Pageable.class));
+            then(popularProductService).should(never()).getPopularProductIds(anyInt());
+        }
+
+        @Test
+        @DisplayName("가격 필터가 있으면 POPULAR라도 repository 검색을 탄다 (#508)")
+        void popularWithPriceFilter_usesRepositorySearch() {
+            given(productRepository.search(any(), any())).willReturn(Page.empty(pageable));
+
+            buyerProductService.search(null, null, 1000L, null, SortType.POPULAR, pageable);
+
+            then(productRepository).should().search(
+                argThat(cond -> cond.minPrice() == 1000L && cond.sort() == SortType.POPULAR),
+                any(Pageable.class));
+            then(popularProductService).should(never()).getPopularProductIds(anyInt());
+        }
+
+        @Test
+        @DisplayName("필터가 없는 POPULAR는 전역 랭킹만 타고 repository.search()는 호출하지 않는다 (#508)")
+        void popularWithoutFilter_usesGlobalRankingOnly() {
+            given(popularProductService.getPopularProductIds(anyInt())).willReturn(List.of(1L));
+            given(productRepository.findAllByIdsWithItems(any())).willReturn(List.of());
+
+            buyerProductService.search(null, null, null, null, SortType.POPULAR, pageable);
+
+            then(popularProductService).should().getPopularProductIds(anyInt());
+            then(productRepository).should(never()).search(any(), any());
+        }
+
+        @Test
+        @DisplayName("공백만 있는 검색어 + POPULAR는 필터 없음으로 보고 전역 랭킹을 탄다 (#508)")
+        void popularWithBlankKeyword_usesGlobalRanking() {
+            given(popularProductService.getPopularProductIds(anyInt())).willReturn(List.of(1L));
+            given(productRepository.findAllByIdsWithItems(any())).willReturn(List.of());
+
+            buyerProductService.search("   ", null, null, null, SortType.POPULAR, pageable);
+
+            then(popularProductService).should().getPopularProductIds(anyInt());
+            then(productRepository).should(never()).search(any(), any());
+        }
+
+        @Test
+        @DisplayName("연산자 문자만 있는 검색어 + POPULAR도 정제 후 null이 되어 전역 랭킹을 탄다 (#508)")
+        void popularWithOperatorOnlyKeyword_usesGlobalRanking() {
+            given(popularProductService.getPopularProductIds(anyInt())).willReturn(List.of(1L));
+            given(productRepository.findAllByIdsWithItems(any())).willReturn(List.of());
+
+            buyerProductService.search("+-*\"()", null, null, null, SortType.POPULAR, pageable);
+
+            then(popularProductService).should().getPopularProductIds(anyInt());
+            then(productRepository).should(never()).search(any(), any());
+        }
     }
 
     private Product approvedProductWithOnSaleItem(Long id) {

@@ -99,6 +99,8 @@ public class ProductRepositoryImpl implements ProductRepositoryCustom {
                 new OrderSpecifier<>(Order.ASC, minOnSalePrice(cond)), product.id.desc()};
             case PRICE_DESC -> new OrderSpecifier<?>[]{
                 new OrderSpecifier<>(Order.DESC, minOnSalePrice(cond)), product.id.desc()};
+            // POPULAR: 판매량 내림차순, 동률이면 id로 안정 정렬 — 검색 필터가 적용된 결과 안에서의 인기순
+            case POPULAR -> new OrderSpecifier<?>[]{product.salesCount.desc(), product.id.desc()};
             // LATEST: 생성 시각 기준 최신순, 동시각이면 id로 안정 정렬
             default -> new OrderSpecifier<?>[]{product.createdAt.desc(), product.id.desc()};
         };
