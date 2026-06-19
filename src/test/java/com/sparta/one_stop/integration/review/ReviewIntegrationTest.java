@@ -30,10 +30,10 @@ import jakarta.validation.Validator;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
-import java.util.List;
 import java.util.Set;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -47,6 +47,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * 1. 서비스 레벨: 주문 상태별 리뷰 작성 가능 여부, 중복 리뷰 차단, 권한 검증
  * 2. Bean Validation: 별점 경계값(0, 6), 내용 길이 제한 (@Min/@Max/@Size)
  */
+@Tag("integration")
 class ReviewIntegrationTest extends IntegrationTestSupport {
 
     @Autowired private ReviewService reviewService;
@@ -172,6 +173,16 @@ class ReviewIntegrationTest extends IntegrationTestSupport {
 
     private AuthUser authOf(User user) {
         return new AuthUser(user.getId(), user.getRole());
+    }
+
+    private void setField(Object target, String fieldName, Object value) {
+        try {
+            java.lang.reflect.Field field = target.getClass().getDeclaredField(fieldName);
+            field.setAccessible(true);
+            field.set(target, value);
+        } catch (Exception e) {
+            throw new RuntimeException("필드 설정 실패: " + fieldName, e);
+        }
     }
 
     @Nested
@@ -418,16 +429,6 @@ class ReviewIntegrationTest extends IntegrationTestSupport {
 
             assertThat(violations).isNotEmpty();
             assertThat(violations).anyMatch(v -> v.getPropertyPath().toString().equals("content"));
-        }
-    }
-
-    private void setField(Object target, String fieldName, Object value) {
-        try {
-            java.lang.reflect.Field field = target.getClass().getDeclaredField(fieldName);
-            field.setAccessible(true);
-            field.set(target, value);
-        } catch (Exception e) {
-            throw new RuntimeException("필드 설정 실패: " + fieldName, e);
         }
     }
 }

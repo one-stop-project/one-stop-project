@@ -19,6 +19,7 @@ import com.sparta.one_stop.integration.IntegrationTestSupport;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.Page;
@@ -50,6 +51,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  *   test 프로필에선 동작하지 않는다. 그래서 이 테스트가 운영과 동일한 인덱스(idx_product_name_fulltext, WITH PARSER ngram)를
  *   기동 시 직접 보장한다(없으면 생성).
  */
+@Tag("integration")
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 @DisplayName("상품 검색 FULLTEXT 키워드 - 실제 MySQL + ngram")
 class ProductSearchFulltextIntegrationTest extends IntegrationTestSupport {

@@ -20,6 +20,7 @@ import com.sparta.one_stop.integration.IntegrationTestSupport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.domain.PageRequest;
@@ -27,9 +28,11 @@ import org.springframework.data.domain.PageRequest;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+@Tag("integration")
 @DisplayName("관리자 도메인 통합 테스트")
 class AdminIntegrationTest extends IntegrationTestSupport {
 
+    private static final Long ACTOR_ID = 1L;
     @Autowired private AdminSellerService adminSellerService;
     @Autowired private AdminProductService adminProductService;
     @Autowired private AdminUserService adminUserService;
@@ -38,9 +41,6 @@ class AdminIntegrationTest extends IntegrationTestSupport {
     @Autowired private UserRepository userRepository;
     @Autowired private SellerRepository sellerRepository;
     @Autowired private ProductRepository productRepository;
-
-    private static final Long ACTOR_ID = 1L;
-
     private User adminUser;
     private User sellerUser;
     private Seller seller;
