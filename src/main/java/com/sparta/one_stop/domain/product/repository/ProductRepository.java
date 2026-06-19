@@ -34,7 +34,7 @@ public interface ProductRepository extends JpaRepository<Product, Long>, Product
     Page<Product> findAllBySellerId(Long sellerId, Pageable pageable);
 
     // 판매자 ID로 상품 상태 일괄 변경
-    @Modifying(clearAutomatically = true)
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("update Product p set p.status = :status where p.seller.id = :sellerId")
     int updateStatusBySellerId(@Param("sellerId") Long sellerId, @Param("status") ProductStatus status);
 
