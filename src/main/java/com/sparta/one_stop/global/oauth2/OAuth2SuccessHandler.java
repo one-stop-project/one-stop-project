@@ -8,6 +8,7 @@ import com.sparta.one_stop.global.ratelimit.RateLimitService;
 import com.sparta.one_stop.global.security.JwtTokenProvider;
 import com.sparta.one_stop.global.util.ClientIpExtractor;
 import com.sparta.one_stop.global.util.CookieUtil;
+import jakarta.annotation.PostConstruct;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -22,7 +23,11 @@ import org.springframework.util.StringUtils;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.IOException;
+import java.net.URI;
+import java.util.Arrays;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 /**
  * OAuth2 로그인 성공 핸들러.
@@ -36,7 +41,9 @@ import java.util.UUID;
  *   <li>추방된 기기의 Refresh Token 및 DeviceContext 제거</li>
  * </ul>
  *
- * <p>Access Token은 URL에 직접 노출하지 않고 1회용 교환 코드로 전달한다.</p>
+ * <p>서버 테스트 환경에서는 교환 코드를 URL에 노출하지 않는다.
+ * 프론트엔드 콜백에서 Access Token 교환이 필요한 경우에만
+ * app.oauth2.expose-code-in-redirect=true로 명시적으로 활성화한다.</p>
  */
 @Slf4j
 @Component
@@ -56,14 +63,26 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
     private final ClientIpExtractor clientIpExtractor;
     private final CookieUtil cookieUtil;
 
-    /**
-     * OAuth2 성공 후 최종 redirect URI.
-     *
-     * 서버 배포 환경에서는 localhost:3001을 사용하지 않는다.
-     * 프론트가 아직 서버에 배포되지 않았다면 /oauth2/success 서버 확인 페이지로 보낸다.
-     */
     @Value("${app.oauth2.success-redirect-uri:https://onestop1.duckdns.org/oauth2/success}")
     private String successRedirectUri;
+
+    @Value("${app.oauth2.allowed-redirect-hosts:onestop1.duckdns.org}")
+    private String allowedRedirectHosts;
+
+    @Value("${app.oauth2.expose-code-in-redirect:false}")
+    private boolean exposeCodeInRedirect;
+
+    private Set<String> allowedHosts;
+
+    @PostConstruct
+    void validateRedirectConfiguration() {
+        this.allowedHosts = Arrays.stream(allowedRedirectHosts.split(","))
+            .map(String::trim)
+            .filter(StringUtils::hasText)
+            .collect(Collectors.toUnmodifiableSet());
+
+        validateRedirectUri(successRedirectUri, "app.oauth2.success-redirect-uri");
+    }
 
     @Override
     public void onAuthenticationSuccess(
@@ -116,13 +135,7 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
         cleanupEvictedDevice(user.getId(), registration.evictedDeviceId());
         addAuthenticationCookies(response, refreshToken, deviceId);
 
-        String code = UUID.randomUUID().toString().replace("-", "");
-        redisTokenService.saveOAuth2Code(code, deviceId, accessToken);
-
-        String target = UriComponentsBuilder.fromUriString(successRedirectUri)
-            .queryParam("code", code)
-            .build()
-            .toUriString();
+        String target = buildSuccessRedirectTarget(deviceId, accessToken);
 
         if (registration.failOpen()) {
             log.warn(
@@ -133,14 +146,54 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
         }
 
         log.info(
-            "[OAuth2] 로그인 성공: userId={}, deviceId={}, newDevice={}, evictedDeviceId={}",
+            "[OAuth2] 로그인 성공: userId={}, deviceId={}, newDevice={}, evictedDeviceId={}, exposeCodeInRedirect={}",
             user.getId(),
             deviceId,
             registration.isNewDevice(),
-            registration.evictedDeviceId()
+            registration.evictedDeviceId(),
+            exposeCodeInRedirect
         );
 
         getRedirectStrategy().sendRedirect(request, response, target);
+    }
+
+    private String buildSuccessRedirectTarget(String deviceId, String accessToken) {
+        validateRedirectUri(successRedirectUri, "app.oauth2.success-redirect-uri");
+
+        if (!exposeCodeInRedirect) {
+            return successRedirectUri;
+        }
+
+        String code = UUID.randomUUID().toString().replace("-", "");
+        redisTokenService.saveOAuth2Code(code, deviceId, accessToken);
+
+        return UriComponentsBuilder.fromUriString(successRedirectUri)
+            .queryParam("code", code)
+            .build()
+            .toUriString();
+    }
+
+    private void validateRedirectUri(String redirectUri, String propertyName) {
+        if (!StringUtils.hasText(redirectUri)) {
+            throw new IllegalStateException(propertyName + " must not be blank");
+        }
+
+        URI uri;
+        try {
+            uri = URI.create(redirectUri);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalStateException(propertyName + " is not a valid URI", e);
+        }
+
+        if (!"https".equalsIgnoreCase(uri.getScheme())) {
+            throw new IllegalStateException(propertyName + " must use https: " + redirectUri);
+        }
+
+        if (!allowedHosts.contains(uri.getHost())) {
+            throw new IllegalStateException(
+                propertyName + " host is not allowed: " + uri.getHost()
+            );
+        }
     }
 
     private void cleanupEvictedDevice(Long userId, String evictedDeviceId) {

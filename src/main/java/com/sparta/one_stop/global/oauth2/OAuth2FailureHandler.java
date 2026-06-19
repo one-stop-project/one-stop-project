@@ -1,5 +1,6 @@
 package com.sparta.one_stop.global.oauth2;
 
+import jakarta.annotation.PostConstruct;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
@@ -9,20 +10,23 @@ import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.web.authentication.SimpleUrlAuthenticationFailureHandler;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.io.IOException;
+import java.net.URI;
+import java.util.Arrays;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * OAuth2 로그인 실패 핸들러.
  *
- * 실패 시 프론트 에러 라우트로 리다이렉트한다. 내부 예외 메시지는 노출하지 않고,
- * 약속된 에러코드만 쿼리 파라미터로 전달한다.
+ * 실패 시 서버에서 허용한 redirect URI로만 리다이렉트한다.
+ * 내부 예외 메시지는 노출하지 않고, 약속된 에러코드만 쿼리 파라미터로 전달한다.
  *   - AUTH_019 : 이메일 충돌(이미 일반 회원으로 가입된 이메일)
  *   - AUTH_018 : 이메일 미수신 / 처리 중 오류 등
  *   - OAUTH2_FAILED : 그 외 일반 실패
- *
- * 잔여 인가요청 쿠키도 best-effort로 정리한다(대부분 인증 필터가 이미 제거).
  */
 @Slf4j
 @Component
@@ -31,12 +35,23 @@ public class OAuth2FailureHandler extends SimpleUrlAuthenticationFailureHandler 
 
     private final HttpCookieOAuth2AuthorizationRequestRepository authRequestRepository;
 
-    /**
-     * OAuth2 실패 후 최종 redirect URI.
-     * 서버 배포 환경에서는 localhost:3001을 사용하지 않는다.
-     */
     @Value("${app.oauth2.failure-redirect-uri:https://onestop1.duckdns.org/login}")
     private String failureRedirectUri;
+
+    @Value("${app.oauth2.allowed-redirect-hosts:onestop1.duckdns.org}")
+    private String allowedRedirectHosts;
+
+    private Set<String> allowedHosts;
+
+    @PostConstruct
+    void validateRedirectConfiguration() {
+        this.allowedHosts = Arrays.stream(allowedRedirectHosts.split(","))
+            .map(String::trim)
+            .filter(StringUtils::hasText)
+            .collect(Collectors.toUnmodifiableSet());
+
+        validateRedirectUri(failureRedirectUri, "app.oauth2.failure-redirect-uri");
+    }
 
     @Override
     public void onAuthenticationFailure(HttpServletRequest request, HttpServletResponse response,
@@ -46,6 +61,8 @@ public class OAuth2FailureHandler extends SimpleUrlAuthenticationFailureHandler 
 
         String errorCode = resolveErrorCode(exception);
         log.warn("[OAuth2] 로그인 실패: code={}", errorCode);
+
+        validateRedirectUri(failureRedirectUri, "app.oauth2.failure-redirect-uri");
 
         String target = UriComponentsBuilder.fromUriString(failureRedirectUri)
             .queryParam("error", errorCode)
@@ -61,5 +78,28 @@ public class OAuth2FailureHandler extends SimpleUrlAuthenticationFailureHandler 
             return (code != null && !code.isBlank()) ? code : "OAUTH2_FAILED";
         }
         return "OAUTH2_FAILED";
+    }
+
+    private void validateRedirectUri(String redirectUri, String propertyName) {
+        if (!StringUtils.hasText(redirectUri)) {
+            throw new IllegalStateException(propertyName + " must not be blank");
+        }
+
+        URI uri;
+        try {
+            uri = URI.create(redirectUri);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalStateException(propertyName + " is not a valid URI", e);
+        }
+
+        if (!"https".equalsIgnoreCase(uri.getScheme())) {
+            throw new IllegalStateException(propertyName + " must use https: " + redirectUri);
+        }
+
+        if (!allowedHosts.contains(uri.getHost())) {
+            throw new IllegalStateException(
+                propertyName + " host is not allowed: " + uri.getHost()
+            );
+        }
     }
 }

@@ -9,6 +9,7 @@ import com.sparta.one_stop.global.response.ApiResponse;
 import com.sparta.one_stop.global.security.AuthUser;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.http.ResponseEntity;
@@ -21,20 +22,23 @@ import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 
 /**
  * 서버 부하 테스트/시연 전용 포인트 충전 API.
  *
- * 보안 정책:
- * - app.test-api.point-charge.enabled=true일 때만 Bean 등록
- * - JWT 인증 필요
- * - BUYER 권한 필요
- * - X-Test-Api-Key 헤더 필요
- * - 본인 포인트만 충전
+ * <p>운영 상시 기능이 아니므로 다음 조건을 모두 만족해야 한다.</p>
+ * <ul>
+ *   <li>app.test-api.point-charge.enabled=true일 때만 Bean 등록</li>
+ *   <li>JWT 인증 필요</li>
+ *   <li>BUYER 권한 필요</li>
+ *   <li>X-Test-Api-Key 헤더 필요</li>
+ * </ul>
  *
- * 운영 테스트 종료 후 반드시 enabled=false로 되돌린다.
+ * <p>테스트 종료 후 app.test-api.point-charge.enabled=false로 반드시 되돌린다.</p>
  */
+@Slf4j
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/test/users/me/points")
@@ -50,7 +54,7 @@ public class TestPointChargeController {
     private final PointService pointService;
 
     @Value("${app.test-api.point-charge.api-key:}")
-    private String testApiKey;
+    private String expectedApiKey;
 
     @PostMapping("/charge")
     @PreAuthorize("hasRole('BUYER')")
@@ -59,7 +63,7 @@ public class TestPointChargeController {
         @RequestHeader(value = TEST_API_KEY_HEADER, required = false) String requestApiKey,
         @Valid @RequestBody PointChargeRequest request
     ) {
-        validateTestApiKey(requestApiKey);
+        validateTestApiKey(authUser, requestApiKey);
 
         PointChargeResponse response = pointService.chargePoint(
             authUser.userId(),
@@ -69,18 +73,24 @@ public class TestPointChargeController {
         return ResponseEntity.ok(ApiResponse.success(response));
     }
 
-    private void validateTestApiKey(String requestApiKey) {
-        if (!StringUtils.hasText(testApiKey) || !StringUtils.hasText(requestApiKey)) {
-            throw new CustomException(ErrorCode.AUTH_011);
+    private void validateTestApiKey(AuthUser authUser, String requestApiKey) {
+        if (!StringUtils.hasText(expectedApiKey) || !StringUtils.hasText(requestApiKey)) {
+            log.warn(
+                "[TEST_POINT_CHARGE] missing api key. userId={}",
+                authUser != null ? authUser.userId() : null
+            );
+            throw new CustomException(ErrorCode.AUTH_007);
         }
 
-        byte[] expected = testApiKey.getBytes();
-        byte[] actual = requestApiKey.getBytes();
+        byte[] expected = expectedApiKey.getBytes(StandardCharsets.UTF_8);
+        byte[] actual = requestApiKey.getBytes(StandardCharsets.UTF_8);
 
         if (!MessageDigest.isEqual(expected, actual)) {
-            throw new CustomException(ErrorCode.AUTH_011);
+            log.warn(
+                "[TEST_POINT_CHARGE] invalid api key. userId={}",
+                authUser != null ? authUser.userId() : null
+            );
+            throw new CustomException(ErrorCode.AUTH_007);
         }
     }
 }
-
-

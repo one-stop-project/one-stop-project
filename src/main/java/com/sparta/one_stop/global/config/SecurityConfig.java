@@ -163,9 +163,11 @@ public class SecurityConfig {
                 .requestMatchers("/api/reviews/**").hasRole("BUYER")
                 .requestMatchers("/api/subscriptions/**").hasRole("BUYER")
                 .requestMatchers("/api/coupons/**").hasRole("BUYER")
-                .requestMatchers("/api/notifications/**").hasRole("BUYER")
-                .requestMatchers(HttpMethod.GET, "/api/users/me/coupons", "/api/users/me/coupons/**").hasRole("BUYER")
-                .requestMatchers(HttpMethod.POST, "/api/users/me/points/charge").hasAnyRole("ADMIN", "SUPER_ADMIN") // 테스트 충전 방어
+                // 서버 부하 테스트/시연 전용 포인트 충전 API.
+                // Controller 자체가 app.test-api.point-charge.enabled=true일 때만 등록되고,
+                // 내부에서 X-Test-Api-Key를 추가 검증한다.
+                .requestMatchers(HttpMethod.POST, "/api/test/users/me/points/charge").hasRole("BUYER")
+                .requestMatchers(HttpMethod.POST, "/api/users/me/points/charge").hasAnyRole("ADMIN", "SUPER_ADMIN") // 기존 테스트 충전 방어
                 .requestMatchers("/api/users/me/points", "/api/users/me/points/**").hasRole("BUYER")
 
                 // User 공통(BUYER + SELLER 모두 접근 가능)
@@ -174,11 +176,6 @@ public class SecurityConfig {
 
                 // 관리자만 접근 가능
                 .requestMatchers("/api/admin/**").hasAnyRole("ADMIN", "SUPER_ADMIN")
-
-                // 서버 부하 테스트/시연 전용 포인트 충전 API // 테스트 완료 후 삭제
-                // Controller 자체가 app.test-api.point-charge.enabled=true일 때만 등록되고,
-                // 내부에서 X-Test-Api-Key를 추가 검증한다.
-                .requestMatchers(HttpMethod.POST, "/api/test/users/me/points/charge").hasRole("ADMIN")
 
                 // 판매자만 접근 가능
                 .requestMatchers("/api/seller/**").hasRole("SELLER")
