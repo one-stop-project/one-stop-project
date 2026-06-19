@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.sparta.one_stop.global.ai.prompt.AiPromptProperties;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
@@ -15,6 +16,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
 
+@Slf4j
 @Configuration
 @EnableConfigurationProperties(AiPromptProperties.class)
 public class AiConfig {
@@ -32,7 +34,8 @@ public class AiConfig {
                             objectMapper.createObjectNode().put("type", "disabled"));
                         body = objectMapper.writeValueAsBytes(root);
                     }
-                } catch (Exception ignored) {
+                } catch (Exception e) {
+                    log.warn("[Gemini] thinking 비활성화 주입 실패 — uri={}, error={}", request.getURI(), e.getMessage());
                 }
             }
             return execution.execute(request, body);
