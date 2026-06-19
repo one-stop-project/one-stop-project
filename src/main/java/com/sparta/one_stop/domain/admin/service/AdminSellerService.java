@@ -61,8 +61,8 @@ public class AdminSellerService {
         Seller seller = sellerRepository.findById(sellerId)
             .orElseThrow(() -> new CustomException(ErrorCode.SELLER_001));
 
-        if (seller.getStatus() == SellerStatus.APPROVED) {
-            throw new CustomException(ErrorCode.ADMIN_002);
+        if (seller.getStatus() != SellerStatus.PENDING) {
+            throw new CustomException(ErrorCode.ADMIN_018);
         }
 
         seller.approve();
@@ -82,8 +82,8 @@ public class AdminSellerService {
         Seller seller = sellerRepository.findById(sellerId)
             .orElseThrow(() -> new CustomException(ErrorCode.SELLER_001));
 
-        if (seller.getStatus() == SellerStatus.REJECTED) {
-            throw new CustomException(ErrorCode.ADMIN_003);
+        if (seller.getStatus() != SellerStatus.PENDING) {
+            throw new CustomException(ErrorCode.ADMIN_018);
         }
 
         seller.reject();
@@ -104,8 +104,8 @@ public class AdminSellerService {
         Seller seller = sellerRepository.findById(sellerId)
             .orElseThrow(() -> new CustomException(ErrorCode.SELLER_001));
 
-        if (seller.getUser().isSuspended()) {
-            throw new CustomException(ErrorCode.ADMIN_004);
+        if (seller.getStatus() == SellerStatus.SUSPENDED) {
+            throw new CustomException(ErrorCode.ADMIN_019);
         }
 
         seller.getUser().suspend();

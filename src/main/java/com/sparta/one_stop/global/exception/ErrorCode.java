@@ -358,7 +358,9 @@ public enum ErrorCode {
     ADMIN_014(HttpStatus.FORBIDDEN, "ADMIN_014", "본인 계정의 권한은 회수할 수 없습니다"),
     ADMIN_015(HttpStatus.BAD_REQUEST, "ADMIN_015", "관리자 권한이 없는 계정입니다"),
     ADMIN_016(HttpStatus.BAD_REQUEST, "ADMIN_016", "비활성(정지/탈퇴) 상태의 회원은 관리자로 승격할 수 없습니다."),
-    ADMIN_017(HttpStatus.BAD_REQUEST, "ADMIN_017", "승인 요청 상태의 상품만 승인/반려할 수 있습니다");
+    ADMIN_017(HttpStatus.BAD_REQUEST, "ADMIN_017", "승인 요청 상태의 상품만 승인/반려할 수 있습니다"),
+    ADMIN_018(HttpStatus.BAD_REQUEST, "ADMIN_018", "승인 대기 상태인 판매자만 승인/반려할 수 있습니다"),
+    ADMIN_019(HttpStatus.BAD_REQUEST, "ADMIN_019", "이미 정지된 판매자입니다");
     private final HttpStatus status;
     private final String code;
     private final String message;
