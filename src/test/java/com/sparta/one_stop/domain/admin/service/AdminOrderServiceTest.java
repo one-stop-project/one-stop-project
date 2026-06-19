@@ -15,7 +15,6 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
 import java.time.LocalDate;
-import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -23,6 +22,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.verify;
+
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("AdminOrderService 테스트")
@@ -44,7 +44,6 @@ class AdminOrderServiceTest {
         void escape_percent_in_keyword() {
             given(orderRepository.searchAllOrders(any(), any(), any(), any(), any()))
                 .willReturn(Page.empty());
-            given(orderRepository.countItemsByOrderIds(any())).willReturn(List.of());
 
             adminOrderService.getOrders(null, null, null, "100%", Pageable.unpaged());
 
@@ -58,7 +57,6 @@ class AdminOrderServiceTest {
         void escape_underscore_in_keyword() {
             given(orderRepository.searchAllOrders(any(), any(), any(), any(), any()))
                 .willReturn(Page.empty());
-            given(orderRepository.countItemsByOrderIds(any())).willReturn(List.of());
 
             adminOrderService.getOrders(null, null, null, "user_01", Pageable.unpaged());
 
@@ -72,7 +70,6 @@ class AdminOrderServiceTest {
         void escape_backslash_in_keyword() {
             given(orderRepository.searchAllOrders(any(), any(), any(), any(), any()))
                 .willReturn(Page.empty());
-            given(orderRepository.countItemsByOrderIds(any())).willReturn(List.of());
 
             adminOrderService.getOrders(null, null, null, "a\\b", Pageable.unpaged());
 
@@ -86,7 +83,6 @@ class AdminOrderServiceTest {
         void blank_keyword_becomes_null() {
             given(orderRepository.searchAllOrders(any(), any(), any(), isNull(), any()))
                 .willReturn(Page.empty());
-            given(orderRepository.countItemsByOrderIds(any())).willReturn(List.of());
 
             adminOrderService.getOrders(null, null, null, "   ", Pageable.unpaged());
 
@@ -123,7 +119,6 @@ class AdminOrderServiceTest {
             LocalDate date = LocalDate.of(2024, 5, 10);
             given(orderRepository.searchAllOrders(any(), any(), any(), any(), any()))
                 .willReturn(Page.empty());
-            given(orderRepository.countItemsByOrderIds(any())).willReturn(List.of());
 
             adminOrderService.getOrders(null, date, date, null, Pageable.unpaged());
 

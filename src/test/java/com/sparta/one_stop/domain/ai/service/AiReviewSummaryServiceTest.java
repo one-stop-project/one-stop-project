@@ -19,7 +19,6 @@ import org.springframework.transaction.TransactionStatus;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
 
@@ -39,9 +38,6 @@ class AiReviewSummaryServiceTest {
 
     @BeforeEach
     void setUp() {
-        TransactionStatus txStatus = mock(TransactionStatus.class);
-        given(txManager.getTransaction(any())).willReturn(txStatus);
-
         service = new AiReviewSummaryService(
             reviewRepository, productRepository, reviewSummaryService,
             summaryRepository, new ObjectMapper(), txManager
