@@ -43,6 +43,13 @@ class CategorySearchKeywordTest {
     }
 
     @Test
+    @DisplayName("경로가 null이거나 비면 null을 반환한다 — 오케스트레이터가 빈 카테고리로 건너뛴다 (#527)")
+    void nullOrEmptyPath_returnsNull() {
+        assertThat(resolver.resolve(null)).isNull();
+        assertThat(resolver.resolve(List.of())).isNull();
+    }
+
+    @Test
     @DisplayName("deriveFromName: 첫 구분자 앞 토큰만 사용하고 공백을 정리한다")
     void deriveFromName_firstToken() {
         assertThat(CategorySearchKeyword.deriveFromName("이어폰·헤드폰")).isEqualTo("이어폰");

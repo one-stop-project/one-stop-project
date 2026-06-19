@@ -75,6 +75,10 @@ public class DummyProductOrchestrator {
             try {
                 List<Long> categoryIds = categoryChain(leaf);
                 String keyword = searchKeyword.resolve(categoryPathNames(leaf));
+                if (keyword == null || keyword.isBlank()) {
+                    log.warn("[더미시드] 빈 카테고리 — 검색어 해석 실패 (category={})", leaf.getName());
+                    continue;
+                }
                 List<NaverShopItem> items = naverShopClient.search(keyword, properties.display(), START, SORT);
                 List<NaverShopItem> deduped = deduplicator.dedup(items);
                 if (deduped.isEmpty()) {
