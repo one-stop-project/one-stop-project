@@ -17,6 +17,7 @@ import com.sparta.one_stop.domain.order.repository.OrderRepository;
 import com.sparta.one_stop.domain.order.service.OrderCommandService;
 import com.sparta.one_stop.domain.product.entity.ProductItem;
 import com.sparta.one_stop.domain.user.entity.Seller;
+import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.SellerRepository;
 import com.sparta.one_stop.global.enums.delivery.DeliveryStatus;
 import com.sparta.one_stop.global.enums.order.OrderItemStatus;
@@ -221,10 +222,6 @@ class DeliveryServiceTest {
         }
     }
 
-    // ──────────────────────────────────────────────
-    // 운송장 등록 (shipDelivery)
-    // ──────────────────────────────────────────────
-
     @Nested
     @DisplayName("운송장 등록")
     class ShipDelivery {
@@ -305,6 +302,66 @@ class DeliveryServiceTest {
             );
 
             verify(deliveryHistoryRepository).save(any(DeliveryHistory.class));
+        }
+
+        @Test
+        @DisplayName("성공 — FINAL_DELIVERY 전이 시 completeDelivery + Outbox 저장")
+        void success_finalDelivery() throws Exception {
+            Long userId = 1L;
+            Seller seller = mockSeller(1L, userId);
+
+            Order order = mock(Order.class);
+            when(order.getId()).thenReturn(100L);
+            User buyer = mock(User.class);
+            when(buyer.getId()).thenReturn(99L);
+            when(order.getUser()).thenReturn(buyer);
+
+            OrderItem oi = mock(OrderItem.class);
+            when(oi.getSeller()).thenReturn(seller);
+            when(oi.getOrder()).thenReturn(order);
+
+            Delivery delivery = mockDelivery(1L, oi, DeliveryStatus.DELIVERING);
+            when(objectMapper.writeValueAsString(any())).thenReturn("{\"ok\":true}");
+
+            deliveryService.updateDeliveryStatus(
+                1L, userId, new UpdateDeliveryStatusRequest(DeliveryStatus.FINAL_DELIVERY)
+            );
+
+            verify(delivery).updateStatus(DeliveryStatus.FINAL_DELIVERY);
+            verify(oi).completeDelivery();
+            verify(outboxEventService).saveDeliveryCompletedEvent(any(), any(), any());
+            verify(deliveryHistoryRepository).save(any(DeliveryHistory.class));
+        }
+
+        @Test
+        @DisplayName("실패 — Outbox payload 직렬화 실패 시 COMMON_007")
+        void fail_finalDelivery_payloadSerialization() throws Exception {
+            Long userId = 1L;
+            Seller seller = mockSeller(1L, userId);
+
+            Order order = mock(Order.class);
+            when(order.getId()).thenReturn(100L);
+            User buyer = mock(User.class);
+            when(buyer.getId()).thenReturn(99L);
+            when(order.getUser()).thenReturn(buyer);
+
+            OrderItem oi = mock(OrderItem.class);
+            when(oi.getSeller()).thenReturn(seller);
+            when(oi.getOrder()).thenReturn(order);
+
+            mockDelivery(1L, oi, DeliveryStatus.DELIVERING);
+
+            when(objectMapper.writeValueAsString(any()))
+                .thenThrow(new com.fasterxml.jackson.core.JsonProcessingException("boom") {});
+
+            assertThatThrownBy(() ->
+                deliveryService.updateDeliveryStatus(
+                    1L, userId, new UpdateDeliveryStatusRequest(DeliveryStatus.FINAL_DELIVERY)
+                )
+            )
+                .isInstanceOf(CustomException.class)
+                .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.COMMON_007));
         }
 
         @Test
