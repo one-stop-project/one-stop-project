@@ -31,9 +31,12 @@ public class OAuth2FailureHandler extends SimpleUrlAuthenticationFailureHandler 
 
     private final HttpCookieOAuth2AuthorizationRequestRepository authRequestRepository;
 
-    // 프론트 베이스 URL. yml: app.oauth2.redirect-base (로컬 기본 :3001)
-    @Value("${app.oauth2.redirect-base:http://localhost:3001}")
-    private String redirectBase;
+    /**
+     * OAuth2 실패 후 최종 redirect URI.
+     * 서버 배포 환경에서는 localhost:3001을 사용하지 않는다.
+     */
+    @Value("${app.oauth2.failure-redirect-uri:https://onestop1.duckdns.org/login}")
+    private String failureRedirectUri;
 
     @Override
     public void onAuthenticationFailure(HttpServletRequest request, HttpServletResponse response,
@@ -44,8 +47,7 @@ public class OAuth2FailureHandler extends SimpleUrlAuthenticationFailureHandler 
         String errorCode = resolveErrorCode(exception);
         log.warn("[OAuth2] 로그인 실패: code={}", errorCode);
 
-        String target = UriComponentsBuilder.fromUriString(redirectBase)
-            .path("/login")
+        String target = UriComponentsBuilder.fromUriString(failureRedirectUri)
             .queryParam("error", errorCode)
             .build()
             .toUriString();

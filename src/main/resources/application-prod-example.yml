@@ -63,7 +63,8 @@ spring:
           kakao:
             client-id: ${KAKAO_CLIENT_ID}
             client-secret: ${KAKAO_CLIENT_SECRET}
-            redirect-uri: "{baseUrl}/login/oauth2/code/kakao"
+            # 운영 서버에서는 Kakao Developers에 등록한 Redirect URI와 정확히 일치해야 한다.
+            redirect-uri: "https://onestop1.duckdns.org/login/oauth2/code/kakao"
             authorization-grant-type: authorization_code
             client-authentication-method: client_secret_post   # 카카오 권장
             scope: account_email, profile_nickname
@@ -76,6 +77,8 @@ spring:
 
 server:
   shutdown: graceful
+  # Nginx/Reverse Proxy 뒤에서 OAuth2 redirect_uri를 외부 HTTPS 기준으로 생성하기 위한 설정
+  # ProxyHeaderConfig와 함께 X-Forwarded-* 헤더를 인식한다.
   forward-headers-strategy: framework
 
 jwt:
@@ -109,12 +112,26 @@ gemini:
 app:
   scheduler:
     enabled: ${APP_SCHEDULER_ENABLED:true}
+
+  # OAuth2 서버 배포 환경 설정
+  # localhost:3001은 로컬 프론트 개발용이므로 prod 설정에 넣지 않는다.
+  oauth2:
+    success-redirect-uri: ${OAUTH2_SUCCESS_REDIRECT_URI:https://onestop1.duckdns.org/oauth2/success}
+    failure-redirect-uri: ${OAUTH2_FAILURE_REDIRECT_URI:https://onestop1.duckdns.org/login}
+    cookie-secure: ${OAUTH2_COOKIE_SECURE:true}
+
+  # 서버 부하 테스트/시연 전용 포인트 충전 API
+  # 테스트할 때만 true, 종료 후 반드시 false
+  test-api:
+    point-charge:
+      enabled: ${TEST_POINT_CHARGE_ENABLED:false}
+      api-key: ${TEST_POINT_CHARGE_API_KEY:}
+
   cors:
-    allowed-origins: ${ALLOWED_ORIGINS:http://localhost:8080}
+    allowed-origins: ${ALLOWED_ORIGINS:https://onestop1.duckdns.org}
   image:
     bucket: ${S3_BUCKET_NAME}
     region: ${AWS_REGION:ap-northeast-2}
-    cloudfront-domain: ${CLOUDFRONT_DOMAIN:}
   security:
     csp:
       policy: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; img-src 'self' data:; font-src 'self' data: https://cdn.jsdelivr.net;"

@@ -56,8 +56,14 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
     private final ClientIpExtractor clientIpExtractor;
     private final CookieUtil cookieUtil;
 
-    @Value("${app.oauth2.redirect-base:http://localhost:3001}")
-    private String redirectBase;
+    /**
+     * OAuth2 성공 후 최종 redirect URI.
+     *
+     * 서버 배포 환경에서는 localhost:3001을 사용하지 않는다.
+     * 프론트가 아직 서버에 배포되지 않았다면 /oauth2/success 서버 확인 페이지로 보낸다.
+     */
+    @Value("${app.oauth2.success-redirect-uri:https://onestop1.duckdns.org/oauth2/success}")
+    private String successRedirectUri;
 
     @Override
     public void onAuthenticationSuccess(
@@ -113,8 +119,7 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
         String code = UUID.randomUUID().toString().replace("-", "");
         redisTokenService.saveOAuth2Code(code, deviceId, accessToken);
 
-        String target = UriComponentsBuilder.fromUriString(redirectBase)
-            .path("/oauth2/callback")
+        String target = UriComponentsBuilder.fromUriString(successRedirectUri)
             .queryParam("code", code)
             .build()
             .toUriString();

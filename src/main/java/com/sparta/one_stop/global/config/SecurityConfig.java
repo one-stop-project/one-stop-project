@@ -175,6 +175,11 @@ public class SecurityConfig {
                 // 관리자만 접근 가능
                 .requestMatchers("/api/admin/**").hasAnyRole("ADMIN", "SUPER_ADMIN")
 
+                // 서버 부하 테스트/시연 전용 포인트 충전 API // 테스트 완료 후 삭제
+                // Controller 자체가 app.test-api.point-charge.enabled=true일 때만 등록되고,
+                // 내부에서 X-Test-Api-Key를 추가 검증한다.
+                .requestMatchers(HttpMethod.POST, "/api/test/users/me/points/charge").hasRole("ADMIN")
+
                 // 판매자만 접근 가능
                 .requestMatchers("/api/seller/**").hasRole("SELLER")
 
