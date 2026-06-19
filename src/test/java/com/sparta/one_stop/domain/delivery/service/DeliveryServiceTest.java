@@ -17,13 +17,16 @@ import com.sparta.one_stop.domain.order.repository.OrderRepository;
 import com.sparta.one_stop.domain.order.service.OrderCommandService;
 import com.sparta.one_stop.domain.product.entity.ProductItem;
 import com.sparta.one_stop.domain.user.entity.Seller;
+import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.SellerRepository;
 import com.sparta.one_stop.global.enums.delivery.DeliveryStatus;
 import com.sparta.one_stop.global.enums.order.OrderItemStatus;
 import com.sparta.one_stop.global.enums.order.OrderStatus;
 import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.exception.ErrorCode;
 import com.sparta.one_stop.global.outbox.service.OutboxEventService;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -33,268 +36,374 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.List;
 import java.util.Optional;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 class DeliveryServiceTest {
 
-    @Mock
-    private DeliveryRepository deliveryRepository;
-
-    @Mock
-    private DeliveryHistoryRepository deliveryHistoryRepository;
-
-    @Mock
-    private OrderRepository orderRepository;
-
-    @Mock
-    private OrderItemRepository orderItemRepository;
-
-    @Mock
-    private SellerRepository sellerRepository;
-
-    @Mock
-    private OutboxEventService outboxEventService;
-
-    @Mock
-    private ObjectMapper objectMapper;
-
-    @Mock
-    private OrderCommandService orderCommandService;
-
-    @Mock
-    private OrderCancelHistoryRepository orderCancelHistoryRepository;
+    @Mock private DeliveryRepository deliveryRepository;
+    @Mock private DeliveryHistoryRepository deliveryHistoryRepository;
+    @Mock private OrderRepository orderRepository;
+    @Mock private OrderItemRepository orderItemRepository;
+    @Mock private SellerRepository sellerRepository;
+    @Mock private OutboxEventService outboxEventService;
+    @Mock private ObjectMapper objectMapper;
+    @Mock private OrderCommandService orderCommandService;
+    @Mock private OrderCancelHistoryRepository orderCancelHistoryRepository;
 
     @InjectMocks
     private DeliveryService deliveryService;
 
-    @Test
-    @DisplayName("발주 확인 성공")
-    void confirmOrder_success() {
-
-        Long userId = 1L;
-        Long orderItemId = 1L;
-
+    private Seller mockSeller(Long sellerId, Long userId) {
         Seller seller = mock(Seller.class);
-        OrderItem orderItem = mock(OrderItem.class);
-        Delivery delivery = mock(Delivery.class);
-
-        when(sellerRepository.findByUserId(userId))
-            .thenReturn(Optional.of(seller));
-
-        when(seller.getId()).thenReturn(1L);
-
-        when(orderItemRepository.findById(orderItemId))
-            .thenReturn(Optional.of(orderItem));
-
-        when(orderItem.getSeller()).thenReturn(seller);
-
-        when(orderItem.getStatus())
-            .thenReturn(OrderItemStatus.ORDERED);
-
-        when(deliveryRepository.findByOrderItem(orderItem))
-            .thenReturn(Optional.of(delivery));
-
-        deliveryService.confirmOrder(
-            orderItemId,
-            userId
-        );
-
-        verify(orderItem).confirm();
-        verify(delivery).confirm();
-
-        verify(deliveryHistoryRepository)
-            .save(any(DeliveryHistory.class));
+        lenient().when(seller.getId()).thenReturn(sellerId);
+        when(sellerRepository.findByUserId(userId)).thenReturn(Optional.of(seller));
+        return seller;
     }
 
-    @Test
-    @DisplayName("발주 확인 실패 - 다른 판매자")
-    void confirmOrder_fail_owner() {
+    private OrderItem mockOrderItem(Long orderItemId, Seller seller, OrderItemStatus status) {
+        OrderItem oi = mock(OrderItem.class);
+        lenient().when(oi.getId()).thenReturn(orderItemId);
+        lenient().when(oi.getSeller()).thenReturn(seller);
+        lenient().when(oi.getStatus()).thenReturn(status);
+        when(orderItemRepository.findById(orderItemId)).thenReturn(Optional.of(oi));
+        return oi;
+    }
 
-        Long userId = 1L;
+    private Delivery mockDelivery(Long deliveryId, OrderItem orderItem, DeliveryStatus status) {
+        Delivery delivery = mock(Delivery.class);
+        lenient().when(delivery.getId()).thenReturn(deliveryId);
+        lenient().when(delivery.getOrderItem()).thenReturn(orderItem);
+        lenient().when(delivery.getStatus()).thenReturn(status);
+        when(deliveryRepository.findById(deliveryId)).thenReturn(Optional.of(delivery));
+        return delivery;
+    }
 
-        Seller loginSeller = mock(Seller.class);
-        Seller orderSeller = mock(Seller.class);
+    @Nested
+    @DisplayName("발주 확인")
+    class ConfirmOrder {
 
-        OrderItem orderItem = mock(OrderItem.class);
+        @Test
+        @DisplayName("성공 — ORDERED 상태에서 CONFIRMED 전이")
+        void success() {
+            Long userId = 1L;
+            Seller seller = mockSeller(1L, userId);
+            OrderItem oi = mockOrderItem(1L, seller, OrderItemStatus.ORDERED);
 
-        when(sellerRepository.findByUserId(userId))
-            .thenReturn(Optional.of(loginSeller));
+            Delivery delivery = mock(Delivery.class);
+            when(deliveryRepository.findByOrderItem(oi)).thenReturn(Optional.of(delivery));
 
-        when(loginSeller.getId()).thenReturn(1L);
-        when(orderSeller.getId()).thenReturn(2L);
+            deliveryService.confirmOrder(1L, userId);
 
-        when(orderItemRepository.findById(1L))
-            .thenReturn(Optional.of(orderItem));
+            verify(oi).confirm();
+            verify(delivery).confirm();
+            verify(deliveryHistoryRepository).save(any(DeliveryHistory.class));
+        }
 
-        when(orderItem.getSeller())
-            .thenReturn(orderSeller);
+        @Test
+        @DisplayName("실패 — 다른 판매자 (SELLER_007)")
+        void fail_differentSeller() {
+            Long userId = 1L;
+            Seller loginSeller = mockSeller(1L, userId);
 
-        assertThatThrownBy(() ->
-            deliveryService.confirmOrder(
-                1L,
-                userId
+            Seller otherSeller = mock(Seller.class);
+            when(otherSeller.getId()).thenReturn(2L);
+
+            OrderItem oi = mock(OrderItem.class);
+            when(oi.getSeller()).thenReturn(otherSeller);
+            when(orderItemRepository.findById(1L)).thenReturn(Optional.of(oi));
+
+            assertThatThrownBy(() -> deliveryService.confirmOrder(1L, userId))
+                .isInstanceOf(CustomException.class)
+                .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SELLER_007));
+        }
+
+        @Test
+        @DisplayName("실패 — ORDERED 아닌 상태 (SELLER_008)")
+        void fail_notOrdered() {
+            Long userId = 1L;
+            Seller seller = mockSeller(1L, userId);
+            mockOrderItem(1L, seller, OrderItemStatus.CONFIRMED);
+
+            assertThatThrownBy(() -> deliveryService.confirmOrder(1L, userId))
+                .isInstanceOf(CustomException.class)
+                .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SELLER_008));
+
+            verify(deliveryRepository, never()).findByOrderItem(any());
+        }
+    }
+
+    @Nested
+    @DisplayName("주문 거절")
+    class RejectOrder {
+
+        @Test
+        @DisplayName("성공 — 재고 복구 + Delivery ORDER_CANCELLED + History 저장")
+        void success() {
+            Long userId = 1L;
+            Seller seller = mockSeller(1L, userId);
+
+            OrderItem oi = mockOrderItem(1L, seller, OrderItemStatus.ORDERED);
+            ProductItem pi = mock(ProductItem.class);
+            Order order = mock(Order.class);
+
+            when(oi.getProductItem()).thenReturn(pi);
+            when(oi.getPrice()).thenReturn(10000L);
+            when(oi.getQuantity()).thenReturn(2);
+            when(oi.getOrder()).thenReturn(order);
+            when(order.getId()).thenReturn(100L);
+
+            // 거절 후 status 변경 시뮬레이션
+            when(oi.getStatus())
+                .thenReturn(OrderItemStatus.ORDERED)
+                .thenReturn(OrderItemStatus.REJECTED);
+
+            Delivery delivery = mock(Delivery.class);
+            when(deliveryRepository.findByOrderItemId(1L)).thenReturn(Optional.of(delivery));
+            when(delivery.getStatus()).thenReturn(DeliveryStatus.ORDER_CANCELLED);
+
+            // 다른 아이템이 있어서 자동 취소 안 됨
+            OrderItem otherItem = mock(OrderItem.class);
+            when(otherItem.getStatus()).thenReturn(OrderItemStatus.ORDERED);
+            when(orderItemRepository.findAllByOrderId(100L)).thenReturn(List.of(oi, otherItem));
+            when(orderRepository.findByIdWithLock(100L)).thenReturn(Optional.of(order));
+            when(order.getStatus()).thenReturn(OrderStatus.PAID);
+
+            deliveryService.rejectOrder(1L, userId, new RejectOrderRequest("재고 없음"));
+
+            verify(oi).reject();
+            verify(pi).increaseStock(2);
+            verify(delivery).cancelOrder();
+            verify(deliveryHistoryRepository).save(any(DeliveryHistory.class));
+            verify(orderCancelHistoryRepository).save(any(OrderCancelHistory.class));
+        }
+
+        @Test
+        @DisplayName("실패 — 다른 판매자 (SELLER_007)")
+        void fail_differentSeller() {
+            Long userId = 1L;
+            Seller loginSeller = mockSeller(1L, userId);
+
+            Seller otherSeller = mock(Seller.class);
+            when(otherSeller.getId()).thenReturn(2L);
+
+            OrderItem oi = mock(OrderItem.class);
+            when(oi.getSeller()).thenReturn(otherSeller);
+            when(orderItemRepository.findById(1L)).thenReturn(Optional.of(oi));
+
+            assertThatThrownBy(() ->
+                deliveryService.rejectOrder(1L, userId, new RejectOrderRequest("재고 없음"))
             )
-        ).isInstanceOf(CustomException.class);
-    }
+                .isInstanceOf(CustomException.class)
+                .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SELLER_007));
 
-    @Test
-    @DisplayName("주문 거절 성공")
-    void rejectOrder_success() {
+            verify(oi, never()).reject();
+        }
 
-        Long userId = 1L;
+        @Test
+        @DisplayName("실패 — ORDERED 아닌 상태 (SELLER_008)")
+        void fail_notOrdered() {
+            Long userId = 1L;
+            Seller seller = mockSeller(1L, userId);
+            mockOrderItem(1L, seller, OrderItemStatus.CONFIRMED);
 
-        Seller seller = mock(Seller.class);
-        OrderItem orderItem = mock(OrderItem.class);
-        ProductItem productItem = mock(ProductItem.class);
-        Delivery delivery = mock(Delivery.class);
-        Order order = mock(Order.class);
-
-        when(sellerRepository.findByUserId(userId))
-            .thenReturn(Optional.of(seller));
-
-        when(seller.getId()).thenReturn(1L);
-
-        when(orderItemRepository.findById(1L))
-            .thenReturn(Optional.of(orderItem));
-
-        when(orderItem.getSeller()).thenReturn(seller);
-        when(orderItem.getProductItem()).thenReturn(productItem);
-        when(orderItem.getPrice()).thenReturn(10000L);
-        when(orderItem.getQuantity()).thenReturn(2);
-        when(orderItem.getOrder()).thenReturn(order);
-        when(order.getId()).thenReturn(100L);
-
-        // 1번째 호출: 검증 통과(ORDERED), 2번째 호출: 전체 거절 확인(REJECTED)
-        when(orderItem.getStatus())
-            .thenReturn(OrderItemStatus.ORDERED)
-            .thenReturn(OrderItemStatus.REJECTED);
-
-        // Delivery mock
-        when(deliveryRepository.findByOrderItemId(1L))
-            .thenReturn(Optional.of(delivery));
-
-        when(delivery.getStatus())
-            .thenReturn(DeliveryStatus.ORDER_CANCELLED);
-
-        // 전체 거절 확인용 — 다른 아이템이 있어서 자동 취소 안 됨
-        OrderItem otherItem = mock(OrderItem.class);
-        when(otherItem.getStatus()).thenReturn(OrderItemStatus.ORDERED);
-        when(orderItemRepository.findAllByOrderId(100L))
-            .thenReturn(List.of(orderItem, otherItem));
-
-        when(orderRepository.findByIdWithLock(100L))
-            .thenReturn(Optional.of(order));
-
-        when(order.getStatus()).thenReturn(OrderStatus.PAID);
-
-        deliveryService.rejectOrder(
-            1L, userId,
-            new RejectOrderRequest("재고 없음")
-        );
-
-        verify(orderItem).reject();
-        verify(productItem).increaseStock(2);
-        verify(delivery).cancelOrder();
-        verify(deliveryHistoryRepository).save(any(DeliveryHistory.class));
-        verify(orderCancelHistoryRepository).save(any(OrderCancelHistory.class));
-    }
-
-    @Test
-    @DisplayName("운송장 등록 성공")
-    void shipDelivery_success() {
-
-        Long userId = 1L;
-
-        Seller seller = mock(Seller.class);
-
-        OrderItem orderItem = mock(OrderItem.class);
-
-        Delivery delivery = mock(Delivery.class);
-
-        when(sellerRepository.findByUserId(userId))
-            .thenReturn(Optional.of(seller));
-
-        when(seller.getId()).thenReturn(1L);
-
-        when(deliveryRepository.findById(1L))
-            .thenReturn(Optional.of(delivery));
-
-        when(delivery.getOrderItem())
-            .thenReturn(orderItem);
-
-        when(orderItem.getSeller())
-            .thenReturn(seller);
-
-        when(delivery.getStatus())
-            .thenReturn(DeliveryStatus.INSTRUCT);
-
-        deliveryService.shipDelivery(
-            1L,
-            userId,
-            new ShipDeliveryRequest(
-                "CJ대한통운",
-                "123456"
+            assertThatThrownBy(() ->
+                deliveryService.rejectOrder(1L, userId, new RejectOrderRequest("사유"))
             )
-        );
+                .isInstanceOf(CustomException.class)
+                .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SELLER_008));
+        }
+    }
 
-        verify(delivery)
-            .registerInvoice(
-                "CJ대한통운",
-                "123456"
+    @Nested
+    @DisplayName("운송장 등록")
+    class ShipDelivery {
+
+        @Test
+        @DisplayName("성공 — INSTRUCT → DEPARTURE + startShipping")
+        void success() {
+            Long userId = 1L;
+            Seller seller = mockSeller(1L, userId);
+            OrderItem oi = mock(OrderItem.class);
+            when(oi.getSeller()).thenReturn(seller);
+
+            Delivery delivery = mockDelivery(1L, oi, DeliveryStatus.INSTRUCT);
+
+            deliveryService.shipDelivery(1L, userId, new ShipDeliveryRequest("CJ대한통운", "123456"));
+
+            verify(delivery).registerInvoice("CJ대한통운", "123456");
+            verify(oi).startShipping();
+            verify(deliveryHistoryRepository).save(any(DeliveryHistory.class));
+        }
+
+        @Test
+        @DisplayName("실패 — INSTRUCT 아닌 상태 (SHIPPING_001)")
+        void fail_notInstruct() {
+            Long userId = 1L;
+            Seller seller = mockSeller(1L, userId);
+            OrderItem oi = mock(OrderItem.class);
+            when(oi.getSeller()).thenReturn(seller);
+
+            mockDelivery(1L, oi, DeliveryStatus.ACCEPT);
+
+            assertThatThrownBy(() ->
+                deliveryService.shipDelivery(1L, userId, new ShipDeliveryRequest("CJ대한통운", "123456"))
+            )
+                .isInstanceOf(CustomException.class)
+                .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SHIPPING_001));
+        }
+
+        @Test
+        @DisplayName("실패 — 다른 판매자 (SHIPPING_006)")
+        void fail_differentSeller() {
+            Long userId = 1L;
+            mockSeller(1L, userId);
+
+            Seller otherSeller = mock(Seller.class);
+            when(otherSeller.getId()).thenReturn(2L);
+            OrderItem oi = mock(OrderItem.class);
+            when(oi.getSeller()).thenReturn(otherSeller);
+
+            mockDelivery(1L, oi, DeliveryStatus.INSTRUCT);
+
+            assertThatThrownBy(() ->
+                deliveryService.shipDelivery(1L, userId, new ShipDeliveryRequest("CJ대한통운", "123456"))
+            )
+                .isInstanceOf(CustomException.class)
+                .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SHIPPING_006));
+        }
+    }
+
+    @Nested
+    @DisplayName("배송 상태 변경")
+    class UpdateDeliveryStatus {
+
+        @Test
+        @DisplayName("성공 — DEPARTURE → DELIVERING")
+        void success_delivering() {
+            Long userId = 1L;
+            Seller seller = mockSeller(1L, userId);
+            OrderItem oi = mock(OrderItem.class);
+            when(oi.getSeller()).thenReturn(seller);
+
+            mockDelivery(1L, oi, DeliveryStatus.DEPARTURE);
+
+            deliveryService.updateDeliveryStatus(
+                1L, userId, new UpdateDeliveryStatusRequest(DeliveryStatus.DELIVERING)
             );
 
-        verify(orderItem)
-            .startShipping();
+            verify(deliveryHistoryRepository).save(any(DeliveryHistory.class));
+        }
 
-        verify(deliveryHistoryRepository)
-            .save(any(DeliveryHistory.class));
-    }
+        @Test
+        @DisplayName("성공 — FINAL_DELIVERY 전이 시 completeDelivery + Outbox 저장")
+        void success_finalDelivery() throws Exception {
+            Long userId = 1L;
+            Seller seller = mockSeller(1L, userId);
 
-    @Test
-    @DisplayName("배송 상태 변경 성공")
-    void updateDeliveryStatus_success() {
+            Order order = mock(Order.class);
+            when(order.getId()).thenReturn(100L);
+            User buyer = mock(User.class);
+            when(buyer.getId()).thenReturn(99L);
+            when(order.getUser()).thenReturn(buyer);
 
-        Long userId = 1L;
+            OrderItem oi = mock(OrderItem.class);
+            when(oi.getSeller()).thenReturn(seller);
+            when(oi.getOrder()).thenReturn(order);
 
-        Seller seller = mock(Seller.class);
+            Delivery delivery = mockDelivery(1L, oi, DeliveryStatus.DELIVERING);
+            when(objectMapper.writeValueAsString(any())).thenReturn("{\"ok\":true}");
 
-        OrderItem orderItem = mock(OrderItem.class);
-
-        Delivery delivery = mock(Delivery.class);
-
-        when(sellerRepository.findByUserId(userId))
-            .thenReturn(Optional.of(seller));
-
-        when(seller.getId()).thenReturn(1L);
-
-        when(deliveryRepository.findById(1L))
-            .thenReturn(Optional.of(delivery));
-
-        when(delivery.getOrderItem())
-            .thenReturn(orderItem);
-
-        when(orderItem.getSeller())
-            .thenReturn(seller);
-
-        deliveryService.updateDeliveryStatus(
-            1L,
-            userId,
-            new UpdateDeliveryStatusRequest(
-                DeliveryStatus.DELIVERING
-            )
-        );
-
-        verify(delivery)
-            .updateStatus(
-                DeliveryStatus.DELIVERING
+            deliveryService.updateDeliveryStatus(
+                1L, userId, new UpdateDeliveryStatusRequest(DeliveryStatus.FINAL_DELIVERY)
             );
 
-        verify(deliveryHistoryRepository)
-            .save(any(DeliveryHistory.class));
+            verify(delivery).updateStatus(DeliveryStatus.FINAL_DELIVERY);
+            verify(oi).completeDelivery();
+            verify(outboxEventService).saveDeliveryCompletedEvent(any(), any(), any());
+            verify(deliveryHistoryRepository).save(any(DeliveryHistory.class));
+        }
+
+        @Test
+        @DisplayName("실패 — Outbox payload 직렬화 실패 시 COMMON_007")
+        void fail_finalDelivery_payloadSerialization() throws Exception {
+            Long userId = 1L;
+            Seller seller = mockSeller(1L, userId);
+
+            Order order = mock(Order.class);
+            when(order.getId()).thenReturn(100L);
+            User buyer = mock(User.class);
+            when(buyer.getId()).thenReturn(99L);
+            when(order.getUser()).thenReturn(buyer);
+
+            OrderItem oi = mock(OrderItem.class);
+            when(oi.getSeller()).thenReturn(seller);
+            when(oi.getOrder()).thenReturn(order);
+
+            mockDelivery(1L, oi, DeliveryStatus.DELIVERING);
+
+            when(objectMapper.writeValueAsString(any()))
+                .thenThrow(new com.fasterxml.jackson.core.JsonProcessingException("boom") {});
+
+            assertThatThrownBy(() ->
+                deliveryService.updateDeliveryStatus(
+                    1L, userId, new UpdateDeliveryStatusRequest(DeliveryStatus.FINAL_DELIVERY)
+                )
+            )
+                .isInstanceOf(CustomException.class)
+                .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.COMMON_007));
+        }
+
+        @Test
+        @DisplayName("실패 — DELIVERING/FINAL_DELIVERY 외 상태 요청 (SHIPPING_002)")
+        void fail_invalidRequestStatus() {
+            Long userId = 1L;
+            mockSeller(1L, userId);
+
+            assertThatThrownBy(() ->
+                deliveryService.updateDeliveryStatus(
+                    1L, userId, new UpdateDeliveryStatusRequest(DeliveryStatus.ACCEPT)
+                )
+            )
+                .isInstanceOf(CustomException.class)
+                .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SHIPPING_002));
+
+            // Delivery 조회조차 하지 않음
+            verify(deliveryRepository, never()).findById(any());
+        }
+
+        @Test
+        @DisplayName("실패 — 다른 판매자 (SHIPPING_006)")
+        void fail_differentSeller() {
+            Long userId = 1L;
+            mockSeller(1L, userId);
+
+            Seller otherSeller = mock(Seller.class);
+            when(otherSeller.getId()).thenReturn(2L);
+            OrderItem oi = mock(OrderItem.class);
+            when(oi.getSeller()).thenReturn(otherSeller);
+
+            mockDelivery(1L, oi, DeliveryStatus.DEPARTURE);
+
+            assertThatThrownBy(() ->
+                deliveryService.updateDeliveryStatus(
+                    1L, userId, new UpdateDeliveryStatusRequest(DeliveryStatus.DELIVERING)
+                )
+            )
+                .isInstanceOf(CustomException.class)
+                .satisfies(ex -> assertThat(((CustomException) ex).getErrorCode())
+                    .isEqualTo(ErrorCode.SHIPPING_006));
+        }
     }
 }
