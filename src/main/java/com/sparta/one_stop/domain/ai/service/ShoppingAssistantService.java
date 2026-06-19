@@ -10,9 +10,11 @@ import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatResponse;
+import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.util.Map;
 import java.util.UUID;
 
 @Slf4j
@@ -54,6 +56,9 @@ public class ShoppingAssistantService {
                 .system(buildSystemPrompt(categoryId))
                 .user(userMessage)
                 .tools(shoppingAssistantTool)
+                .options(OpenAiChatOptions.builder()
+                    .additionalOptions(Map.of("thinking", Map.of("type", "disabled")))
+                    .build())
                 .call()
                 .chatResponse();
 
