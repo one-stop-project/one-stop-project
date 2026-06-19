@@ -57,7 +57,7 @@ public class ShoppingAssistantService {
                 .user(userMessage)
                 .tools(shoppingAssistantTool)
                 .options(OpenAiChatOptions.builder()
-                    .additionalOptions(Map.of("thinking", Map.of("type", "disabled")))
+                    .additionalOptions(Map.<String, Object>of("thinking", Map.of("type", "disabled")))
                     .build())
                 .call()
                 .chatResponse();
