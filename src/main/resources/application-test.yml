@@ -62,6 +62,13 @@ jwt:
   refresh-token-expiry: 7d
 
 app:
+  oauth2:
+    redirect-base: http://localhost:3001
+    cookie-secure: false
+  test-api:
+    point-charge:
+      enabled: true
+      api-key: test-point-api-key
   cors:
     allowed-origins: "*"
   image:
