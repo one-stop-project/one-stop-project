@@ -14,7 +14,6 @@ import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.util.Map;
 import java.util.UUID;
 
 @Slf4j
@@ -57,7 +56,7 @@ public class ShoppingAssistantService {
                 .user(userMessage)
                 .tools(shoppingAssistantTool)
                 .options(OpenAiChatOptions.builder()
-                    .additionalOptions(Map.<String, Object>of("thinking", Map.of("type", "disabled")))
+                    .reasoningEffort("none")
                     .build())
                 .call()
                 .chatResponse();
