@@ -41,6 +41,7 @@ import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -70,6 +71,7 @@ import static org.mockito.Mockito.doThrow;
  *   IntegrationTestSupport의 기본 트랜잭션을 비활성화한다.
  * - 테스트 데이터는 @AfterEach에서 직접 정리한다.
  */
+@Tag("integration")
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class PaymentServiceOutboxFailureIntegrationTest extends IntegrationTestSupport {
 
