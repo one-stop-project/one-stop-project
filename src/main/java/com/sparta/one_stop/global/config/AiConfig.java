@@ -2,8 +2,10 @@ package com.sparta.one_stop.global.config;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+
+import java.util.Iterator;
+import java.util.Map;
 import com.sparta.one_stop.global.ai.prompt.AiPromptProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -44,7 +46,7 @@ public class AiConfig {
                         removeField(root, "thought_signature");
                         body = objectMapper.writeValueAsBytes(root);
                     } catch (Exception e) {
-                        log.warn("[Gemini] thought_signature 제거 실패: {}", e.getMessage());
+                        log.warn("[Gemini] thought_signature 제거 실패", e);
                     }
                 }
                 return execution.execute(request, body);
@@ -66,11 +68,17 @@ public class AiConfig {
     }
 
     private void removeField(JsonNode node, String fieldName) {
-        if (node instanceof ObjectNode obj) {
+        if (node.isObject()) {
+            ObjectNode obj = (ObjectNode) node;
             obj.remove(fieldName);
-            obj.fields().forEachRemaining(e -> removeField(e.getValue(), fieldName));
-        } else if (node instanceof ArrayNode arr) {
-            arr.forEach(child -> removeField(child, fieldName));
+            Iterator<Map.Entry<String, JsonNode>> fields = obj.fields();
+            while (fields.hasNext()) {
+                removeField(fields.next().getValue(), fieldName);
+            }
+        } else if (node.isArray()) {
+            for (JsonNode child : node) {
+                removeField(child, fieldName);
+            }
         }
     }
 
