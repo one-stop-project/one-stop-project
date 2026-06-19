@@ -51,6 +51,16 @@ jobs:
           name: app-jar
           path: ./
 
+      - name: EC2 1 서비스 중지 및 구버전 JAR 제거
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_MAIN_HOST }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            sudo systemctl stop one-stop-main
+            sudo rm -f /app/app.jar
+
       - name: EC2 1에 JAR 전송
         uses: appleboy/scp-action@v0.1.7
         with:
@@ -89,6 +99,16 @@ jobs:
         with:
           name: app-jar
           path: ./
+
+      - name: EC2 2 서비스 중지 및 구버전 JAR 제거
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.EC2_DUMMY_HOST }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            sudo systemctl stop one-stop-dummy
+            sudo rm -f /app/app.jar
 
       - name: EC2 2에 JAR 전송
         uses: appleboy/scp-action@v0.1.7
