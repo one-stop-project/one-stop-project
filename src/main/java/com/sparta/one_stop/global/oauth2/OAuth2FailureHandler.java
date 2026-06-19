@@ -45,12 +45,19 @@ public class OAuth2FailureHandler extends SimpleUrlAuthenticationFailureHandler 
 
     @PostConstruct
     void validateRedirectConfiguration() {
+        initializeAllowedHostsIfNecessary();
+        validateRedirectUri(failureRedirectUri, "app.oauth2.failure-redirect-uri");
+    }
+
+    private void initializeAllowedHostsIfNecessary() {
+        if (allowedHosts != null) {
+            return;
+        }
+
         this.allowedHosts = Arrays.stream(allowedRedirectHosts.split(","))
             .map(String::trim)
             .filter(StringUtils::hasText)
             .collect(Collectors.toUnmodifiableSet());
-
-        validateRedirectUri(failureRedirectUri, "app.oauth2.failure-redirect-uri");
     }
 
     @Override
@@ -81,6 +88,8 @@ public class OAuth2FailureHandler extends SimpleUrlAuthenticationFailureHandler 
     }
 
     private void validateRedirectUri(String redirectUri, String propertyName) {
+        initializeAllowedHostsIfNecessary();
+
         if (!StringUtils.hasText(redirectUri)) {
             throw new IllegalStateException(propertyName + " must not be blank");
         }

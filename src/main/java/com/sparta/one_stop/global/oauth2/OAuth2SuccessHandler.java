@@ -76,12 +76,19 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
 
     @PostConstruct
     void validateRedirectConfiguration() {
+        initializeAllowedHostsIfNecessary();
+        validateRedirectUri(successRedirectUri, "app.oauth2.success-redirect-uri");
+    }
+
+    private void initializeAllowedHostsIfNecessary() {
+        if (allowedHosts != null) {
+            return;
+        }
+
         this.allowedHosts = Arrays.stream(allowedRedirectHosts.split(","))
             .map(String::trim)
             .filter(StringUtils::hasText)
             .collect(Collectors.toUnmodifiableSet());
-
-        validateRedirectUri(successRedirectUri, "app.oauth2.success-redirect-uri");
     }
 
     @Override
@@ -174,6 +181,8 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
     }
 
     private void validateRedirectUri(String redirectUri, String propertyName) {
+        initializeAllowedHostsIfNecessary();
+
         if (!StringUtils.hasText(redirectUri)) {
             throw new IllegalStateException(propertyName + " must not be blank");
         }
