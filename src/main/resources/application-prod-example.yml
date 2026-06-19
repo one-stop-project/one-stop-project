@@ -180,7 +180,7 @@ dummy:
   seed:
     display: ${DUMMY_SEED_DISPLAY:100}
     throttle-ms: ${DUMMY_SEED_THROTTLE_MS:4000}
-    default-image-url: ${DUMMY_SEED_DEFAULT_IMAGE_URL:/images/default-product.png}
+    default-image-url: ${DUMMY_SEED_DEFAULT_IMAGE_URL:https://d34xrn1duxtwu5.cloudfront.net/default-product.png}
 
 slack:
   alert:
