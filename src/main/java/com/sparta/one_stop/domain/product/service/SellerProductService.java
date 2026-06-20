@@ -8,6 +8,7 @@ import com.sparta.one_stop.domain.product.dto.response.ProductDeleteResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductDetailResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductImageAddResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductImageDeleteResponse;
+import com.sparta.one_stop.domain.product.dto.response.ProductImageResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductImageThumbnailResponse;
 import com.sparta.one_stop.domain.product.dto.response.SellerProductListResponse;
 import com.sparta.one_stop.domain.product.entity.Category;
@@ -286,6 +287,7 @@ public class SellerProductService {
 
         // 기존 이미지 순서(1,2,3...)는 그대로 두고, 새 이미지는 맨 뒤에 이어 붙임
         int nextOrder = activeImages.size();
+        List<ProductImage> addedImages = new ArrayList<>();
         for (int i = 0; i < imageUrls.size(); i++) {
             ProductImage image = ProductImage.builder()
                 .product(product)
@@ -293,15 +295,20 @@ public class SellerProductService {
                 .displayOrder(nextOrder + i + 1)
                 .build();
             product.addProductImage(image);
+            addedImages.add(image);
         }
 
         // 이미지 변경 → 재승인
         markForReapproval(product);
 
+        // 응답에 새 이미지의 생성된 imageId를 담기 위해 즉시 저장(IDENTITY)해 식별자를 채운다.
+        productImageRepository.saveAll(addedImages);
+
         return ProductImageAddResponse.builder()
             .addedImageCount(imageUrls.size())
             .totalImageCount(activeImages.size() + imageUrls.size())
             .thumbnailUrl(product.getThumbnailUrl())
+            .addedImages(addedImages.stream().map(ProductImageResponse::from).toList())
             .build();
     }
 
