@@ -31,8 +31,14 @@ public class ProductDetailResponse {
     private List<ProductImageResponse> images;
     private List<String> categoryNames;
     private List<String> tags;
+    // 관리자 반려 사유 — REJECTED 상품에서만 채워지며, 그 외에는 null이다.
+    private String rejectReason;
 
     public static ProductDetailResponse from(Product product) {
+        return from(product, null);
+    }
+
+    public static ProductDetailResponse from(Product product, String rejectReason) {
         List<String> optionNames = buildOptionNames(product);
 
         // 판매자 관리 화면이므로 STOP 옵션도 포함해 전체 옵션을 노출한다.
@@ -74,6 +80,7 @@ public class ProductDetailResponse {
             .images(images)
             .categoryNames(categoryNames)
             .tags(product.getTags().stream().sorted().toList())
+            .rejectReason(rejectReason)
             .build();
     }
 

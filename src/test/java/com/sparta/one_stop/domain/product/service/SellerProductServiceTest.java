@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
@@ -722,6 +723,63 @@ class SellerProductServiceTest {
             assertThat(response.getProductId()).isEqualTo(PRODUCT_ID);
             assertThat(response.getStatus()).isEqualTo(ProductStatus.APPROVE_REQUESTED);
             assertThat(response.getShopName()).isEqualTo("테스트샵");
+        }
+
+        @Test
+        @DisplayName("반려된 상품은 최신 반려 사유가 응답에 포함된다")
+        void getMyProductDetail_rejectedProduct_includesRejectReason() {
+            // given
+            Seller seller = approvedSeller(SELLER_ID);
+            Product product = createProduct(seller, ProductStatus.REJECTED);
+            given(sellerRepository.findByUserId(SELLER_USER_ID)).willReturn(Optional.of(seller));
+            given(productRepository.findWithCollectionsById(PRODUCT_ID)).willReturn(Optional.of(product));
+            given(productRepository.findLatestRejectReason(eq(PRODUCT_ID), any()))
+                    .willReturn(List.of("대표 이미지가 상품과 무관합니다"));
+
+            // when
+            ProductDetailResponse response =
+                    sellerProductService.getMyProductDetail(SELLER_USER_ID, PRODUCT_ID);
+
+            // then
+            assertThat(response.getStatus()).isEqualTo(ProductStatus.REJECTED);
+            assertThat(response.getRejectReason()).isEqualTo("대표 이미지가 상품과 무관합니다");
+        }
+
+        @Test
+        @DisplayName("반려 상품이지만 반려 이력이 없으면 rejectReason은 null이다")
+        void getMyProductDetail_rejectedButNoHistory_rejectReasonNull() {
+            // given
+            Seller seller = approvedSeller(SELLER_ID);
+            Product product = createProduct(seller, ProductStatus.REJECTED);
+            given(sellerRepository.findByUserId(SELLER_USER_ID)).willReturn(Optional.of(seller));
+            given(productRepository.findWithCollectionsById(PRODUCT_ID)).willReturn(Optional.of(product));
+            given(productRepository.findLatestRejectReason(eq(PRODUCT_ID), any())).willReturn(List.of());
+
+            // when
+            ProductDetailResponse response =
+                    sellerProductService.getMyProductDetail(SELLER_USER_ID, PRODUCT_ID);
+
+            // then
+            assertThat(response.getStatus()).isEqualTo(ProductStatus.REJECTED);
+            assertThat(response.getRejectReason()).isNull();
+        }
+
+        @Test
+        @DisplayName("반려가 아닌 상품은 반려 사유를 조회하지 않고 rejectReason은 null이다")
+        void getMyProductDetail_nonRejected_noReasonLookup() {
+            // given
+            Seller seller = approvedSeller(SELLER_ID);
+            Product product = createProduct(seller, ProductStatus.APPROVED);
+            given(sellerRepository.findByUserId(SELLER_USER_ID)).willReturn(Optional.of(seller));
+            given(productRepository.findWithCollectionsById(PRODUCT_ID)).willReturn(Optional.of(product));
+
+            // when
+            ProductDetailResponse response =
+                    sellerProductService.getMyProductDetail(SELLER_USER_ID, PRODUCT_ID);
+
+            // then
+            assertThat(response.getRejectReason()).isNull();
+            verify(productRepository, never()).findLatestRejectReason(any(), any());
         }
 
         @Test
