@@ -28,6 +28,7 @@ public class ProductDetailResponse {
     private List<String> optionNames;
     private List<ProductItemResponse> items;
     private List<String> imageUrls;
+    private List<ProductImageResponse> images;
     private List<String> categoryNames;
     private List<String> tags;
     // 관리자 반려 사유 — REJECTED 상품에서만 채워지며, 그 외에는 null이다.
@@ -45,10 +46,19 @@ public class ProductDetailResponse {
             .map(ProductItemResponse::from)
             .toList();
 
-        List<String> imageUrls = product.getProductImages().stream()
+        // imageUrls(URL 문자열)는 기존 FE 호환을 위해 유지하고, images(imageId 포함)를 함께 내려준다.
+        List<ProductImage> activeImages = product.getProductImages().stream()
             .filter(ProductImage::isActive)
-            .sorted(Comparator.comparingInt(ProductImage::getDisplayOrder))
+            .sorted(Comparator.comparingInt(ProductImage::getDisplayOrder)
+                .thenComparing(ProductImage::getId, Comparator.nullsLast(Comparator.naturalOrder())))
+            .toList();
+
+        List<String> imageUrls = activeImages.stream()
             .map(ProductImage::getImageUrl)
+            .toList();
+
+        List<ProductImageResponse> images = activeImages.stream()
+            .map(ProductImageResponse::from)
             .toList();
 
         List<String> categoryNames = product.getCategoryMappings().stream()
@@ -67,6 +77,7 @@ public class ProductDetailResponse {
             .optionNames(optionNames)
             .items(items)
             .imageUrls(imageUrls)
+            .images(images)
             .categoryNames(categoryNames)
             .tags(product.getTags().stream().sorted().toList())
             .rejectReason(rejectReason)
