@@ -30,6 +30,7 @@ import com.sparta.one_stop.global.storage.ImageStorage;
 import lombok.RequiredArgsConstructor;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -119,7 +120,14 @@ public class SellerProductService {
             throw new CustomException(ErrorCode.PRODUCT_008, "다른 판매자의 상품은 조회할 수 없습니다");
         }
 
-        return ProductDetailResponse.from(product);
+        // 반려 상품일 때만 관리자 이력에서 최신 반려 사유를 함께 내려준다.
+        String rejectReason = null;
+        if (product.getStatus() == ProductStatus.REJECTED) {
+            rejectReason = productRepository.findLatestRejectReason(productId, PageRequest.of(0, 1))
+                .stream().findFirst().orElse(null);
+        }
+
+        return ProductDetailResponse.from(product, rejectReason);
     }
 
     // 상품 수정

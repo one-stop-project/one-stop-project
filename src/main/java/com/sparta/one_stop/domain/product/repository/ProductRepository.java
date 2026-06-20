@@ -53,6 +53,15 @@ public interface ProductRepository extends JpaRepository<Product, Long>, Product
     @Query("SELECT p FROM Product p WHERE p.id = :id")
     Optional<Product> findByIdForImageUpdate(@Param("id") Long id);
 
+    // 상품 최신 반려 사유 — 사유는 관리자 이력(AdminActionHistory)에만 저장되므로 상품 도메인에서 JPQL로 읽는다.
+    // 최신 1건만 필요하므로 Pageable로 제한해 호출한다.
+    @Query("SELECT h.reason FROM AdminActionHistory h "
+        + "WHERE h.targetType = com.sparta.one_stop.global.enums.admin.AdminActionTarget.PRODUCT "
+        + "AND h.targetId = :productId "
+        + "AND h.action = com.sparta.one_stop.global.enums.admin.AdminActionType.REJECT "
+        + "ORDER BY h.createdAt DESC")
+    List<String> findLatestRejectReason(@Param("productId") Long productId, Pageable pageable);
+
     // 연관 상품 — 같은 카테고리 / 자기 제외 / 상품·판매자 APPROVED
     // + 판매중(ON_SALE)·재고 있는 옵션이 하나라도 있는 상품만 (품절·STOP 제외)
     // + 인기순 정렬 (조회수 70% + 판매수 30%)
