@@ -4,6 +4,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
+import java.io.ByteArrayInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
 import com.sparta.one_stop.global.ai.prompt.AiPromptProperties;
@@ -17,6 +21,9 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatusCode;
+import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.web.client.RestClient;
 
 @Slf4j
@@ -24,10 +31,10 @@ import org.springframework.web.client.RestClient;
 @EnableConfigurationProperties(AiPromptProperties.class)
 public class AiConfig {
 
-    // 메인 AI (eunjiom 키) — AI 리뷰 요약 · 어시스턴트 · 연관상품 추천
-    // RestClientCustomizer는 Spring AI 내부 RestClient에 미적용 → OpenAiApi 직접 생성
-    // Gemini thinking 모델은 tool_calls 내 thought_signature를 2차 요청에 반드시 포함해야 함.
-    // extra_content 등 tool_calls 외부의 thought_signature만 제거하고 tool_calls 내부는 보존.
+    // Spring AI가 Gemini 응답의 thought_signature를 내부 ToolCall 모델로 역직렬화할 때 손실시킴.
+    // 응답을 버퍼링해 thought_signature를 ThreadLocal에 저장 → 2차 요청의 tool_calls에 재주입.
+    private static final ThreadLocal<Map<String, String>> THOUGHT_SIGNATURES = new ThreadLocal<>();
+
     @Bean
     @Primary
     public ChatClient mainChatClient(
@@ -39,16 +46,37 @@ public class AiConfig {
     ) {
         RestClient.Builder restClientBuilder = RestClient.builder()
             .requestInterceptor((request, body, execution) -> {
+                byte[] modifiedBody = body;
                 if (body.length > 0) {
                     try {
                         JsonNode root = objectMapper.readTree(body);
                         removeFieldExceptToolCalls(root, "thought_signature");
-                        body = objectMapper.writeValueAsBytes(root);
+
+                        Map<String, String> sigs = THOUGHT_SIGNATURES.get();
+                        if (sigs != null && !sigs.isEmpty()) {
+                            injectThoughtSignatures(root, sigs);
+                            THOUGHT_SIGNATURES.remove();
+                        }
+
+                        modifiedBody = objectMapper.writeValueAsBytes(root);
                     } catch (Exception e) {
-                        log.warn("[Gemini] thought_signature 제거 실패", e);
+                        log.warn("[Gemini] request modification failed", e);
                     }
                 }
-                return execution.execute(request, body);
+
+                ClientHttpResponse response = execution.execute(request, modifiedBody);
+
+                try {
+                    byte[] responseBytes = response.getBody().readAllBytes();
+                    Map<String, String> extracted = extractThoughtSignatures(objectMapper, responseBytes);
+                    if (!extracted.isEmpty()) {
+                        THOUGHT_SIGNATURES.set(extracted);
+                    }
+                    return new BufferedClientHttpResponse(response, responseBytes);
+                } catch (Exception e) {
+                    log.warn("[Gemini] response buffering failed", e);
+                    return response;
+                }
             });
 
         OpenAiApi api = OpenAiApi.builder()
@@ -64,6 +92,43 @@ public class AiConfig {
             .build();
 
         return ChatClient.builder(chatModel).build();
+    }
+
+    private static Map<String, String> extractThoughtSignatures(ObjectMapper mapper, byte[] responseBytes) {
+        Map<String, String> signatures = new HashMap<>();
+        try {
+            JsonNode root = mapper.readTree(responseBytes);
+            JsonNode choices = root.path("choices");
+            if (!choices.isArray()) return signatures;
+            for (JsonNode choice : choices) {
+                JsonNode toolCalls = choice.path("message").path("tool_calls");
+                if (!toolCalls.isArray()) continue;
+                for (JsonNode tc : toolCalls) {
+                    String id = tc.path("id").asText();
+                    JsonNode sig = tc.path("function").path("thought_signature");
+                    if (!id.isEmpty() && !sig.isMissingNode() && !sig.isNull()) {
+                        signatures.put(id, sig.asText());
+                    }
+                }
+            }
+        } catch (Exception ignored) {}
+        return signatures;
+    }
+
+    private static void injectThoughtSignatures(JsonNode root, Map<String, String> signatures) {
+        JsonNode messages = root.path("messages");
+        if (!messages.isArray()) return;
+        for (JsonNode msg : messages) {
+            JsonNode toolCalls = msg.path("tool_calls");
+            if (!toolCalls.isArray()) continue;
+            for (JsonNode tc : toolCalls) {
+                String id = tc.path("id").asText();
+                String sig = signatures.get(id);
+                if (sig != null && tc.path("function").isObject()) {
+                    ((ObjectNode) tc.path("function")).put("thought_signature", sig);
+                }
+            }
+        }
     }
 
     private void removeFieldExceptToolCalls(JsonNode node, String fieldName) {
@@ -83,6 +148,22 @@ public class AiConfig {
                 removeFieldExceptToolCalls(child, fieldName);
             }
         }
+    }
+
+    private static class BufferedClientHttpResponse implements ClientHttpResponse {
+        private final ClientHttpResponse delegate;
+        private final byte[] bufferedBody;
+
+        BufferedClientHttpResponse(ClientHttpResponse delegate, byte[] bufferedBody) {
+            this.delegate = delegate;
+            this.bufferedBody = bufferedBody;
+        }
+
+        @Override public InputStream getBody() { return new ByteArrayInputStream(bufferedBody); }
+        @Override public HttpStatusCode getStatusCode() throws IOException { return delegate.getStatusCode(); }
+        @Override public String getStatusText() throws IOException { return delegate.getStatusText(); }
+        @Override public HttpHeaders getHeaders() { return delegate.getHeaders(); }
+        @Override public void close() { delegate.close(); }
     }
 
     // 더미 AI (junghyun 키, S2는 GEMINI_API_KEY fallback) — 상품 더미데이터 생성 전용
