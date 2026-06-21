@@ -81,6 +81,7 @@ public enum ErrorCode {
     PRODUCT_014(HttpStatus.BAD_REQUEST, "PRODUCT_014", "조회 페이지 크기가 허용 범위를 벗어났습니다"),
     PRODUCT_015(HttpStatus.BAD_REQUEST, "PRODUCT_015", "가격 범위가 올바르지 않습니다"),
     PRODUCT_016(HttpStatus.BAD_REQUEST, "PRODUCT_016", "상품 옵션 조합이 중복됩니다"),
+    PRODUCT_017(HttpStatus.INTERNAL_SERVER_ERROR, "PRODUCT_017", "상품 반려 이력을 찾을 수 없습니다"),
 
     // ===== CATEGORY - 카테고리 =====
     CATEGORY_001(HttpStatus.NOT_FOUND, "CATEGORY_001", "카테고리를 찾을 수 없습니다"),

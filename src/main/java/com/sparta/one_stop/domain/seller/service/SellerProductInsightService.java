@@ -37,7 +37,7 @@ public class SellerProductInsightService {
         AdminActionHistory rejection = adminActionHistoryRepository
             .findTopByTargetTypeAndTargetIdAndActionOrderByCreatedAtDesc(
                 AdminActionTarget.PRODUCT, productId, AdminActionType.REJECT)
-            .orElse(null);
+            .orElseThrow(() -> new CustomException(ErrorCode.PRODUCT_017));
         return SellerProductRejectReasonResponse.of(product, rejection);
     }
 }

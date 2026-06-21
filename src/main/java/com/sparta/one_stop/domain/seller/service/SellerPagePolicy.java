@@ -15,7 +15,7 @@ public class SellerPagePolicy {
 
     public void validate(Pageable pageable) {
         if (pageable.isUnpaged() || pageable.getPageSize() < 1
-            || pageable.getPageSize() > Math.max(1, properties.getMaxPageSize())
+            || pageable.getPageSize() > properties.getMaxPageSize()
             || pageable.getOffset() > Integer.MAX_VALUE) {
             throw new CustomException(ErrorCode.COMMON_010, "판매자 조회 페이지 범위가 올바르지 않습니다");
         }
