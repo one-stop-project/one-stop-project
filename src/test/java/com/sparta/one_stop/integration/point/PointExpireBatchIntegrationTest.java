@@ -13,6 +13,7 @@ import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.redisson.api.RedissonClient;
 import org.springframework.batch.core.BatchStatus;
@@ -34,7 +35,7 @@ import java.util.List;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
-
+@Tag("integration")
 @SpringBatchTest
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class PointExpireBatchIntegrationTest extends IntegrationTestSupport {

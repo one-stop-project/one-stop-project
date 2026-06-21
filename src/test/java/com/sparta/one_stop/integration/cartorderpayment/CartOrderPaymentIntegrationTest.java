@@ -3,12 +3,21 @@ package com.sparta.one_stop.integration.cartorderpayment;
 import com.sparta.one_stop.domain.cart.dto.request.AddCartItemRequest;
 import com.sparta.one_stop.domain.cart.entity.CartItem;
 import com.sparta.one_stop.domain.cart.repository.CartItemRepository;
+import com.sparta.one_stop.domain.cart.repository.CartRepository;
 import com.sparta.one_stop.domain.cart.service.CartMergeService;
 import com.sparta.one_stop.domain.cart.service.CartService;
 import com.sparta.one_stop.domain.cart.support.GuestCartRedisKeyProvider;
+import com.sparta.one_stop.domain.coupon.entity.Coupon;
+import com.sparta.one_stop.domain.coupon.entity.UserCoupon;
+import com.sparta.one_stop.domain.coupon.repository.CouponRepository;
+import com.sparta.one_stop.domain.coupon.repository.UserCouponRepository;
+import com.sparta.one_stop.domain.delivery.repository.DeliveryHistoryRepository;
+import com.sparta.one_stop.domain.delivery.repository.DeliveryRepository;
+import com.sparta.one_stop.domain.order.dto.request.CreateOrderItemRequest;
 import com.sparta.one_stop.domain.order.dto.request.CreateOrderRequest;
 import com.sparta.one_stop.domain.order.dto.response.CreateOrderResponse;
 import com.sparta.one_stop.domain.order.entity.Order;
+import com.sparta.one_stop.domain.order.repository.OrderItemRepository;
 import com.sparta.one_stop.domain.order.repository.OrderRepository;
 import com.sparta.one_stop.domain.order.service.OrderCommandService;
 import com.sparta.one_stop.domain.payment.dto.request.ApprovePaymentRequest;
@@ -16,6 +25,13 @@ import com.sparta.one_stop.domain.payment.dto.response.ApprovePaymentResponse;
 import com.sparta.one_stop.domain.payment.entity.Payment;
 import com.sparta.one_stop.domain.payment.repository.PaymentRepository;
 import com.sparta.one_stop.domain.payment.service.PaymentService;
+import com.sparta.one_stop.domain.point.dto.request.PointChargeRequest;
+import com.sparta.one_stop.domain.point.entity.Point;
+import com.sparta.one_stop.domain.point.entity.PointHistory;
+import com.sparta.one_stop.domain.point.repository.PointHistoryRepository;
+import com.sparta.one_stop.domain.point.repository.PointRepository;
+import com.sparta.one_stop.domain.point.repository.PointUsageDetailRepository;
+import com.sparta.one_stop.domain.point.service.PointService;
 import com.sparta.one_stop.domain.product.entity.Product;
 import com.sparta.one_stop.domain.product.entity.ProductItem;
 import com.sparta.one_stop.domain.product.repository.ProductItemRepository;
@@ -24,23 +40,36 @@ import com.sparta.one_stop.domain.user.entity.Seller;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.SellerRepository;
 import com.sparta.one_stop.domain.user.repository.UserRepository;
+import com.sparta.one_stop.global.enums.coupon.CouponDiscountType;
+import com.sparta.one_stop.global.enums.coupon.UserCouponStatus;
 import com.sparta.one_stop.global.enums.order.OrderStatus;
 import com.sparta.one_stop.global.enums.order.OrderType;
+import com.sparta.one_stop.global.enums.outbox.OutboxEventStatus;
+import com.sparta.one_stop.global.enums.outbox.OutboxEventType;
 import com.sparta.one_stop.global.enums.payment.PaymentStatus;
+import com.sparta.one_stop.global.enums.point.PointHistoryType;
 import com.sparta.one_stop.global.enums.product.ProductItemStatus;
 import com.sparta.one_stop.global.enums.user.UserRole;
 import com.sparta.one_stop.global.exception.CustomException;
+import com.sparta.one_stop.global.outbox.entity.OutboxEvent;
+import com.sparta.one_stop.global.outbox.publisher.OutboxEventPublisher;
+import com.sparta.one_stop.global.outbox.repository.OutboxEventRepository;
 import com.sparta.one_stop.integration.IntegrationTestSupport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.redisson.api.RLock;
 import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.mock.web.MockHttpServletResponse;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -53,21 +82,22 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+@Tag("integration")
 /**
  * Cart → Order → Payment 핵심 구매 플로우 통합 테스트
  *
- * 1차 커밋: 로그인 사용자 구매 성공 플로우
+ * 시나리오 1: 로그인 사용자 구매 성공 플로우
  * - 로그인 사용자가 상품을 장바구니에 담는다.
  * - 장바구니 상품을 기반으로 주문을 생성한다.
  * - 주문 생성 후 장바구니 상품이 삭제되는지 확인한다.
  * - 주문 생성 시 상품 재고가 차감되는지 확인한다.
  * - 결제 승인 후 주문/결제 상태가 정상적으로 변경되는지 확인한다.
  *
- * 2차 커밋: 대표 실패 플로우
+ * 시나리오 2: 대표 실패 플로우
  * - 주문 생성 시점에 재고가 부족하면 주문 생성에 실패하는지 확인한다.
  * - 이미 결제 완료된 주문에 대해 중복 결제 승인을 방지하는지 확인한다.
  *
- * 3차 커밋: 비로그인 장바구니 merge 플로우
+ * 시나리오 3: 비로그인 장바구니 merge 플로우
  * - 비로그인 사용자가 Redis 장바구니에 상품을 담는다.
  * - Redis Hash에 수량이 저장되는지 확인한다.
  * - Redis ZSet에 담기 순서가 저장되는지 확인한다.
@@ -76,9 +106,17 @@ import static org.mockito.Mockito.when;
  * - merge 후 Redis Hash/ZSet key가 삭제되는지 확인한다.
  * - merge된 DB 장바구니 기준으로 주문 생성 및 결제 승인까지 완료되는지 확인한다.
  *
- * 4차 커밋: 추가 실패 플로우
+ * 시나리오 4: 추가 실패 플로우
  * - 장바구니에 담은 상품이 주문 생성 전에 판매 중지되면 주문 생성에 실패하는지 확인한다.
  * - 결제 승인 금액이 주문 최종 금액과 다르면 결제 승인에 실패하고 주문 상태가 유지되는지 확인한다.
+ *
+ *
+ * 시나리오 5: 쿠폰 + 포인트 적용 주문/결제 플로우
+ * - 구매자에게 포인트를 충전하고 정액 쿠폰을 발급한다.
+ * - 쿠폰과 포인트를 적용하여 주문을 생성한다.
+ * - 주문 생성 시점에는 쿠폰/포인트가 실제 사용 처리되지 않고, 주문에 사용 예정 정보만 기록되는지 확인한다.
+ * - 결제 승인 시점에 쿠폰 USED 처리, 포인트 차감, PointHistory USE 이력 생성이 수행되는지 확인한다.
+ * - 결제 승인 후 PAYMENT_APPROVED Outbox 이벤트가 저장되는지 확인한다.
  */
 class CartOrderPaymentIntegrationTest extends IntegrationTestSupport {
 
@@ -108,9 +146,36 @@ class CartOrderPaymentIntegrationTest extends IntegrationTestSupport {
     private GuestCartRedisKeyProvider guestCartRedisKeyProvider;
     @Autowired
     private RedisTemplate<String, String> redisTemplate;
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+    @Autowired
+    private CartRepository cartRepository;
+    @Autowired
+    private CouponRepository couponRepository;
+    @Autowired
+    private UserCouponRepository userCouponRepository;
+    @Autowired
+    private PointService pointService;
+    @Autowired
+    private PointRepository pointRepository;
+    @Autowired
+    private PointHistoryRepository pointHistoryRepository;
+    @Autowired
+    private PointUsageDetailRepository pointUsageDetailRepository;
+    @Autowired
+    private OutboxEventRepository outboxEventRepository;
+    @Autowired
+    private DeliveryRepository deliveryRepository;
+    @Autowired
+    private DeliveryHistoryRepository deliveryHistoryRepository;
+    @Autowired
+    private OrderItemRepository orderItemRepository;
 
     @MockitoBean
     private RedissonClient redissonClient;
+
+    @MockitoBean
+    private OutboxEventPublisher outboxEventPublisher;
 
     private User buyer;
     private Seller seller;
@@ -140,17 +205,17 @@ class CartOrderPaymentIntegrationTest extends IntegrationTestSupport {
             .build()
         );
 
-        seller = sellerRepository.save(Seller.builder()
+        seller = Seller.builder()
             .user(sellerUser)
             .shopName("테스트샵")
             .businessNumber("1234567890")
             .bankAccount("110-123-456789")
-            .build()
-        );
+            .build();
         seller.approve();
+        seller = sellerRepository.save(seller);
 
         // 3. 상품 생성 (APPROVED)
-        Product product = productRepository.save(Product.builder()
+        Product product = Product.builder()
             .seller(seller)
             .name("테스트 상품")
             .description("통합 테스트용 상품입니다.")
@@ -160,9 +225,9 @@ class CartOrderPaymentIntegrationTest extends IntegrationTestSupport {
             .optionName3("")
             .optionName4("")
             .optionName5("")
-            .build()
-        );
+            .build();
         product.approve();
+        product = productRepository.save(product);
 
         // 4. 상품 옵션 생성 (ON_SALE, 재고 100개, 가격 10,000원)
         productItem = productItemRepository.save(ProductItem.builder()
@@ -656,6 +721,182 @@ class CartOrderPaymentIntegrationTest extends IntegrationTestSupport {
             .orElseThrow();
 
         assertThat(updatedItem.getStock()).isEqualTo(98L);
+    }
+
+    /**
+     * 쿠폰/포인트/Outbox의 실제 커밋 결과를 검증하기 위해 테스트 트랜잭션을 비활성화한다.
+     * NOT_SUPPORTED를 사용하므로 테스트 데이터는 finally 블록에서 직접 정리한다.
+     */
+    @Test
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    @DisplayName("쿠폰과 포인트를 적용한 주문은 생성 시 예약만 하고 결제 승인 시 실제 사용 처리된다")
+    void createOrderWithCouponAndPoint_thenApprovePayment_success() {
+        try {
+            // given: 구매자에게 포인트 10,000P를 충전하고, 3,000원 정액 쿠폰과 UserCoupon을 생성한다.
+            pointService.chargePoint(
+                buyer.getId(),
+                new PointChargeRequest(10_000)
+            );
+
+            LocalDateTime now = LocalDateTime.now();
+            Coupon coupon = couponRepository.save(new Coupon(
+                "통합 테스트 정액 쿠폰",
+                CouponDiscountType.FIXED,
+                3_000,
+                1_000L,
+                null,
+                100,
+                now.minusDays(1),
+                now.plusDays(1)
+            ));
+            coupon.increaseIssuedQuantity();
+
+            UserCoupon userCoupon = userCouponRepository.save(new UserCoupon(
+                buyer,
+                coupon
+            ));
+
+            // when 1: 쿠폰 3,000원과 포인트 5,000원을 적용하여 주문을 생성한다.
+            CreateOrderResponse orderResponse = orderCommandService.createOrder(
+                buyer.getId(),
+                new CreateOrderRequest(
+                    OrderType.DIRECT,
+                    List.of(new CreateOrderItemRequest(
+                        productItem.getId(),
+                        2
+                    )),
+                    null,
+                    "홍길동",
+                    "010-1234-5678",
+                    "서울시 강남구",
+                    "문 앞에 놓아주세요",
+                    userCoupon.getId(),
+                    5_000
+                )
+            );
+
+            // then 1: 주문 생성 시점에는 쿠폰/포인트 사용 예정 정보와 최종 금액만 기록되고,
+            // 쿠폰 USED 처리와 포인트 잔액 차감은 아직 수행되지 않는다.
+            assertThat(orderResponse).isNotNull();
+            assertThat(orderResponse.finalPrice()).isEqualTo(15_000L);
+
+            Order pendingOrder = orderRepository.findById(orderResponse.orderId())
+                .orElseThrow();
+
+            assertThat(pendingOrder.getStatus()).isEqualTo(OrderStatus.PENDING_PAYMENT);
+            assertThat(pendingOrder.getTotalPrice()).isEqualTo(20_000L);
+            assertThat(pendingOrder.getDiscountPrice()).isEqualTo(3_000L);
+            assertThat(pendingOrder.getUsedPoint()).isEqualTo(5_000);
+            assertThat(pendingOrder.getDeliveryFee()).isEqualTo(3_000L);
+            assertThat(pendingOrder.getFinalPrice()).isEqualTo(15_000L);
+
+            UserCoupon beforePaymentCoupon = userCouponRepository.findById(userCoupon.getId())
+                .orElseThrow();
+
+            assertThat(beforePaymentCoupon.getStatus()).isEqualTo(UserCouponStatus.AVAILABLE);
+            assertThat(beforePaymentCoupon.getUsedOrder()).isNull();
+
+            Point beforePaymentPoint = pointRepository.findByUserId(buyer.getId())
+                .orElseThrow();
+
+            assertThat(beforePaymentPoint.getBalance()).isEqualTo(10_000);
+
+            ProductItem orderedItem = productItemRepository.findById(productItem.getId())
+                .orElseThrow();
+
+            assertThat(orderedItem.getStock()).isEqualTo(98L);
+
+            // when 2: 주문 최종 금액으로 결제를 승인한다.
+            ApprovePaymentResponse paymentResponse = paymentService.approvePayment(
+                buyer.getId(),
+                new ApprovePaymentRequest(
+                    orderResponse.orderId(),
+                    orderResponse.finalPrice()
+                )
+            );
+
+            // then 2: 결제 승인 후 주문/결제/쿠폰/포인트/Outbox 상태가 함께 확정된다.
+            assertThat(paymentResponse).isNotNull();
+            assertThat(paymentResponse.status()).isEqualTo(OrderStatus.PAID);
+
+            Order paidOrder = orderRepository.findById(orderResponse.orderId())
+                .orElseThrow();
+
+            assertThat(paidOrder.getStatus()).isEqualTo(OrderStatus.PAID);
+
+            Payment payment = paymentRepository.findByOrderId(orderResponse.orderId())
+                .orElseThrow();
+
+            assertThat(payment.getStatus()).isEqualTo(PaymentStatus.PAID);
+            assertThat(payment.getAmount()).isEqualTo(15_000L);
+            assertThat(payment.getApprovedAt()).isNotNull();
+
+            UserCoupon usedCoupon = userCouponRepository.findById(userCoupon.getId())
+                .orElseThrow();
+
+            assertThat(usedCoupon.getStatus()).isEqualTo(UserCouponStatus.USED);
+            assertThat(usedCoupon.getUsedOrder().getId()).isEqualTo(orderResponse.orderId());
+            assertThat(usedCoupon.getUsedAt()).isNotNull();
+
+            Point afterPaymentPoint = pointRepository.findByUserId(buyer.getId())
+                .orElseThrow();
+
+            assertThat(afterPaymentPoint.getBalance()).isEqualTo(5_000);
+
+            List<PointHistory> useHistories = pointHistoryRepository.findAllByOrderIdAndType(
+                orderResponse.orderId(),
+                PointHistoryType.USE
+            );
+
+            assertThat(useHistories).hasSize(1);
+            assertThat(useHistories.get(0).getAmount()).isEqualTo(-5_000);
+
+            List<OutboxEvent> paymentApprovedEvents = outboxEventRepository.findAll().stream()
+                .filter(event -> event.getEventType() == OutboxEventType.PAYMENT_APPROVED)
+                .filter(event -> event.getAggregateId().equals(orderResponse.orderId()))
+                .toList();
+
+            assertThat(paymentApprovedEvents).hasSize(1);
+            assertThat(paymentApprovedEvents.get(0).getStatus()).isEqualTo(OutboxEventStatus.PENDING);
+            assertThat(paymentApprovedEvents.get(0).getTopic()).isEqualTo("payment.approved");
+        } finally {
+            cleanupCommittedCouponPointPaymentFlowData();
+        }
+    }
+
+    /**
+     * NOT_SUPPORTED 테스트에서 커밋된 데이터를 직접 정리한다.
+     * FK 의존성을 고려해 자식 테이블부터 삭제한다.
+     */
+    private void cleanupCommittedCouponPointPaymentFlowData() {
+        jdbcTemplate.update("update user_coupon set used_order_id = null");
+        jdbcTemplate.update("update orders set user_coupon_id = null");
+
+        pointUsageDetailRepository.deleteAllInBatch();
+        pointHistoryRepository.deleteAllInBatch();
+        pointRepository.deleteAllInBatch();
+
+        outboxEventRepository.deleteAllInBatch();
+
+        paymentRepository.deleteAllInBatch();
+
+        deliveryHistoryRepository.deleteAllInBatch();
+        deliveryRepository.deleteAllInBatch();
+
+        orderItemRepository.deleteAllInBatch();
+        orderRepository.deleteAllInBatch();
+
+        userCouponRepository.deleteAllInBatch();
+        couponRepository.deleteAllInBatch();
+
+        cartItemRepository.deleteAllInBatch();
+        cartRepository.deleteAllInBatch();
+
+        productItemRepository.deleteAllInBatch();
+        productRepository.deleteAllInBatch();
+
+        sellerRepository.deleteAllInBatch();
+        userRepository.deleteAllInBatch();
     }
 
 }

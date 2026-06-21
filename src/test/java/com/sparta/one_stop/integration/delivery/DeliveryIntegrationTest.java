@@ -41,6 +41,7 @@ import com.sparta.one_stop.integration.IntegrationTestSupport;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -57,6 +58,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
  * 결제 완료 후 생성된 배송에 대해 발주 확인, 운송장 등록, 배송 상태 변경, 주문 거절 플로우를
  * 실제 DB(Testcontainers MySQL)에서 검증한다.
  */
+@Tag("integration")
 class DeliveryIntegrationTest extends IntegrationTestSupport {
 
     @Autowired private DeliveryService deliveryService;

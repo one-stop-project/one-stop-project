@@ -13,6 +13,7 @@ import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import com.sparta.one_stop.integration.IntegrationTestSupport;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.transaction.AfterTransaction;
@@ -20,7 +21,7 @@ import org.springframework.test.context.transaction.BeforeTransaction;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-
+@Tag("integration")
 @DisplayName("AiReviewSummaryService 통합 테스트")
 class AiReviewSummaryIntegrationTest extends IntegrationTestSupport {
 
