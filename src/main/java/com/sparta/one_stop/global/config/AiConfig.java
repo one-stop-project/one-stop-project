@@ -46,6 +46,7 @@ public class AiConfig {
     ) {
         RestClient.Builder restClientBuilder = RestClient.builder()
             .requestInterceptor((request, body, execution) -> {
+                THOUGHT_SIGNATURES.remove();
                 byte[] modifiedBody = body;
                 if (body.length > 0) {
                     try {
@@ -75,7 +76,7 @@ public class AiConfig {
                     return new BufferedClientHttpResponse(response, responseBytes);
                 } catch (Exception e) {
                     log.warn("[Gemini] response buffering failed", e);
-                    return response;
+                    return new BufferedClientHttpResponse(response, new byte[0]);
                 }
             });
 
@@ -111,7 +112,9 @@ public class AiConfig {
                     }
                 }
             }
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            log.debug("[Gemini] thought_signature extraction failed", e);
+        }
         return signatures;
     }
 
