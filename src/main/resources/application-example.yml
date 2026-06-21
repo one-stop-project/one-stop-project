@@ -72,6 +72,12 @@ jwt:
   access-token-expiry: 15m
   refresh-token-expiry: 7d
 
+security:
+  audit:
+    hmac-secret: ${SECURITY_AUDIT_HMAC_SECRET}
+    aes-key-version: ${SECURITY_AUDIT_AES_KEY_VERSION:v1}
+    aes-secret: ${SECURITY_AUDIT_AES_SECRET}
+
 springdoc:
   swagger-ui:
     path: /swagger-ui.html

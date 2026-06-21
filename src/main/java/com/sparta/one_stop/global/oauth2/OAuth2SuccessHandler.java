@@ -41,9 +41,9 @@ import java.util.stream.Collectors;
  *   <li>추방된 기기의 Refresh Token 및 DeviceContext 제거</li>
  * </ul>
  *
- * <p>서버 테스트 환경에서는 교환 코드를 URL에 노출하지 않는다.
- * 프론트엔드 콜백에서 Access Token 교환이 필요한 경우에만
- * app.oauth2.expose-code-in-redirect=true로 명시적으로 활성화한다.</p>
+ * <p>프론트엔드 콜백에는 짧은 수명의 일회용 교환 코드만 전달한다.
+ * 서버 테스트 환경에서 콜백 교환을 사용하지 않을 때는
+ * app.oauth2.expose-code-in-redirect=false로 비활성화할 수 있다.</p>
  */
 @Slf4j
 @Component
@@ -63,13 +63,13 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
     private final ClientIpExtractor clientIpExtractor;
     private final CookieUtil cookieUtil;
 
-    @Value("${app.oauth2.success-redirect-uri:https://onestop1.duckdns.org/oauth2/success}")
+    @Value("${app.oauth2.success-redirect-uri:https://onestop1.duckdns.org/oauth2/callback}")
     private String successRedirectUri;
 
     @Value("${app.oauth2.allowed-redirect-hosts:onestop1.duckdns.org}")
     private String allowedRedirectHosts;
 
-    @Value("${app.oauth2.expose-code-in-redirect:false}")
+    @Value("${app.oauth2.expose-code-in-redirect:true}")
     private boolean exposeCodeInRedirect;
 
     private Set<String> allowedHosts;

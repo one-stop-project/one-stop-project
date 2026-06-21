@@ -116,6 +116,10 @@ point:
     secret: "test_secret_key_for_point_integrity_validation_must_be_long"
 
 security:
+  audit:
+    hmac-secret: "test-security-audit-hmac-secret-at-least-32-bytes"
+    aes-key-version: v1
+    aes-secret: "test-security-audit-aes-secret-at-least-32-bytes"
   trusted-proxies:
     - "127.0.0.1"        # IPv4 로컬
     - "0:0:0:0:0:0:0:1"  # IPv6 로컬 (Mac 등에서 종종 사용됨)

@@ -13,6 +13,8 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
+import static com.sparta.one_stop.global.common.RedisKeyConstants.DEVICE_ZSET_PREFIX;
+
 /**
  * 다중 기기 세션 제한 서비스 — 강화본
  *
@@ -58,7 +60,6 @@ public class DeviceLimitService {
      * 이 값을 넘으면 강제 정리 + CRITICAL 보안 이벤트 발생.
      */
     public static final int HARD_DEVICE_LIMIT = 100;
-    private static final String ZSET_KEY_PREFIX = "devices:";
     private static final Duration ZSET_TTL = Duration.ofDays(14);
     /** Lua Script — 원자적 등록 + 추방 + 새 기기 여부 반환 */
     private static final DefaultRedisScript<List> REGISTER_SCRIPT = createRegisterScript();
@@ -262,7 +263,7 @@ public class DeviceLimitService {
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
     private String key(Long userId) {
-        return ZSET_KEY_PREFIX + userId;
+        return DEVICE_ZSET_PREFIX + userId;
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

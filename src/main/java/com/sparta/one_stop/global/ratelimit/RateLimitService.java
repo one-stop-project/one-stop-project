@@ -1,6 +1,9 @@
 package com.sparta.one_stop.global.ratelimit;
 
 import com.sparta.one_stop.global.enums.ratelimit.RateLimitPolicy;
+import com.sparta.one_stop.global.audit.SecurityAuditEvent;
+import com.sparta.one_stop.global.audit.SecurityAuditEventType;
+import com.sparta.one_stop.global.audit.SecurityAuditService;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
@@ -47,6 +50,7 @@ public class RateLimitService {
     private static final RedisScript<Long> RATE_LIMIT =
         new DefaultRedisScript<>(RATE_LIMIT_SCRIPT, Long.class);
     private final RedisTemplate<String, String> redisTemplate;
+    private final SecurityAuditService securityAuditService;
 
     /**
      * Rate Limit 검증 — 통과 시 정상, 차단 시 COMMON_009 예외
@@ -72,6 +76,16 @@ public class RateLimitService {
 
                 log.warn("[Rate Limit 차단] policy={}, id={}, 대기시간={}초, description={}",
                     policy.name(), maskIdentifier(identifier), waitSeconds, policy.getDescription());
+
+                securityAuditService.record(SecurityAuditEvent.builder()
+                    .eventType(SecurityAuditEventType.RATE_LIMIT_BLOCKED)
+                    .result("BLOCKED")
+                    .ruleCode("RATE_LIMIT_TRIGGERED")
+                    .errorCode(ErrorCode.COMMON_009.getCode())
+                    .errorMessage("Rate limit blocked: " + policy.name())
+                    .clientIp(policy.name().contains("IP") ? identifier : null)
+                    .suspicious(true)
+                    .build());
 
                 throw new CustomException(
                     ErrorCode.COMMON_009,
