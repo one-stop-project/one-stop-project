@@ -46,7 +46,6 @@ public class AiConfig {
     ) {
         RestClient.Builder restClientBuilder = RestClient.builder()
             .requestInterceptor((request, body, execution) -> {
-                THOUGHT_SIGNATURES.remove();
                 byte[] modifiedBody = body;
                 if (body.length > 0) {
                     try {
@@ -54,14 +53,15 @@ public class AiConfig {
                         removeFieldExceptToolCalls(root, "thought_signature");
 
                         Map<String, String> sigs = THOUGHT_SIGNATURES.get();
+                        THOUGHT_SIGNATURES.remove();
                         if (sigs != null && !sigs.isEmpty()) {
                             injectThoughtSignatures(root, sigs);
-                            THOUGHT_SIGNATURES.remove();
                         }
 
                         modifiedBody = objectMapper.writeValueAsBytes(root);
                     } catch (Exception e) {
                         log.warn("[Gemini] request modification failed", e);
+                        THOUGHT_SIGNATURES.remove();
                     }
                 }
 
