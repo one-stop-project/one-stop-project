@@ -32,39 +32,37 @@ public class SecurityAuditController {
 
  @GetMapping("/api/admin/security-audit/critical")
  @PreAuthorize("hasRole('SUPER_ADMIN')")
- public ResponseEntity<ApiResponse<Page<AdminAuditView>>> critical(
+ public ResponseEntity<Page<AdminAuditView>> critical(
   @RequestParam(defaultValue="24") @Min(1) @Max(168) int hours,
   @RequestParam(defaultValue="0") @Min(0) int page,
   @RequestParam(defaultValue="50") @Min(1) @Max(100) int size){
    LocalDateTime since = LocalDateTime.now().minusHours(hours);
-   Page<AdminAuditView> result = repository
+   return ResponseEntity.ok(repository
     .findBySeverityAndOccurredAtAfterOrderByOccurredAtDesc(SecuritySeverity.CRITICAL, since, PageRequest.of(page, size))
-    .map(AdminAuditView::from);
-   return ResponseEntity.ok(ApiResponse.success(result));
+    .map(AdminAuditView::from));
  }
 
  @GetMapping("/api/admin/security-audit/high-risk")
  @PreAuthorize("hasRole('SUPER_ADMIN')")
- public ResponseEntity<ApiResponse<Page<AdminAuditView>>> highRisk(
+ public ResponseEntity<Page<AdminAuditView>> highRisk(
   @RequestParam(defaultValue="7") @Min(1) @Max(90) int days,
   @RequestParam(defaultValue="0") @Min(0) int page,
   @RequestParam(defaultValue="50") @Min(1) @Max(100) int size){
    LocalDateTime since = LocalDateTime.now().minusDays(days);
-   Page<AdminAuditView> result = repository
+   return ResponseEntity.ok(repository
     .findBySeverityInAndOccurredAtAfterOrderByOccurredAtDesc(List.of(SecuritySeverity.CRITICAL, SecuritySeverity.HIGH), since, PageRequest.of(page, size))
-    .map(AdminAuditView::from);
-   return ResponseEntity.ok(ApiResponse.success(result));
+    .map(AdminAuditView::from));
  }
 
  @GetMapping("/api/admin/security-audit/stats/by-category")
  @PreAuthorize("hasRole('SUPER_ADMIN')")
- public ResponseEntity<ApiResponse<Map<String, Long>>> statsByCategory(
+ public ResponseEntity<Map<String, Long>> statsByCategory(
   @RequestParam(defaultValue="7") @Min(1) @Max(90) int days){
    LocalDateTime since = LocalDateTime.now().minusDays(days);
    List<Object[]> rows = repository.countGroupedByCategory(since);
    Map<String, Long> stats = new LinkedHashMap<>();
    for (Object[] row : rows) stats.put(row[0].toString(), (Long) row[1]);
-   return ResponseEntity.ok(ApiResponse.success(stats));
+   return ResponseEntity.ok(stats);
  }
 
  record AdminAuditView(Long id, String eventType, SecuritySeverity severity, String category,
