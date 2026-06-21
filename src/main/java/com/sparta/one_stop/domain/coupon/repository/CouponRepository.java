@@ -52,4 +52,18 @@ public interface CouponRepository extends JpaRepository<Coupon, Long> {
     // 관리자 상태별 목록 조회 (최신순)
     Page<Coupon> findAllByStatusOrderByCreatedAtDesc(CouponStatus status, Pageable pageable);
 
+    // 만료 기간이 지난 ACTIVE 쿠폰 일괄 비활성화 (ACTIVE → INACTIVE)
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+        update Coupon c
+        set c.status = :inactiveStatus
+        where c.status = :activeStatus
+          and c.expiredAt < :now
+    """)
+    int bulkDeactivateExpired(
+        @Param("activeStatus") CouponStatus activeStatus,
+        @Param("inactiveStatus") CouponStatus inactiveStatus,
+        @Param("now") LocalDateTime now
+    );
+
 }

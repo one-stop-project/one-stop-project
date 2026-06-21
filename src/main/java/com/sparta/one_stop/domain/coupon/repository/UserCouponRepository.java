@@ -9,10 +9,12 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.jpa.repository.QueryHints;
 import org.springframework.data.repository.query.Param;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 public interface UserCouponRepository extends JpaRepository<UserCoupon, Long> {
@@ -71,5 +73,21 @@ public interface UserCouponRepository extends JpaRepository<UserCoupon, Long> {
         where uc.id = :userCouponId
     """)
     Optional<UserCoupon> findByIdWithLock(@Param("userCouponId") Long userCouponId);
+
+    // expiredAt이 지난 쿠폰에 속한 AVAILABLE UserCoupon 일괄 만료 (AVAILABLE → EXPIRED)
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+        update UserCoupon uc
+        set uc.status = :expiredStatus
+        where uc.status = :availableStatus
+          and uc.coupon.id in (
+              select c.id from Coupon c where c.expiredAt < :now
+          )
+    """)
+    int bulkExpireAvailableByExpiredCoupons(
+        @Param("availableStatus") UserCouponStatus availableStatus,
+        @Param("expiredStatus") UserCouponStatus expiredStatus,
+        @Param("now") LocalDateTime now
+    );
 
 }
