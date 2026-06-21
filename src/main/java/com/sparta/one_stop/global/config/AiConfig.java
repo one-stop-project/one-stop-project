@@ -26,9 +26,8 @@ public class AiConfig {
 
     // 메인 AI (eunjiom 키) — AI 리뷰 요약 · 어시스턴트 · 연관상품 추천
     // RestClientCustomizer는 Spring AI 내부 RestClient에 미적용 → OpenAiApi 직접 생성
-    // Gemini가 1차 tool call 응답에 thought_signature를 포함해 반환하고,
-    // Spring AI가 이를 2차 요청 body에 그대로 포함시키면 Gemini가 400으로 거부함.
-    // 요청 인터셉터로 messages[].thought_signature를 제거해 이를 방지.
+    // Gemini thinking 모델은 tool_calls 내 thought_signature를 2차 요청에 반드시 포함해야 함.
+    // extra_content 등 tool_calls 외부의 thought_signature만 제거하고 tool_calls 내부는 보존.
     @Bean
     @Primary
     public ChatClient mainChatClient(
@@ -43,7 +42,7 @@ public class AiConfig {
                 if (body.length > 0) {
                     try {
                         JsonNode root = objectMapper.readTree(body);
-                        removeField(root, "thought_signature");
+                        removeFieldExceptToolCalls(root, "thought_signature");
                         body = objectMapper.writeValueAsBytes(root);
                     } catch (Exception e) {
                         log.warn("[Gemini] thought_signature 제거 실패", e);
@@ -67,17 +66,20 @@ public class AiConfig {
         return ChatClient.builder(chatModel).build();
     }
 
-    private void removeField(JsonNode node, String fieldName) {
+    private void removeFieldExceptToolCalls(JsonNode node, String fieldName) {
         if (node.isObject()) {
             ObjectNode obj = (ObjectNode) node;
             obj.remove(fieldName);
             Iterator<Map.Entry<String, JsonNode>> fields = obj.fields();
             while (fields.hasNext()) {
-                removeField(fields.next().getValue(), fieldName);
+                Map.Entry<String, JsonNode> entry = fields.next();
+                if (!entry.getKey().equals("tool_calls")) {
+                    removeFieldExceptToolCalls(entry.getValue(), fieldName);
+                }
             }
         } else if (node.isArray()) {
             for (JsonNode child : node) {
-                removeField(child, fieldName);
+                removeFieldExceptToolCalls(child, fieldName);
             }
         }
     }
