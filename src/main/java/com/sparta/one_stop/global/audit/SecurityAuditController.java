@@ -9,12 +9,17 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
+import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
-@RestController @RequestMapping("/api/admin/security/audit-logs") @RequiredArgsConstructor @Validated
+@RestController @RequiredArgsConstructor @Validated
 @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
 public class SecurityAuditController {
  private final SecurityAuditLogRepository repository; private final SecurityAuditService audit;
- @GetMapping
+
+ @GetMapping("/api/admin/security/audit-logs")
  public ResponseEntity<ApiResponse<Page<SecurityAuditLogResponse>>> search(
   @RequestParam SecurityAuditEventType eventType,@RequestParam(defaultValue="false") boolean suspicious,
   @RequestParam(defaultValue="0") @Min(0) int page,@RequestParam(defaultValue="20") @Min(1) @Max(100) int size){
@@ -23,5 +28,53 @@ public class SecurityAuditController {
     .map(SecurityAuditLogResponse::from);
    audit.record(SecurityAuditEvent.builder().eventType(SecurityAuditEventType.SECURITY_AUDIT_LOG_VIEWED).result("SUCCESS").ruleCode("AUDIT_VIEW").build());
    return ResponseEntity.ok(ApiResponse.success(result));
+ }
+
+ @GetMapping("/api/admin/security-audit/critical")
+ @PreAuthorize("hasRole('SUPER_ADMIN')")
+ public ResponseEntity<ApiResponse<Page<AdminAuditView>>> critical(
+  @RequestParam(defaultValue="24") @Min(1) @Max(168) int hours,
+  @RequestParam(defaultValue="0") @Min(0) int page,
+  @RequestParam(defaultValue="50") @Min(1) @Max(100) int size){
+   LocalDateTime since = LocalDateTime.now().minusHours(hours);
+   Page<AdminAuditView> result = repository
+    .findBySeverityAndOccurredAtAfterOrderByOccurredAtDesc(SecuritySeverity.CRITICAL, since, PageRequest.of(page, size))
+    .map(AdminAuditView::from);
+   return ResponseEntity.ok(ApiResponse.success(result));
+ }
+
+ @GetMapping("/api/admin/security-audit/high-risk")
+ @PreAuthorize("hasRole('SUPER_ADMIN')")
+ public ResponseEntity<ApiResponse<Page<AdminAuditView>>> highRisk(
+  @RequestParam(defaultValue="7") @Min(1) @Max(90) int days,
+  @RequestParam(defaultValue="0") @Min(0) int page,
+  @RequestParam(defaultValue="50") @Min(1) @Max(100) int size){
+   LocalDateTime since = LocalDateTime.now().minusDays(days);
+   Page<AdminAuditView> result = repository
+    .findBySeverityInAndOccurredAtAfterOrderByOccurredAtDesc(List.of(SecuritySeverity.CRITICAL, SecuritySeverity.HIGH), since, PageRequest.of(page, size))
+    .map(AdminAuditView::from);
+   return ResponseEntity.ok(ApiResponse.success(result));
+ }
+
+ @GetMapping("/api/admin/security-audit/stats/by-category")
+ @PreAuthorize("hasRole('SUPER_ADMIN')")
+ public ResponseEntity<ApiResponse<Map<String, Long>>> statsByCategory(
+  @RequestParam(defaultValue="7") @Min(1) @Max(90) int days){
+   LocalDateTime since = LocalDateTime.now().minusDays(days);
+   List<Object[]> rows = repository.countGroupedByCategory(since);
+   Map<String, Long> stats = new LinkedHashMap<>();
+   for (Object[] row : rows) stats.put(row[0].toString(), (Long) row[1]);
+   return ResponseEntity.ok(ApiResponse.success(stats));
+ }
+
+ record AdminAuditView(Long id, String eventType, SecuritySeverity severity, String category,
+  Long actorUserId, String actorEmail, String actorRole, String targetResource, String targetId,
+  String result, String errorCode, String clientIp, String requestUri, java.time.LocalDateTime occurredAt) {
+  static AdminAuditView from(SecurityAuditLog l) {
+   return new AdminAuditView(l.getId(), l.getEventType().name(), l.getSeverity(),
+    l.getCategory() != null ? l.getCategory().name() : null,
+    l.getActorUserId(), null, l.getActorRole(), l.getTargetResource(), l.getTargetId(),
+    l.getResult(), l.getErrorCode(), l.getClientIpPrefix(), l.getRequestPath(), l.getOccurredAt());
+  }
  }
 }
