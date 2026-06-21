@@ -40,6 +40,6 @@ jobs:
         run: chmod +x gradlew
 
       - name: 빌드 및 테스트
-        run: ./gradlew build --no-daemon
+        run: ./gradlew test --no-daemon
         env:
           SPRING_PROFILES_ACTIVE: test
