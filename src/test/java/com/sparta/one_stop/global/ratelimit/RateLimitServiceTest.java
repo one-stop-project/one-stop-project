@@ -1,6 +1,7 @@
 package com.sparta.one_stop.global.ratelimit;
 
 import com.sparta.one_stop.global.enums.ratelimit.RateLimitPolicy;
+import com.sparta.one_stop.global.audit.SecurityAuditService;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import org.junit.jupiter.api.DisplayName;
@@ -31,7 +32,7 @@ class RateLimitServiceTest {
         mock(RedisTemplate.class);
 
     private final RateLimitService rateLimitService =
-        new RateLimitService(redisTemplate);
+        new RateLimitService(redisTemplate, mock(SecurityAuditService.class));
 
     @ParameterizedTest
     @EnumSource(

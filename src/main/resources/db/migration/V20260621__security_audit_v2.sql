@@ -1,0 +1,42 @@
+CREATE TABLE IF NOT EXISTS security_audit_logs (
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    event_type VARCHAR(60) NOT NULL,
+    severity VARCHAR(20) NOT NULL,
+    category VARCHAR(20) NOT NULL,
+    actor_user_id BIGINT NULL,
+    actor_role VARCHAR(20) NULL,
+    target_user_id BIGINT NULL,
+    target_resource VARCHAR(30) NULL,
+    target_id VARCHAR(50) NULL,
+    result VARCHAR(20) NOT NULL,
+    error_code VARCHAR(100) NULL,
+    detail_message VARCHAR(1000) NULL,
+    client_ip_encrypted TEXT NULL,
+    client_ip_hash VARCHAR(128) NULL,
+    client_ip_prefix VARCHAR(64) NULL,
+    user_agent_hash VARCHAR(128) NULL,
+    device_id_hash VARCHAR(128) NULL,
+    request_id VARCHAR(100) NULL,
+    rule_code VARCHAR(100) NULL,
+    request_path VARCHAR(200) NULL,
+    suspicious BOOLEAN NOT NULL DEFAULT FALSE,
+    occurred_at DATETIME(6) NOT NULL,
+    created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+    INDEX idx_sal_event_time (event_type, occurred_at),
+    INDEX idx_sal_actor_time (actor_user_id, occurred_at),
+    INDEX idx_sal_ip_hash_time (client_ip_hash, occurred_at),
+    INDEX idx_sal_suspicious_time (suspicious, occurred_at)
+);
+
+CREATE TABLE IF NOT EXISTS user_security_actions (
+    id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    target_user_id BIGINT NOT NULL,
+    admin_user_id BIGINT NOT NULL,
+    action_type VARCHAR(50) NOT NULL,
+    reason_code VARCHAR(100) NOT NULL,
+    reason_detail VARCHAR(1000) NULL,
+    started_at DATETIME(6) NOT NULL,
+    expires_at DATETIME(6) NULL,
+    active BOOLEAN NOT NULL DEFAULT FALSE,
+    INDEX idx_usa_target_active (target_user_id, action_type, active)
+);

@@ -135,7 +135,20 @@ public class AuthService {
         rateLimitService.tryConsume(RateLimitPolicy.LOGIN_PER_GLOBAL, "all");
 
         // 2. 사용자 인증 (AuthQueryService — 트랜잭션 프록시 경유)
-        User user = authQueryService.authenticate(request, dummyHash);
+        User user;
+        try {
+            user = authQueryService.authenticate(request, dummyHash);
+        } catch (CustomException e) {
+            // 정지 계정은 SuspensionPolicyService가 차단 이벤트를 이미 발행한다.
+            if (e.getErrorCode() != ErrorCode.AUTH_005) {
+                securityAuditService.record(SecurityAuditEvent.builder()
+                    .eventType(SecurityAuditEventType.LOGIN_FAILED)
+                    .result("FAILURE").errorCode(e.getErrorCode().getCode())
+                    .clientIp(clientIp).userAgent(userAgent).deviceId(deviceId)
+                    .build());
+            }
+            throw e;
+        }
 
         rateLimitService.tryConsume(RateLimitPolicy.LOGIN_CONCURRENT_PER_ACCOUNT, request.email());
         rateLimitService.tryConsume(RateLimitPolicy.DEVICE_REGISTER_PER_IP, clientIp);
@@ -165,16 +178,19 @@ public class AuthService {
 
         deviceContextService.bindContext(user.getId(), deviceId, userAgent, clientIp);
 
+        securityAuditService.record(SecurityAuditEvent.builder()
+            .eventType(SecurityAuditEventType.LOGIN_SUCCESS)
+            .actorUserId(user.getId()).result("SUCCESS")
+            .clientIp(clientIp).userAgent(userAgent).deviceId(deviceId)
+            .build());
+
         // 새 기기 감지 시 보안 이벤트 기록
         if (result.isNewDevice()) {
             securityAuditService.record(SecurityAuditEvent.builder()
-                .eventType(SecurityAuditEventType.LOGIN_SUCCESS)
+                .eventType(SecurityAuditEventType.NEW_DEVICE_REGISTERED)
                 .actorUserId(user.getId())
-                .actorEmail(user.getEmail())
                 .result("SUCCESS")
-                .metadata(String.format(
-                    "{\"newDevice\":true,\"deviceId\":\"%s\",\"currentDeviceCount\":%d}",
-                    deviceId, result.currentSize()))
+                .deviceId(deviceId).clientIp(clientIp).userAgent(userAgent)
                 .build());
         }
 
@@ -183,11 +199,8 @@ public class AuthService {
             securityAuditService.record(SecurityAuditEvent.builder()
                 .eventType(SecurityAuditEventType.DEVICE_LIMIT_EXCEEDED)
                 .actorUserId(user.getId())
-                .actorEmail(user.getEmail())
                 .result("EVICTED")
-                .metadata(String.format(
-                    "{\"evictedDeviceId\":\"%s\",\"newDeviceId\":\"%s\"}",
-                    result.evictedDeviceId(), deviceId))
+                .deviceId(result.evictedDeviceId()).clientIp(clientIp).userAgent(userAgent)
                 .build());
 
             // 추방된 기기의 RT 강제 삭제 (이미 deviceLimitService에서 ZSET 추방되어도
@@ -285,10 +298,13 @@ public class AuthService {
                 userId, deviceId);
 
             securityAuditService.record(SecurityAuditEvent.builder()
-                .eventType(SecurityAuditEventType.TOKEN_REFRESH_FAILED)
+                .eventType(SecurityAuditEventType.REFRESH_TOKEN_REUSE_DETECTED)
                 .actorUserId(userId)
                 .result("FAILURE")
-                .errorMessage("CAS 회전 실패 (동시성 충돌 또는 탈취 의심)")
+                .ruleCode("REFRESH_TOKEN_REUSE")
+                .errorMessage("Refresh token rotation mismatch")
+                .clientIp(clientIp).userAgent(userAgent).deviceId(deviceId)
+                .suspicious(true)
                 .build());
 
             throw new CustomException(ErrorCode.AUTH_007);
@@ -404,18 +420,15 @@ public class AuthService {
 
     // ━━━ POST /api/auth/oauth2/exchange ━━━
     public TokenRefreshResponse exchangeOAuth2Code(String code, String deviceIdCookie) {
-        RedisTokenService.OAuth2Handoff handoff = redisTokenService.consumeOAuth2Code(code);
+        if (deviceIdCookie == null || deviceIdCookie.isBlank()) {
+            throw new CustomException(ErrorCode.AUTH_010, "유효하지 않거나 만료된 인증 코드입니다.");
+        }
+        RedisTokenService.OAuth2Handoff handoff = redisTokenService.consumeOAuth2Code(code, deviceIdCookie);
         if (handoff == null) {
             throw new CustomException(ErrorCode.AUTH_010, "유효하지 않거나 만료된 인증 코드입니다.");
         }
-
-        // (선택) device_id 바인딩 — 아래 "남는 판단" 참고. cross-origin이면 주의사항 있음.
-        // if (deviceIdCookie == null || !handoff.deviceId().equals(deviceIdCookie)) {
-        //     throw new CustomException(ErrorCode.AUTH_006, "인증 코드와 기기가 일치하지 않습니다.");
-        // }
 
         return TokenRefreshResponse.of(handoff.accessToken(),
             jwtTokenProvider.getAccessTokenExpirySeconds());
     }
 }
-

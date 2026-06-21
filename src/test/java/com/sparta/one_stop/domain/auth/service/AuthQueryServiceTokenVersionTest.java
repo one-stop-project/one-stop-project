@@ -1,6 +1,7 @@
 package com.sparta.one_stop.domain.auth.service;
 
 import com.sparta.one_stop.domain.user.repository.UserRepository;
+import com.sparta.one_stop.domain.admin.security.SuspensionPolicyService;
 import com.sparta.one_stop.domain.user.service.UserStatusCacheService;
 import com.sparta.one_stop.global.exception.CustomException;
 import org.junit.jupiter.api.Test;
@@ -18,10 +19,11 @@ class AuthQueryServiceTokenVersionTest {
     @Mock UserRepository userRepository;
     @Mock PasswordEncoder passwordEncoder;
     @Mock UserStatusCacheService userStatusCacheService;
+    @Mock SuspensionPolicyService suspensionPolicyService;
 
     @Test
     void access_token_issued_before_password_change_is_rejected() {
-        AuthQueryService service = new AuthQueryService(userRepository, passwordEncoder, userStatusCacheService);
+        AuthQueryService service = new AuthQueryService(userRepository, passwordEncoder, userStatusCacheService, suspensionPolicyService);
         when(userStatusCacheService.getTokenVersion(1L)).thenReturn(2);
 
         assertThatThrownBy(() -> service.verifyTokenVersion(1L, 1))
