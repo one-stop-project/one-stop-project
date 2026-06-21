@@ -3,15 +3,18 @@ package com.sparta.one_stop.domain.product.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
 import com.sparta.one_stop.domain.product.dto.request.ProductUpdateRequest;
 import com.sparta.one_stop.domain.product.dto.response.ProductImageAddResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductImageDeleteResponse;
+import com.sparta.one_stop.domain.product.dto.response.ProductImageResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductDetailResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductImageThumbnailResponse;
 import com.sparta.one_stop.domain.product.dto.response.ProductItemResponse;
@@ -366,6 +369,47 @@ class SellerProductServiceTest {
         }
 
         @Test
+        @DisplayName("추가 이미지 목록이 저장 시 부여된 imageId·display_order·대표여부와 함께 반환된다")
+        void addImages_returnsAddedImagesWithGeneratedIds() {
+            // given
+            Seller seller = approvedSeller(SELLER_ID);
+            Product product = createProduct(seller, ProductStatus.APPROVED);
+            ProductImage img1 = createImage(1L, product, 1, "url1");
+            ProductImage img2 = createImage(2L, product, 2, "url2");
+            mockSellerAndProduct(seller, product);
+            mockActiveImages(List.of(img1, img2));
+            given(imageStorage.store(any(), any())).willReturn("stored-3", "stored-4");
+            // 영속화 시 IDENTITY id가 채워지는 동작을 시뮬레이션
+            given(productImageRepository.saveAll(anyList())).willAnswer(invocation -> {
+                List<ProductImage> saved = invocation.getArgument(0);
+                long generatedId = 100L;
+                for (ProductImage image : saved) {
+                    ReflectionTestUtils.setField(image, "id", generatedId++);
+                }
+                return saved;
+            });
+
+            // when
+            ProductImageAddResponse response = sellerProductService.addImages(
+                    SELLER_USER_ID, PRODUCT_ID, imageFiles(2));
+
+            // then — 저장 시 부여된 imageId가 응답에 실리고, display_order 3,4 / 대표 아님 / 저장 URL로 반환
+            assertThat(response.getAddedImages()).hasSize(2);
+            assertThat(response.getAddedImages())
+                    .extracting(ProductImageResponse::getImageId)
+                    .containsExactly(100L, 101L);
+            assertThat(response.getAddedImages())
+                    .extracting(ProductImageResponse::getDisplayOrder)
+                    .containsExactly(3, 4);
+            assertThat(response.getAddedImages())
+                    .extracting(ProductImageResponse::getImageUrl)
+                    .containsExactly("stored-3", "stored-4");
+            assertThat(response.getAddedImages())
+                    .allSatisfy(img -> assertThat(img.isThumbnail()).isFalse());
+            verify(productImageRepository).saveAll(anyList());
+        }
+
+        @Test
         @DisplayName("추가 후 ACTIVE 이미지가 10장을 초과하면 PRODUCT_006 예외가 발생한다")
         void addImages_exceedsMax_throwsProduct006() {
             // given
@@ -679,6 +723,98 @@ class SellerProductServiceTest {
             assertThat(response.getProductId()).isEqualTo(PRODUCT_ID);
             assertThat(response.getStatus()).isEqualTo(ProductStatus.APPROVE_REQUESTED);
             assertThat(response.getShopName()).isEqualTo("테스트샵");
+        }
+
+        @Test
+        @DisplayName("반려된 상품은 최신 반려 사유가 응답에 포함된다")
+        void getMyProductDetail_rejectedProduct_includesRejectReason() {
+            // given
+            Seller seller = approvedSeller(SELLER_ID);
+            Product product = createProduct(seller, ProductStatus.REJECTED);
+            given(sellerRepository.findByUserId(SELLER_USER_ID)).willReturn(Optional.of(seller));
+            given(productRepository.findWithCollectionsById(PRODUCT_ID)).willReturn(Optional.of(product));
+            given(productRepository.findLatestRejectReason(eq(PRODUCT_ID), any()))
+                    .willReturn(List.of("대표 이미지가 상품과 무관합니다"));
+
+            // when
+            ProductDetailResponse response =
+                    sellerProductService.getMyProductDetail(SELLER_USER_ID, PRODUCT_ID);
+
+            // then
+            assertThat(response.getStatus()).isEqualTo(ProductStatus.REJECTED);
+            assertThat(response.getRejectReason()).isEqualTo("대표 이미지가 상품과 무관합니다");
+        }
+
+        @Test
+        @DisplayName("반려 상품이지만 반려 이력이 없으면 rejectReason은 null이다")
+        void getMyProductDetail_rejectedButNoHistory_rejectReasonNull() {
+            // given
+            Seller seller = approvedSeller(SELLER_ID);
+            Product product = createProduct(seller, ProductStatus.REJECTED);
+            given(sellerRepository.findByUserId(SELLER_USER_ID)).willReturn(Optional.of(seller));
+            given(productRepository.findWithCollectionsById(PRODUCT_ID)).willReturn(Optional.of(product));
+            given(productRepository.findLatestRejectReason(eq(PRODUCT_ID), any())).willReturn(List.of());
+
+            // when
+            ProductDetailResponse response =
+                    sellerProductService.getMyProductDetail(SELLER_USER_ID, PRODUCT_ID);
+
+            // then
+            assertThat(response.getStatus()).isEqualTo(ProductStatus.REJECTED);
+            assertThat(response.getRejectReason()).isNull();
+        }
+
+        @Test
+        @DisplayName("반려가 아닌 상품은 반려 사유를 조회하지 않고 rejectReason은 null이다")
+        void getMyProductDetail_nonRejected_noReasonLookup() {
+            // given
+            Seller seller = approvedSeller(SELLER_ID);
+            Product product = createProduct(seller, ProductStatus.APPROVED);
+            given(sellerRepository.findByUserId(SELLER_USER_ID)).willReturn(Optional.of(seller));
+            given(productRepository.findWithCollectionsById(PRODUCT_ID)).willReturn(Optional.of(product));
+
+            // when
+            ProductDetailResponse response =
+                    sellerProductService.getMyProductDetail(SELLER_USER_ID, PRODUCT_ID);
+
+            // then
+            assertThat(response.getRejectReason()).isNull();
+            verify(productRepository, never()).findLatestRejectReason(any(), any());
+        }
+
+        @Test
+        @DisplayName("이미지가 imageId·대표여부와 함께 display_order 순으로 노출되고 삭제 이미지는 제외된다")
+        void getMyProductDetail_exposesImagesWithIdAndThumbnail() {
+            // given
+            Seller seller = approvedSeller(SELLER_ID);
+            Product product = createProduct(seller, ProductStatus.APPROVED);
+            // 순서를 섞어 등록하고 삭제 이미지를 끼워 정렬·필터를 검증한다
+            ProductImage img2 = createImage(2L, product, 2, "url2");
+            ProductImage img1 = createImage(1L, product, 1, "url1");
+            ProductImage deleted = createImage(3L, product, 3, "url3");
+            deleted.delete();
+            product.addProductImage(img2);
+            product.addProductImage(img1);
+            product.addProductImage(deleted);
+            given(sellerRepository.findByUserId(SELLER_USER_ID)).willReturn(Optional.of(seller));
+            given(productRepository.findWithCollectionsById(PRODUCT_ID)).willReturn(Optional.of(product));
+
+            // when
+            ProductDetailResponse response =
+                    sellerProductService.getMyProductDetail(SELLER_USER_ID, PRODUCT_ID);
+
+            // then — 활성 이미지만 display_order 오름차순, imageId·대표여부 포함
+            assertThat(response.getImages()).hasSize(2);
+            ProductImageResponse first = response.getImages().get(0);
+            ProductImageResponse second = response.getImages().get(1);
+            assertThat(first.getImageId()).isEqualTo(1L);
+            assertThat(first.getImageUrl()).isEqualTo("url1");
+            assertThat(first.getDisplayOrder()).isEqualTo(1);
+            assertThat(first.isThumbnail()).isTrue();
+            assertThat(second.getImageId()).isEqualTo(2L);
+            assertThat(second.isThumbnail()).isFalse();
+            // imageUrls(URL 문자열)도 병행 유지
+            assertThat(response.getImageUrls()).containsExactly("url1", "url2");
         }
 
         @Test

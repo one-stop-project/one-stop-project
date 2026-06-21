@@ -42,6 +42,7 @@ import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -71,6 +72,7 @@ import static org.assertj.core.api.Assertions.assertThat;
  * - 멀티스레드 테스트에서는 테스트 메서드 트랜잭션 롤백과 서비스 트랜잭션이 충돌할 수 있다.
  * - 따라서 IntegrationTestSupport의 기본 @Transactional을 비활성화하고, 테스트 데이터는 @AfterEach에서 수동 정리한다.
  */
+@Tag("integration")
 @Transactional(propagation = Propagation.NOT_SUPPORTED)
 class PaymentServiceConcurrencyIntegrationTest extends IntegrationTestSupport {
 

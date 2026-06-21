@@ -1,5 +1,6 @@
 package com.sparta.one_stop.integration;
 
+import org.junit.jupiter.api.Tag;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Bean;
@@ -35,6 +36,7 @@ import org.testcontainers.containers.MySQLContainer;
  * - Redis 데이터는 트랜잭션 롤백 대상이 아니므로, Redis를 사용하는 테스트에서는 테스트별 key를 직접 삭제하거나
  *   고유한 guestCartId/key를 사용해야 한다.
  */
+@Tag("integration")
 @SpringBootTest(properties = {
     // RedisTemplate이 RedissonConnectionFactory를 사용하지 않도록 Redisson 자동 구성을 제외한다.
     "spring.autoconfigure.exclude=org.redisson.spring.starter.RedissonAutoConfigurationV2"
