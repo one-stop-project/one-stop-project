@@ -23,16 +23,11 @@ public class SuspensionPolicyService {
 
     @Transactional
     public void validateOrRelease(User user) {
-        if (!user.isSuspended()) {
-            return;
-        }
+        if (!user.isSuspended()) return;
 
-        // 관리자 재정지와 자동 해제가 교차하지 않도록 관리자 조치와 동일하게 User를 먼저 잠근다.
         User lockedUser = users.findByIdForUpdate(user.getId())
             .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_001));
-        if (!lockedUser.isSuspended()) {
-            return;
-        }
+        if (!lockedUser.isSuspended()) return;
 
         var activeSuspension = actions.findActiveSuspendAction(lockedUser.getId());
         if (activeSuspension.isPresent()
