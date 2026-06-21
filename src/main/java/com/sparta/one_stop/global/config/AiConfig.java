@@ -67,6 +67,7 @@ public class AiConfig {
     }
 
     private void removeFieldExceptToolCalls(JsonNode node, String fieldName) {
+        if (node == null) return;
         if (node.isObject()) {
             ObjectNode obj = (ObjectNode) node;
             obj.remove(fieldName);
