@@ -113,7 +113,7 @@ public class AiConfig {
                 }
             }
         } catch (Exception e) {
-            log.debug("[Gemini] thought_signature extraction failed", e);
+            log.warn("[Gemini] thought_signature extraction failed", e);
         }
         return signatures;
     }
