@@ -7,7 +7,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.RedisSystemException;
 import org.springframework.data.redis.core.RedisTemplate;
-import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
@@ -17,10 +16,10 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import static com.sparta.one_stop.global.common.RedisKeyConstants.BLACKLIST_PREFIX;
+import static com.sparta.one_stop.global.common.RedisKeyConstants.DEVICE_ZSET_PREFIX;
 import static com.sparta.one_stop.global.common.RedisKeyConstants.REFRESH_TOKEN_PREFIX;
 import static com.sparta.one_stop.global.common.RedisKeyConstants.USER_TOKEN_CUTOFF_PREFIX;
 
@@ -39,6 +38,25 @@ public class RedisTokenService {
             "end";
     private static final RedisScript<Long> ROTATE_RT =
         new DefaultRedisScript<>(ROTATE_RT_SCRIPT, Long.class);
+    private static final String DELETE_ALL_USER_SESSIONS_SCRIPT =
+        "local devices = redis.call('ZRANGE', KEYS[1], 0, -1) " +
+            "local deleted = 0 " +
+            "for _, deviceId in ipairs(devices) do " +
+            "  deleted = deleted + redis.call('DEL', ARGV[1] .. deviceId) " +
+            "end " +
+            "redis.call('DEL', KEYS[1]) " +
+            "return deleted";
+    private static final RedisScript<Long> DELETE_ALL_USER_SESSIONS =
+        new DefaultRedisScript<>(DELETE_ALL_USER_SESSIONS_SCRIPT, Long.class);
+    private static final String CONSUME_OAUTH2_CODE_SCRIPT =
+        "local value = redis.call('GET', KEYS[1]) " +
+            "if not value then return nil end " +
+            "local expectedPrefix = ARGV[1] .. ':' " +
+            "if string.sub(value, 1, string.len(expectedPrefix)) ~= expectedPrefix then return nil end " +
+            "redis.call('DEL', KEYS[1]) " +
+            "return value";
+    private static final RedisScript<String> CONSUME_OAUTH2_CODE =
+        new DefaultRedisScript<>(CONSUME_OAUTH2_CODE_SCRIPT, String.class);
     // ═══════════ OAuth2 일회용 핸드오프 code ═══════════
     private static final String OAUTH2_CODE_PREFIX = "oauth2:code:"; // 일관성 위해 RedisKeyConstants로 옮겨도 됨
     private static final long OAUTH2_CODE_TTL_SECONDS = 60;
@@ -54,8 +72,6 @@ public class RedisTokenService {
     // ═══════════════════════════════════════════════════════════
     //  Refresh Token 관리
     // ═══════════════════════════════════════════════════════════
-    private final DeviceLimitService deviceLimitService;
-
     private String rtKey(Long userId, String deviceId) {
         return REFRESH_TOKEN_PREFIX + userId + ":" + deviceId;
     }
@@ -147,14 +163,11 @@ public class RedisTokenService {
      */
     public long deleteAllRefreshTokensByUserId(Long userId) {
         try {
-            Set<ZSetOperations.TypedTuple<String>> devices = deviceLimitService.listDevices(userId);
-            List<String> refreshKeys = devices == null ? List.of() : devices.stream()
-                .map(ZSetOperations.TypedTuple::getValue)
-                .filter(java.util.Objects::nonNull)
-                .map(deviceId -> rtKey(userId, deviceId))
-                .toList();
-            Long deleted = refreshKeys.isEmpty() ? 0L : redisTemplate.delete(refreshKeys);
-            deviceLimitService.removeAllDevices(userId);
+            Long deleted = redisTemplate.execute(
+                DELETE_ALL_USER_SESSIONS,
+                List.of(DEVICE_ZSET_PREFIX + userId),
+                REFRESH_TOKEN_PREFIX + userId + ":"
+            );
             return deleted == null ? 0L : deleted;
         } catch (RedisConnectionFailureException | RedisSystemException e) {
             log.error("전체 Refresh Token 삭제 실패: userId={}", userId, e);
@@ -250,11 +263,15 @@ public class RedisTokenService {
         }
     }
 
-    /** code 원자적 1회 소비(GETDEL). 없거나 만료면 null. ※ Redis 6.2+ / Spring Data Redis 2.6+ */
-    public OAuth2Handoff consumeOAuth2Code(String code) {
+    /** code와 device_id가 일치할 때만 원자적으로 1회 소비한다. */
+    public OAuth2Handoff consumeOAuth2Code(String code, String expectedDeviceId) {
         String value;
         try {
-            value = redisTemplate.opsForValue().getAndDelete(oauth2CodeKey(code));
+            value = redisTemplate.execute(
+                CONSUME_OAUTH2_CODE,
+                List.of(oauth2CodeKey(code)),
+                expectedDeviceId
+            );
         } catch (RedisConnectionFailureException | RedisSystemException e) {
             log.error("Redis 통신 장애 (OAuth2 code 소비 실패)", e);
             throw new CustomException(ErrorCode.COMMON_008);

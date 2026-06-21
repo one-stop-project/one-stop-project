@@ -14,9 +14,12 @@ import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.HexFormat;
+import java.util.regex.Pattern;
 
 @Component
 public class SecurityAuditCryptoService {
+    private static final int MIN_SECRET_BYTES = 32;
+    private static final Pattern NUMERIC_IPV6 = Pattern.compile("[0-9a-fA-F:.]+");
     private final byte[] hmacSecret;
     private final SecretKeySpec aesKey;
     private final String keyVersion;
@@ -27,8 +30,8 @@ public class SecurityAuditCryptoService {
         @Value("${security.audit.aes-secret}") String aesSecret,
         @Value("${security.audit.aes-key-version:v1}") String keyVersion
     ) {
-        if (!StringUtils.hasText(hmacSecret) || !StringUtils.hasText(aesSecret))
-            throw new IllegalStateException("보안 감사용 HMAC/AES secret은 필수입니다");
+        validateSecret("security.audit.hmac-secret", hmacSecret);
+        validateSecret("security.audit.aes-secret", aesSecret);
         this.hmacSecret = hmacSecret.getBytes(StandardCharsets.UTF_8);
         this.aesKey = new SecretKeySpec(digest(aesSecret), "AES");
         this.keyVersion = keyVersion;
@@ -58,7 +61,8 @@ public class SecurityAuditCryptoService {
     public String toIpPrefix(String ip) {
         if (!usable(ip)) return null;
         try {
-            byte[] bytes = InetAddress.getByName(ip).getAddress();
+            byte[] bytes = parseNumericIp(ip);
+            if (bytes == null) return null;
             if (bytes.length == 4)
                 return (bytes[0]&255)+"."+(bytes[1]&255)+"."+(bytes[2]&255)+".0/24";
             for (int i=8; i<bytes.length; i++) bytes[i]=0;
@@ -67,6 +71,27 @@ public class SecurityAuditCryptoService {
     }
 
     private boolean usable(String value) { return StringUtils.hasText(value) && !"SYSTEM".equals(value); }
+    private void validateSecret(String propertyName, String secret) {
+        if (!StringUtils.hasText(secret) || secret.getBytes(StandardCharsets.UTF_8).length < MIN_SECRET_BYTES) {
+            throw new IllegalStateException(propertyName + " must contain at least 32 UTF-8 bytes");
+        }
+    }
+    private byte[] parseNumericIp(String ip) throws Exception {
+        if (ip.indexOf(':') >= 0) {
+            if (!NUMERIC_IPV6.matcher(ip).matches()) return null;
+            return InetAddress.getByName(ip).getAddress();
+        }
+        String[] parts = ip.split("\\.", -1);
+        if (parts.length != 4) return null;
+        byte[] bytes = new byte[4];
+        for (int i = 0; i < parts.length; i++) {
+            if (parts[i].isEmpty() || parts[i].length() > 3 || !parts[i].chars().allMatch(Character::isDigit)) return null;
+            int value = Integer.parseInt(parts[i]);
+            if (value > 255) return null;
+            bytes[i] = (byte) value;
+        }
+        return bytes;
+    }
     private byte[] digest(String value) {
         try { return MessageDigest.getInstance("SHA-256").digest(value.getBytes(StandardCharsets.UTF_8)); }
         catch (Exception e) { throw new IllegalStateException(e); }

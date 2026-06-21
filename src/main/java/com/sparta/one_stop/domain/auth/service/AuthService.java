@@ -200,7 +200,7 @@ public class AuthService {
                 .eventType(SecurityAuditEventType.DEVICE_LIMIT_EXCEEDED)
                 .actorUserId(user.getId())
                 .result("EVICTED")
-                .deviceId(deviceId).clientIp(clientIp).userAgent(userAgent)
+                .deviceId(result.evictedDeviceId()).clientIp(clientIp).userAgent(userAgent)
                 .build());
 
             // 추방된 기기의 RT 강제 삭제 (이미 deviceLimitService에서 ZSET 추방되어도
@@ -420,15 +420,13 @@ public class AuthService {
 
     // ━━━ POST /api/auth/oauth2/exchange ━━━
     public TokenRefreshResponse exchangeOAuth2Code(String code, String deviceIdCookie) {
-        RedisTokenService.OAuth2Handoff handoff = redisTokenService.consumeOAuth2Code(code);
+        if (deviceIdCookie == null || deviceIdCookie.isBlank()) {
+            throw new CustomException(ErrorCode.AUTH_010, "유효하지 않거나 만료된 인증 코드입니다.");
+        }
+        RedisTokenService.OAuth2Handoff handoff = redisTokenService.consumeOAuth2Code(code, deviceIdCookie);
         if (handoff == null) {
             throw new CustomException(ErrorCode.AUTH_010, "유효하지 않거나 만료된 인증 코드입니다.");
         }
-
-        // (선택) device_id 바인딩 — 아래 "남는 판단" 참고. cross-origin이면 주의사항 있음.
-        // if (deviceIdCookie == null || !handoff.deviceId().equals(deviceIdCookie)) {
-        //     throw new CustomException(ErrorCode.AUTH_006, "인증 코드와 기기가 일치하지 않습니다.");
-        // }
 
         return TokenRefreshResponse.of(handoff.accessToken(),
             jwtTokenProvider.getAccessTokenExpirySeconds());
