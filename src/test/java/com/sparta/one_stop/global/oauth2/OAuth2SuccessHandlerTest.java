@@ -84,7 +84,7 @@ class OAuth2SuccessHandlerTest {
             cookieUtil
         );
 
-        ReflectionTestUtils.setField(handler, "successRedirectUri", "https://onestop1.duckdns.org/oauth2/success");
+        ReflectionTestUtils.setField(handler, "successRedirectUri", "https://onestop1.duckdns.org/oauth2/callback");
         ReflectionTestUtils.setField(handler, "allowedRedirectHosts", "onestop1.duckdns.org");
         ReflectionTestUtils.setField(handler, "exposeCodeInRedirect", true);
 
@@ -153,7 +153,7 @@ class OAuth2SuccessHandlerTest {
         );
 
         assertThat(response.getRedirectedUrl())
-            .startsWith("https://onestop1.duckdns.org/oauth2/success?code=");
+            .startsWith("https://onestop1.duckdns.org/oauth2/callback?code=");
     }
 
     @Test

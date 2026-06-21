@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.RedisSystemException;
 import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.data.redis.core.ZSetOperations;
 import org.springframework.data.redis.core.script.DefaultRedisScript;
 import org.springframework.data.redis.core.script.RedisScript;
 import org.springframework.stereotype.Service;
@@ -16,6 +17,7 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import static com.sparta.one_stop.global.common.RedisKeyConstants.BLACKLIST_PREFIX;
@@ -144,8 +146,20 @@ public class RedisTokenService {
      * @return 삭제된 RT 개수
      */
     public long deleteAllRefreshTokensByUserId(Long userId) {
-        // DeviceLimitService가 ZSET 인덱스로 일괄 삭제 (SCAN 불필요)
-        return deviceLimitService.removeAllDevices(userId);
+        try {
+            Set<ZSetOperations.TypedTuple<String>> devices = deviceLimitService.listDevices(userId);
+            List<String> refreshKeys = devices == null ? List.of() : devices.stream()
+                .map(ZSetOperations.TypedTuple::getValue)
+                .filter(java.util.Objects::nonNull)
+                .map(deviceId -> rtKey(userId, deviceId))
+                .toList();
+            Long deleted = refreshKeys.isEmpty() ? 0L : redisTemplate.delete(refreshKeys);
+            deviceLimitService.removeAllDevices(userId);
+            return deleted == null ? 0L : deleted;
+        } catch (RedisConnectionFailureException | RedisSystemException e) {
+            log.error("전체 Refresh Token 삭제 실패: userId={}", userId, e);
+            throw new CustomException(ErrorCode.COMMON_008);
+        }
     }
 
     public void addToBlacklist(String jti, long expirySeconds) {

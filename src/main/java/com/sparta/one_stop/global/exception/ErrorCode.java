@@ -361,7 +361,14 @@ public enum ErrorCode {
     ADMIN_016(HttpStatus.BAD_REQUEST, "ADMIN_016", "비활성(정지/탈퇴) 상태의 회원은 관리자로 승격할 수 없습니다."),
     ADMIN_017(HttpStatus.BAD_REQUEST, "ADMIN_017", "승인 요청 상태의 상품만 승인/반려할 수 있습니다"),
     ADMIN_018(HttpStatus.BAD_REQUEST, "ADMIN_018", "승인 대기 상태인 판매자만 승인/반려할 수 있습니다"),
-    ADMIN_019(HttpStatus.BAD_REQUEST, "ADMIN_019", "이미 정지된 판매자입니다");
+    ADMIN_019(HttpStatus.BAD_REQUEST, "ADMIN_019", "이미 정지된 판매자입니다"),
+
+    // ===== SECURITY - 보안 조치 =====
+    SECURITY_001(HttpStatus.BAD_REQUEST, "SECURITY_001", "지원하지 않는 보안 조치입니다"),
+    SECURITY_002(HttpStatus.NOT_FOUND, "SECURITY_002", "조치 대상 사용자를 찾을 수 없습니다"),
+    SECURITY_003(HttpStatus.FORBIDDEN, "SECURITY_003", "보안 조치 권한이 없습니다"),
+    SECURITY_004(HttpStatus.BAD_REQUEST, "SECURITY_004", "자기 자신은 정지할 수 없습니다"),
+    SECURITY_005(HttpStatus.BAD_REQUEST, "SECURITY_005", "조치 사유에 민감정보를 포함할 수 없습니다");
     private final HttpStatus status;
     private final String code;
     private final String message;

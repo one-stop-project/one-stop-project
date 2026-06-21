@@ -1,6 +1,7 @@
 package com.sparta.one_stop.domain.auth.service;
 
 import com.sparta.one_stop.domain.auth.dto.request.LoginRequest;
+import com.sparta.one_stop.domain.admin.security.SuspensionPolicyService;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.UserRepository;
 import com.sparta.one_stop.domain.user.service.UserStatusCacheService;
@@ -44,6 +45,7 @@ public class AuthQueryService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final UserStatusCacheService userStatusCacheService;
+    private final SuspensionPolicyService suspensionPolicyService;
 
     /**
      * 사용자 인증 — BCrypt 검증 + 활성 상태 확인
@@ -58,7 +60,7 @@ public class AuthQueryService {
      * @throws CustomException AUTH_004 (이메일 or 비밀번호 불일치)
      * @throws CustomException AUTH_005 (정지) / AUTH_006 (탈퇴)
      */
-    @Transactional(readOnly = true)
+    @Transactional
     public User authenticate(LoginRequest request, String dummyHash) {
         User user = userRepository.findByEmail(request.email()).orElse(null);
 
@@ -74,6 +76,7 @@ public class AuthQueryService {
             throw new CustomException(ErrorCode.AUTH_004);
         }
 
+        suspensionPolicyService.validateOrRelease(user);
         // Entity가 자기 자신을 검증 (DDD)
         user.verifyActive();
 
@@ -86,10 +89,11 @@ public class AuthQueryService {
      * v1 대비 개선:
      *   - findById 2회 호출 → 1회로 통합 (refresh 시 DB 부하 50% 감소)
      */
-    @Transactional(readOnly = true)
+    @Transactional
     public User findActiveUser(Long userId) {
         User user = userRepository.findById(userId)
             .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_001));
+        suspensionPolicyService.validateOrRelease(user);
         user.verifyActive();
         return user;
     }

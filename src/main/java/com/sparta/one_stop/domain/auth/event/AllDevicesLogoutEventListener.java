@@ -1,6 +1,5 @@
 package com.sparta.one_stop.domain.auth.event;
 
-import com.sparta.one_stop.domain.auth.service.DeviceLimitService;
 import com.sparta.one_stop.domain.auth.service.RedisTokenService;
 import com.sparta.one_stop.domain.user.service.UserStatusCacheService;
 import com.sparta.one_stop.global.security.JwtTokenProvider;
@@ -28,7 +27,6 @@ import org.springframework.transaction.event.TransactionalEventListener;
 @RequiredArgsConstructor
 public class AllDevicesLogoutEventListener {
 
-    private final DeviceLimitService deviceLimitService;
     private final RedisTokenService redisTokenService;
     private final JwtTokenProvider jwtTokenProvider;
     private final UserStatusCacheService userStatusCacheService;
@@ -99,7 +97,7 @@ public class AllDevicesLogoutEventListener {
 
     private void removeAllDeviceSessions(Long userId, String reason) {
         try {
-            long deletedCount = deviceLimitService.removeAllDevices(userId);
+            long deletedCount = redisTokenService.deleteAllRefreshTokensByUserId(userId);
             log.info(
                 "[ALL_DEVICE_LOGOUT] 전체 기기 세션 제거 완료: userId={}, reason={}, deletedCount={}",
                 userId,

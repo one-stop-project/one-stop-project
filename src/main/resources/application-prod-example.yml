@@ -87,6 +87,12 @@ jwt:
   access-token-expiry: 15m
   refresh-token-expiry: 14d
 
+security:
+  audit:
+    hmac-secret: ${SECURITY_AUDIT_HMAC_SECRET}
+    aes-key-version: ${SECURITY_AUDIT_AES_KEY_VERSION:v1}
+    aes-secret: ${SECURITY_AUDIT_AES_SECRET}
+
 springdoc:
   swagger-ui:
     path: /swagger-ui.html
@@ -116,8 +122,9 @@ app:
   # OAuth2 서버 배포 환경 설정
   # localhost:3001은 로컬 프론트 개발용이므로 prod 설정에 넣지 않는다.
   oauth2:
-    success-redirect-uri: ${OAUTH2_SUCCESS_REDIRECT_URI:https://onestop1.duckdns.org/oauth2/success}
+    success-redirect-uri: ${OAUTH2_SUCCESS_REDIRECT_URI:https://onestop1.duckdns.org/oauth2/callback}
     failure-redirect-uri: ${OAUTH2_FAILURE_REDIRECT_URI:https://onestop1.duckdns.org/login}
+    expose-code-in-redirect: ${OAUTH2_EXPOSE_CODE_IN_REDIRECT:true}
     cookie-secure: ${OAUTH2_COOKIE_SECURE:true}
 
   # 서버 부하 테스트/시연 전용 포인트 충전 API
