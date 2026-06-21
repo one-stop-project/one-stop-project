@@ -49,6 +49,7 @@ public enum ErrorCode {
     AUTH_017(HttpStatus.BAD_REQUEST, "AUTH_017", "지원하지 않는 OAuth2 제공자입니다"),
     AUTH_018(HttpStatus.UNAUTHORIZED, "AUTH_018", "OAuth2 인증 처리에 실패했습니다"),
     AUTH_019(HttpStatus.CONFLICT, "AUTH_019", "이미 다른 방법으로 가입된 이메일입니다"),
+    AUTH_020(HttpStatus.UNAUTHORIZED, "AUTH_020", "기기 인증 정보가 일치하지 않습니다. 다시 로그인해주세요"),
 
 
     // ===== MEMBER - 회원 =====

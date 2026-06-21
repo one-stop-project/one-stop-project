@@ -258,7 +258,7 @@ public class AuthService {
                 .errorMessage(String.format(
                     "deviceId 불일치: token=%s, cookie=%s", tokenDeviceId, deviceId))
                 .build());
-            throw new CustomException(ErrorCode.AUTH_006);
+            throw new CustomException(ErrorCode.AUTH_020);
         }
 
         // 4. 사용자 조회 + 활성 검증
@@ -278,7 +278,7 @@ public class AuthService {
                 .metadata(String.format("{\"deviceId\":\"%s\"}", deviceId))
                 .build());
 
-            throw new CustomException(ErrorCode.AUTH_006, "등록되지 않은 기기");
+            throw new CustomException(ErrorCode.AUTH_020, "등록되지 않은 기기입니다. 다시 로그인해주세요.");
         }
 
         User user = authQueryService.findActiveUser(userId);
@@ -306,6 +306,11 @@ public class AuthService {
                 .clientIp(clientIp).userAgent(userAgent).deviceId(deviceId)
                 .suspicious(true)
                 .build());
+
+            // 토큰 패밀리 재사용 가능성이 있으므로 DB tokenVersion을 올린 뒤,
+            // 커밋 이후 전체 기기 세션을 제거한다. AuthService는 비트랜잭션이므로
+            // AFTER_COMMIT 이벤트를 직접 발행하지 않고 Command Service를 경유한다.
+            authCommandService.invalidateTokensForRefreshReuse(userId);
 
             throw new CustomException(ErrorCode.AUTH_007);
         }

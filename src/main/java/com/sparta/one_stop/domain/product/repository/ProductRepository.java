@@ -69,6 +69,7 @@ public interface ProductRepository extends JpaRepository<Product, Long>, Product
     @Query("SELECT p FROM Product p JOIN p.seller s " +
            "WHERE p.id <> :excludeId " +
            "AND p.status = :productStatus AND s.status = :sellerStatus " +
+           "AND s.user.status = com.sparta.one_stop.global.enums.user.UserStatus.ACTIVE " +
            "AND EXISTS (SELECT 1 FROM ProductCategoryMapping m WHERE m.product = p AND m.category.id IN :categoryIds) " +
            "AND EXISTS (SELECT 1 FROM ProductItem i WHERE i.product = p AND i.status = :itemStatus AND i.stock > 0) " +
            "ORDER BY (p.viewCount * 0.7 + p.salesCount * 0.3) DESC")
@@ -81,7 +82,8 @@ public interface ProductRepository extends JpaRepository<Product, Long>, Product
 
     // 인기 상품
     @Query("SELECT p FROM Product p JOIN p.seller s " +
-           "WHERE p.status = :productStatus AND s.status = :sellerStatus")
+           "WHERE p.status = :productStatus AND s.status = :sellerStatus " +
+           "AND s.user.status = com.sparta.one_stop.global.enums.user.UserStatus.ACTIVE")
     Page<Product> findApproved(@Param("productStatus") ProductStatus productStatus,
                                @Param("sellerStatus") SellerStatus sellerStatus,
                                Pageable pageable);
@@ -103,7 +105,8 @@ public interface ProductRepository extends JpaRepository<Product, Long>, Product
                    "FROM product_tag pt " +
                    "INNER JOIN product p ON p.product_id = pt.product_id " +
                    "INNER JOIN seller s ON s.seller_id = p.seller_id " +
-                   "WHERE p.status = 'APPROVED' AND s.status = 'APPROVED' " +
+                   "INNER JOIN users u ON u.user_id = s.user_id " +
+                   "WHERE p.status = 'APPROVED' AND s.status = 'APPROVED' AND u.status = 'ACTIVE' " +
                    "GROUP BY pt.tag ORDER BY cnt DESC, pt.tag ASC LIMIT :limit",
            nativeQuery = true)
     List<Object[]> findTopTags(@Param("limit") int limit);

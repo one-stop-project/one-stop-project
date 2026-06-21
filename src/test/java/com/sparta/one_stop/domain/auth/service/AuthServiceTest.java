@@ -369,6 +369,8 @@ class AuthServiceTest {
             // when & then
             assertThatThrownBy(() -> authService.refresh(request, DEVICE_ID, USER_AGENT, CLIENT_IP))
                 .isInstanceOf(CustomException.class);
+
+            verify(authCommandService).invalidateTokensForRefreshReuse(USER_ID);
         }
     }
 

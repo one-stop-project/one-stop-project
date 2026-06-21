@@ -112,7 +112,7 @@ public class AuthController {
         String deviceIdCookie = cookieUtil.createHttpOnlyCookie(
             "device_id", deviceId,
             jwtTokenProvider.getRefreshTokenExpirySeconds(),
-            "/api/auth"
+            "/"
         );
 
         // ※ 주의: 프론트엔드 보안 강화를 위해 클라이언트에 내려가는 LoginResponse JSON에서
@@ -215,10 +215,12 @@ public class AuthController {
 
         // 3. 브라우저 쿠키 강제 만료
         String clearRtCookie = cookieUtil.createExpiredCookie("refresh_token", "/api/auth");
-        String clearDeviceCookie = cookieUtil.createExpiredCookie("device_id", "/api/auth");
+        String clearDeviceCookie = cookieUtil.createExpiredCookie("device_id", "/");
+        String clearLegacyDeviceCookie = cookieUtil.createExpiredCookie("device_id", "/api/auth");
         return ResponseEntity.ok()
             .header(HttpHeaders.SET_COOKIE, clearRtCookie)
             .header(HttpHeaders.SET_COOKIE, clearDeviceCookie)
+            .header(HttpHeaders.SET_COOKIE, clearLegacyDeviceCookie)
             .body(ApiResponse.success());
     }
 }
