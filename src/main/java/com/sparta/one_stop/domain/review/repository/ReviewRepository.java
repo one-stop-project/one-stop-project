@@ -35,17 +35,22 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
     // ── AI 요약 전용 ─────────────────────────────────────────────
 
     // 최신순 최대 N건 — 전체 요약(최초/강제 갱신) 시 사용
-    List<Review> findAllByProduct_IdOrderByCreatedAtDesc(Long productId, Pageable pageable);
+    // ACTIVE 리뷰만 조회 (soft delete된 리뷰 제외)
+    List<Review> findAllByProduct_IdAndStatusOrderByCreatedAtDesc(Long productId, ReviewStatus status, Pageable pageable);
 
-    long countByProduct_Id(Long productId);
+    // ACTIVE 리뷰 수 조회 (soft delete된 리뷰 제외)
+    long countByProduct_IdAndStatus(Long productId, ReviewStatus status);
 
-    @Query("SELECT AVG(r.rating) FROM Review r WHERE r.product.id = :productId")
-    Double findAverageRatingByProductId(@Param("productId") Long productId);
+    // ACTIVE 리뷰 평균 별점 (soft delete된 리뷰 제외)
+    @Query("SELECT AVG(r.rating) FROM Review r WHERE r.product.id = :productId AND r.status = :status")
+    Double findAverageRatingByProductIdAndStatus(@Param("productId") Long productId, @Param("status") ReviewStatus status);
 
     // 증분 업데이트 — lastIncludedId 초과 ~ newReviewId 이하 범위, 오래된 순
     // ID 범위 커서와 정렬 기준을 id ASC로 통일 — createdAt 기준 정렬 시 max(id) 계산이 어긋날 수 있음
-    @Query("SELECT r FROM Review r WHERE r.product.id = :productId AND r.id > :afterId AND r.id <= :upToId ORDER BY r.id ASC")
+    // ACTIVE 리뷰만 조회 (soft delete된 리뷰 제외)
+    @Query("SELECT r FROM Review r WHERE r.product.id = :productId AND r.id > :afterId AND r.id <= :upToId AND r.status = :status ORDER BY r.id ASC")
     List<Review> findNewReviewsBetween(@Param("productId") Long productId,
                                        @Param("afterId") Long afterId,
-                                       @Param("upToId") Long upToId);
+                                       @Param("upToId") Long upToId,
+                                       @Param("status") ReviewStatus status);
 }

@@ -317,7 +317,8 @@ class AuthServiceTest {
 
             // when & then
             assertThatThrownBy(() -> authService.refresh(request, DEVICE_ID, USER_AGENT, CLIENT_IP))
-                .isInstanceOf(CustomException.class);
+                .isInstanceOfSatisfying(CustomException.class,
+                    exception -> assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.AUTH_020));
 
             verify(redisTokenService, never()).rotateRefreshTokenCAS(
                 anyLong(), anyString(), anyString(), anyString(), anyLong());
@@ -338,7 +339,8 @@ class AuthServiceTest {
 
             // when & then
             assertThatThrownBy(() -> authService.refresh(request, DEVICE_ID, USER_AGENT, CLIENT_IP))
-                .isInstanceOf(CustomException.class);
+                .isInstanceOfSatisfying(CustomException.class,
+                    exception -> assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.AUTH_020));
 
             verify(redisTokenService, never()).rotateRefreshTokenCAS(
                 anyLong(), anyString(), anyString(), anyString(), anyLong());
@@ -369,6 +371,8 @@ class AuthServiceTest {
             // when & then
             assertThatThrownBy(() -> authService.refresh(request, DEVICE_ID, USER_AGENT, CLIENT_IP))
                 .isInstanceOf(CustomException.class);
+
+            verify(authCommandService).invalidateTokensForRefreshReuse(USER_ID);
         }
     }
 

@@ -70,7 +70,7 @@ app:
       enabled: true
       api-key: test-point-api-key
   cors:
-    allowed-origins: "*"
+    allowed-origins: "http://localhost:8080"
   image:
     bucket: test-bucket
     region: ap-northeast-2
