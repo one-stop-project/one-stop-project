@@ -10,7 +10,9 @@ import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -29,6 +31,10 @@ class DummySellerSeederTest {
     @Autowired private SellerRepository sellerRepository;
     @Autowired private UserRepository userRepository;
     @PersistenceContext private EntityManager em;
+    @Autowired private PasswordEncoder passwordEncoder;
+
+    @Value("${dummy.seller.password:CHANGE_ME}")
+    private String expectedPassword;
 
     @Test
     @DisplayName("seed: AI상점 SELLER 생성 (APPROVED, role=SELLER)")
@@ -39,6 +45,14 @@ class DummySellerSeederTest {
         assertThat(seller.isApproved()).isTrue();
         assertThat(seller.getUser().getEmail()).isEqualTo(EMAIL);
         assertThat(seller.getUser().getRole()).isEqualTo(UserRole.SELLER);
+    }
+
+    @Test
+    @DisplayName("seed: 외부화한 설정 비밀번호(dummy.seller.password)로 인코딩되어 저장된다")
+    void seed_encodesConfiguredPassword() {
+        Seller seller = dummySellerSeeder.seed();
+
+        assertThat(passwordEncoder.matches(expectedPassword, seller.getUser().getPassword())).isTrue();
     }
 
     @Test
