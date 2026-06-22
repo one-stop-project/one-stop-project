@@ -61,6 +61,7 @@ public enum SecurityAuditEventType {
     USER_SUSPENDED(Category.ADMIN, SecuritySeverity.HIGH, true),
     USER_UNSUSPENDED(Category.ADMIN, SecuritySeverity.HIGH, false),
     USER_FORCE_LOGOUT(Category.ADMIN, SecuritySeverity.HIGH, true),
+    SECURITY_TARGET_VIEWED(Category.ADMIN, SecuritySeverity.MEDIUM, false),
     SECURITY_AUDIT_LOG_VIEWED(Category.ADMIN, SecuritySeverity.MEDIUM, false),
     SECURITY_AUDIT_IP_DECRYPTED(Category.ADMIN, SecuritySeverity.HIGH, true),
     SUSPICIOUS_PATTERN_DETECTED(Category.OTHER, SecuritySeverity.HIGH, true),

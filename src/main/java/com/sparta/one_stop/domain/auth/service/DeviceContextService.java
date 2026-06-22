@@ -45,8 +45,7 @@ public class DeviceContextService {
                 key(userId, deviceId), hash, CTX_TTL_SECONDS, TimeUnit.SECONDS
             );
         } catch (RedisConnectionFailureException | RedisSystemException e) {
-            log.warn("[DEVICE_CTX] bindContext 실패 (Fail-Open): userId={}, deviceId={}",
-                userId, deviceId, e);
+            log.warn("[DEVICE_CTX] bindContext 실패 (Fail-Open): userId={}", userId, e);
         }
     }
 
@@ -89,8 +88,8 @@ public class DeviceContextService {
                 return ContextVerifyResult.MATCH;
             }
 
-            log.warn("[DEVICE_CTX] 컨텍스트 불일치: userId={}, deviceId={}, os={}, browser={}",
-                userId, deviceId,
+            log.warn("[DEVICE_CTX] 컨텍스트 불일치: userId={}, os={}, browser={}",
+                userId,
                 DeviceContext.parseOsType(userAgent),
                 DeviceContext.parseBrowserType(userAgent));
             return ContextVerifyResult.MISMATCH;
@@ -112,7 +111,7 @@ public class DeviceContextService {
         try {
             redisTemplate.delete(key(userId, deviceId));
         } catch (RedisConnectionFailureException | RedisSystemException e) {
-            log.warn("[DEVICE_CTX] removeContext 실패: userId={}, deviceId={}", userId, deviceId, e);
+            log.warn("[DEVICE_CTX] removeContext 실패: userId={}", userId, e);
         }
     }
 

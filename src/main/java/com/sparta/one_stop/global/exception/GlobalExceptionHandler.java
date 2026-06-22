@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.access.AccessDeniedException;
 
 /**
  * 전역 예외 처리 핸들러
@@ -25,6 +26,17 @@ import org.springframework.http.converter.HttpMessageNotReadableException;
 @Slf4j
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ErrorResponse> handleAccessDeniedException(
+        AccessDeniedException e,
+        HttpServletRequest request
+    ) {
+        log.debug("AccessDeniedException: {} - {}", request.getRequestURI(), e.getMessage());
+        return ResponseEntity
+            .status(ErrorCode.AUTH_011.getStatus())
+            .body(ErrorResponse.of(ErrorCode.AUTH_011, null, request.getRequestURI()));
+    }
 
     /**
      * 비즈니스 로직 예외 처리

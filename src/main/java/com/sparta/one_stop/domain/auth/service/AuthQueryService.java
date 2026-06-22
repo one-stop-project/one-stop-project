@@ -125,7 +125,7 @@ public class AuthQueryService {
     // 비번 변경/탈퇴/정지 시 version++되므로, 그 이전 발급된 AT는 tokenVersion < 현재 version이 되어 거부
     public void verifyTokenVersion(Long userId, int tokenVersion) {
         int currentVersion = userStatusCacheService.getTokenVersion(userId);
-        if (tokenVersion < currentVersion) {
+        if (tokenVersion != currentVersion) {
             throw new com.sparta.one_stop.global.exception.CustomException(
                 com.sparta.one_stop.global.exception.ErrorCode.AUTH_009,
                 "보안 정책에 의해 만료된 토큰입니다. 다시 로그인해주세요.");

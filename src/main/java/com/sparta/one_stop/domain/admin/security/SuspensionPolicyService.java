@@ -1,6 +1,7 @@
 package com.sparta.one_stop.domain.admin.security;
 
 import com.sparta.one_stop.domain.user.entity.User;
+import com.sparta.one_stop.domain.user.event.UserStatusChangedEvent;
 import com.sparta.one_stop.domain.user.repository.UserRepository;
 import com.sparta.one_stop.global.audit.SecurityAuditEvent;
 import com.sparta.one_stop.global.audit.SecurityAuditEventType;
@@ -9,6 +10,7 @@ import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -21,6 +23,7 @@ public class SuspensionPolicyService {
     private final UserSecurityActionRepository actions;
     private final SecurityAuditService audit;
     private final UserRepository users;
+    private final ApplicationEventPublisher events;
     private final Clock clock;
 
     /**
@@ -40,6 +43,7 @@ public class SuspensionPolicyService {
             && activeSuspension.get().isExpired(LocalDateTime.now(clock))) {
             activeSuspension.get().deactivate();
             lockedUser.reactivate();
+            events.publishEvent(new UserStatusChangedEvent(lockedUser.getId()));
             audit.record(SecurityAuditEvent.builder()
                 .eventType(SecurityAuditEventType.USER_SUSPENSION_EXPIRED_AUTO_RELEASED)
                 .actorUserId(lockedUser.getId())

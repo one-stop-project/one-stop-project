@@ -369,8 +369,10 @@ public enum ErrorCode {
     SECURITY_001(HttpStatus.BAD_REQUEST, "SECURITY_001", "지원하지 않는 보안 조치입니다"),
     SECURITY_002(HttpStatus.NOT_FOUND, "SECURITY_002", "조치 대상 사용자를 찾을 수 없습니다"),
     SECURITY_003(HttpStatus.FORBIDDEN, "SECURITY_003", "보안 조치 권한이 없습니다"),
-    SECURITY_004(HttpStatus.BAD_REQUEST, "SECURITY_004", "자기 자신은 정지할 수 없습니다"),
-    SECURITY_005(HttpStatus.BAD_REQUEST, "SECURITY_005", "조치 사유에 민감정보를 포함할 수 없습니다");
+    SECURITY_004(HttpStatus.BAD_REQUEST, "SECURITY_004", "자기 자신은 제재할 수 없습니다"),
+    SECURITY_005(HttpStatus.BAD_REQUEST, "SECURITY_005", "조치 사유에 민감정보를 포함할 수 없습니다"),
+    SECURITY_006(HttpStatus.FORBIDDEN, "SECURITY_006", "해당 역할의 사용자는 보안 제재 대상이 아닙니다"),
+    SECURITY_007(HttpStatus.CONFLICT, "SECURITY_007", "현재 사용자 상태에서는 요청한 보안 조치를 수행할 수 없습니다");
     private final HttpStatus status;
     private final String code;
     private final String message;
