@@ -21,10 +21,12 @@ import com.sparta.one_stop.domain.product.entity.ProductCategoryMapping;
 import com.sparta.one_stop.domain.product.entity.ProductItem;
 import com.sparta.one_stop.domain.product.repository.ProductRepository;
 import com.sparta.one_stop.domain.user.entity.Seller;
+import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.global.enums.product.ProductItemStatus;
 import com.sparta.one_stop.global.enums.product.ProductStatus;
 import com.sparta.one_stop.global.enums.product.SortType;
 import com.sparta.one_stop.global.enums.user.SellerStatus;
+import com.sparta.one_stop.global.enums.user.UserRole;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import org.junit.jupiter.api.DisplayName;
@@ -71,6 +73,7 @@ class BuyerProductServiceTest {
 
     private Seller seller(SellerStatus status) {
         Seller seller = Seller.builder()
+            .user(activeSellerUser())
             .shopName("테스트샵").businessNumber("1234567890").build();
         if (status == SellerStatus.APPROVED) {
             seller.approve();
@@ -414,7 +417,8 @@ class BuyerProductServiceTest {
     }
 
     private Product approvedProductWithOnSaleItem(Long id) {
-        Seller seller = Seller.builder().shopName("shop").businessNumber("1234567890").build();
+        Seller seller = Seller.builder().user(activeSellerUser())
+            .shopName("shop").businessNumber("1234567890").build();
         seller.approve();
         Product product = Product.builder().seller(seller).name("p" + id).thumbnailUrl("url").build();
         product.approve();
@@ -427,7 +431,8 @@ class BuyerProductServiceTest {
 
     // ON_SALE 아이템이 없어 isVisibleOnSale=false인 상품 (노출 필터링 대상)
     private Product approvedProductNoOnSaleItem(Long id) {
-        Seller seller = Seller.builder().shopName("shop").businessNumber("1234567890").build();
+        Seller seller = Seller.builder().user(activeSellerUser())
+            .shopName("shop").businessNumber("1234567890").build();
         seller.approve();
         Product product = Product.builder().seller(seller).name("p" + id).thumbnailUrl("url").build();
         product.approve();
@@ -446,6 +451,15 @@ class BuyerProductServiceTest {
 
     private List<Product> visibleProducts(List<Long> ids) {
         return ids.stream().map(this::approvedProductWithOnSaleItem).toList();
+    }
+
+    private User activeSellerUser() {
+        return User.builder()
+            .email("seller@test.com")
+            .password("password")
+            .name("seller")
+            .role(UserRole.SELLER)
+            .build();
     }
 
     // ===== getDetail =====

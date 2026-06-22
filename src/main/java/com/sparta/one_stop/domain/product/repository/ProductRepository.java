@@ -44,7 +44,7 @@ public interface ProductRepository extends JpaRepository<Product, Long>, Product
     // → ProductRepositoryCustom.search() / ProductRepositoryImpl
 
     // 단건 상세 조회 (카테고리만 함께 — 자식 여럿 합치면 데이터 부풀어 느려짐)
-    @EntityGraph(attributePaths = {"seller", "categoryMappings", "categoryMappings.category"})
+    @EntityGraph(attributePaths = {"seller", "seller.user", "categoryMappings", "categoryMappings.category"})
     @Query("SELECT p FROM Product p WHERE p.id = :id")
     Optional<Product> findWithCollectionsById(@Param("id") Long id);
 
@@ -69,6 +69,7 @@ public interface ProductRepository extends JpaRepository<Product, Long>, Product
     @Query("SELECT p FROM Product p JOIN p.seller s " +
            "WHERE p.id <> :excludeId " +
            "AND p.status = :productStatus AND s.status = :sellerStatus " +
+           "AND s.user.status = com.sparta.one_stop.global.enums.user.UserStatus.ACTIVE " +
            "AND EXISTS (SELECT 1 FROM ProductCategoryMapping m WHERE m.product = p AND m.category.id IN :categoryIds) " +
            "AND EXISTS (SELECT 1 FROM ProductItem i WHERE i.product = p AND i.status = :itemStatus AND i.stock > 0) " +
            "ORDER BY (p.viewCount * 0.7 + p.salesCount * 0.3) DESC")
@@ -81,7 +82,8 @@ public interface ProductRepository extends JpaRepository<Product, Long>, Product
 
     // 인기 상품
     @Query("SELECT p FROM Product p JOIN p.seller s " +
-           "WHERE p.status = :productStatus AND s.status = :sellerStatus")
+           "WHERE p.status = :productStatus AND s.status = :sellerStatus " +
+           "AND s.user.status = com.sparta.one_stop.global.enums.user.UserStatus.ACTIVE")
     Page<Product> findApproved(@Param("productStatus") ProductStatus productStatus,
                                @Param("sellerStatus") SellerStatus sellerStatus,
                                Pageable pageable);
@@ -103,13 +105,18 @@ public interface ProductRepository extends JpaRepository<Product, Long>, Product
                    "FROM product_tag pt " +
                    "INNER JOIN product p ON p.product_id = pt.product_id " +
                    "INNER JOIN seller s ON s.seller_id = p.seller_id " +
-                   "WHERE p.status = 'APPROVED' AND s.status = 'APPROVED' " +
+                   "INNER JOIN users u ON u.user_id = s.user_id " +
+                   "WHERE p.status = 'APPROVED' AND s.status = 'APPROVED' AND u.status = 'ACTIVE' " +
                    "GROUP BY pt.tag ORDER BY cnt DESC, pt.tag ASC LIMIT :limit",
            nativeQuery = true)
     List<Object[]> findTopTags(@Param("limit") int limit);
 
     // 인기/검색 목록 배치 fetch (seller·옵션 같이 로드)
-    @Query("SELECT DISTINCT p FROM Product p LEFT JOIN FETCH p.seller LEFT JOIN FETCH p.productItems WHERE p.id IN :ids")
+    @Query("SELECT DISTINCT p FROM Product p "
+        + "LEFT JOIN FETCH p.seller s "
+        + "LEFT JOIN FETCH s.user "
+        + "LEFT JOIN FETCH p.productItems "
+        + "WHERE p.id IN :ids")
     List<Product> findAllByIdsWithItems(@Param("ids") List<Long> ids);
 
     // 인기 상품 판매수 시간 가중 집계 — 3일 윈도우, 1일 단위 3구간 (recent/middle/oldest)

@@ -133,7 +133,7 @@ public class JwtTokenProvider {
             return UserRole.valueOf(claims.get("role", String.class));
         } catch (IllegalArgumentException | NullPointerException e) {
             // Enum 매칭 실패 시 500 에러가 나지 않도록 커스텀 예외로 변환
-            throw new CustomException(ErrorCode.AUTH_010, "유효하지 않은 권한 정보입니다.");
+            throw new CustomException(ErrorCode.AUTH_009, "유효하지 않은 권한 정보입니다.");
         }
     }
 
