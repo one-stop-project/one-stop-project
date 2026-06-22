@@ -194,6 +194,8 @@ dummy:
     display: ${DUMMY_SEED_DISPLAY:100}
     throttle-ms: ${DUMMY_SEED_THROTTLE_MS:4000}
     default-image-url: ${DUMMY_SEED_DEFAULT_IMAGE_URL:https://d34xrn1duxtwu5.cloudfront.net/default-product.png}
+  seller:
+    password: ${DUMMY_SELLER_PASSWORD:CHANGE_ME}  # 더미 판매자 비번 — 소스 평문 X, env 외부화 (미설정 시 placeholder)
 
 slack:
   alert:
