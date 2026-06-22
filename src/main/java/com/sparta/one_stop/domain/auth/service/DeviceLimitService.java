@@ -159,8 +159,8 @@ public class DeviceLimitService {
 
         } catch (RedisConnectionFailureException e) {
             // ★ Fail-Open — 인증은 통과시키되 로그 남김
-            log.error("[DEVICE_LIMIT] Redis 장애 — Fail-Open으로 로그인 허용 (userId={}, deviceId={})",
-                userId, deviceId, e);
+            log.error("[DEVICE_LIMIT] Redis 장애 — Fail-Open으로 로그인 허용 (userId={})",
+                userId, e);
             return new DeviceRegistrationResult(true, null, 0, true);
         } catch (Exception e) {
             // 예상 못한 예외 — Fail-Open

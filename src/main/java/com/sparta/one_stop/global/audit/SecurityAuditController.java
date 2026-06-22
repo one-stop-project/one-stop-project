@@ -51,41 +51,43 @@ public class SecurityAuditController {
 
     @GetMapping("/api/admin/security-audit/critical")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
-    public ResponseEntity<Page<AdminAuditView>> critical(
+    public ResponseEntity<ApiResponse<Page<AdminAuditView>>> critical(
         @RequestParam(defaultValue = "24") @Min(1) @Max(168) int hours,
         @RequestParam(defaultValue = "0") @Min(0) int page,
         @RequestParam(defaultValue = "50") @Min(1) @Max(100) int size
     ) {
         LocalDateTime since = LocalDateTime.now().minusHours(hours);
-        return ResponseEntity.ok(repository
+        Page<AdminAuditView> result = repository
             .findBySeverityAndOccurredAtAfterOrderByOccurredAtDesc(
                 SecuritySeverity.CRITICAL,
                 since,
                 PageRequest.of(page, size)
             )
-            .map(AdminAuditView::from));
+            .map(AdminAuditView::from);
+        return ResponseEntity.ok(ApiResponse.success(result));
     }
 
     @GetMapping("/api/admin/security-audit/high-risk")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
-    public ResponseEntity<Page<AdminAuditView>> highRisk(
+    public ResponseEntity<ApiResponse<Page<AdminAuditView>>> highRisk(
         @RequestParam(defaultValue = "7") @Min(1) @Max(90) int days,
         @RequestParam(defaultValue = "0") @Min(0) int page,
         @RequestParam(defaultValue = "50") @Min(1) @Max(100) int size
     ) {
         LocalDateTime since = LocalDateTime.now().minusDays(days);
-        return ResponseEntity.ok(repository
+        Page<AdminAuditView> result = repository
             .findBySeverityInAndOccurredAtAfterOrderByOccurredAtDesc(
                 List.of(SecuritySeverity.CRITICAL, SecuritySeverity.HIGH),
                 since,
                 PageRequest.of(page, size)
             )
-            .map(AdminAuditView::from));
+            .map(AdminAuditView::from);
+        return ResponseEntity.ok(ApiResponse.success(result));
     }
 
     @GetMapping("/api/admin/security-audit/stats/by-category")
     @PreAuthorize("hasRole('SUPER_ADMIN')")
-    public ResponseEntity<Map<String, Long>> statsByCategory(
+    public ResponseEntity<ApiResponse<Map<String, Long>>> statsByCategory(
         @RequestParam(defaultValue = "7") @Min(1) @Max(90) int days
     ) {
         LocalDateTime since = LocalDateTime.now().minusDays(days);
@@ -94,7 +96,7 @@ public class SecurityAuditController {
         for (Object[] row : rows) {
             stats.put(row[0].toString(), (Long) row[1]);
         }
-        return ResponseEntity.ok(stats);
+        return ResponseEntity.ok(ApiResponse.success(stats));
     }
 
     record AdminAuditView(

@@ -11,6 +11,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
@@ -27,6 +28,17 @@ class AuthQueryServiceTokenVersionTest {
         when(userStatusCacheService.getTokenVersion(1L)).thenReturn(2);
 
         assertThatThrownBy(() -> service.verifyTokenVersion(1L, 1))
+            .isInstanceOf(CustomException.class);
+    }
+
+    @Test
+    void access_token_version_must_match_current_version_exactly() {
+        AuthQueryService service = new AuthQueryService(
+            userRepository, passwordEncoder, userStatusCacheService, suspensionPolicyService);
+        when(userStatusCacheService.getTokenVersion(1L)).thenReturn(2);
+
+        assertThatCode(() -> service.verifyTokenVersion(1L, 2)).doesNotThrowAnyException();
+        assertThatThrownBy(() -> service.verifyTokenVersion(1L, 3))
             .isInstanceOf(CustomException.class);
     }
 }

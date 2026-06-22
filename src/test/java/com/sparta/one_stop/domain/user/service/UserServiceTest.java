@@ -286,4 +286,17 @@ class UserServiceTest {
             verify(eventPublisher).publishEvent(any(AllDevicesLogoutEvent.class));
         }
     }
+
+    @Test
+    @DisplayName("관리자 정지는 tokenVersion을 한 번만 증가시킨다")
+    void suspend_increases_token_version_once() {
+        given(userRepository.findById(USER_ID)).willReturn(Optional.of(testUser));
+        int before = testUser.getTokenVersion();
+
+        userService.suspendUser(USER_ID, "policy violation");
+
+        assertThat(testUser.getTokenVersion()).isEqualTo(before + 1);
+        verify(userStatusCacheService).evict(USER_ID);
+        verify(eventPublisher).publishEvent(any(AllDevicesLogoutEvent.class));
+    }
 }
