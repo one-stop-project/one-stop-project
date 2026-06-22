@@ -10,7 +10,6 @@ import jakarta.persistence.PersistenceContext;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
@@ -19,22 +18,21 @@ import org.springframework.transaction.annotation.Transactional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-@SpringBootTest
+@SpringBootTest(properties = "dummy.seller.password=TEST_ONLY_DUMMY_SELLER_PASSWORD")
 @ActiveProfiles("test")
 @Transactional
 @DisplayName("DummySellerSeeder")
 class DummySellerSeederTest {
 
     private static final String EMAIL = "ai-shop@dummy.local";
+    // @SpringBootTest properties로 주입한 값과 동일 — 기본값(CHANGE_ME) fallback이 아닌 실제 주입을 검증
+    private static final String DUMMY_PASSWORD = "TEST_ONLY_DUMMY_SELLER_PASSWORD";
 
     @Autowired private DummySellerSeeder dummySellerSeeder;
     @Autowired private SellerRepository sellerRepository;
     @Autowired private UserRepository userRepository;
     @PersistenceContext private EntityManager em;
     @Autowired private PasswordEncoder passwordEncoder;
-
-    @Value("${dummy.seller.password:CHANGE_ME}")
-    private String expectedPassword;
 
     @Test
     @DisplayName("seed: AI상점 SELLER 생성 (APPROVED, role=SELLER)")
@@ -52,7 +50,7 @@ class DummySellerSeederTest {
     void seed_encodesConfiguredPassword() {
         Seller seller = dummySellerSeeder.seed();
 
-        assertThat(passwordEncoder.matches(expectedPassword, seller.getUser().getPassword())).isTrue();
+        assertThat(passwordEncoder.matches(DUMMY_PASSWORD, seller.getUser().getPassword())).isTrue();
     }
 
     @Test
