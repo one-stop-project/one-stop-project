@@ -48,14 +48,14 @@ public enum RateLimitPolicy {
     // 정 :5
     LOGIN_PER_ACCOUNT(
         "login:account",
-        5000, 60,
+        5, 60,
         "로그인 동일 계정 1분 5회 (무차별 대입 방어)"
     ),
 
     // 계정당 동시 로그인 성공 횟수 제한 — 인증은 통과해도 빠른 다발 차단  // 정 :10
     LOGIN_CONCURRENT_PER_ACCOUNT(
         "login:concurrent",
-        5000,
+        10,
         60,
         "계정당 동시 로그인 시도가 너무 많습니다. 잠시 후 다시 시도해주세요."
     ),
@@ -64,7 +64,7 @@ public enum RateLimitPolicy {
     // 짧은 시간 내 새 기기 등록 차단 — LRU 추방 폭주 방지
     DEVICE_REGISTER_PER_ACCOUNT(
         "login:deviceRegister",
-        5000,
+        3,
         5 * 60,
         "짧은 시간에 너무 많은 새 기기에서 로그인되었습니다. 보안을 위해 잠시 후 시도해주세요."
     ),
@@ -73,7 +73,7 @@ public enum RateLimitPolicy {
     // 한 IP에서 여러 계정의 새 기기 등록 차단 — 분산 봇 공격 방어
     DEVICE_REGISTER_PER_IP(
         "login:device_per_ip",
-        5000,
+        10,
         10 * 60,
         "비정상 접근이 감지되었습니다. 잠시 후 다시 시도해주세요."
     ),
@@ -81,14 +81,14 @@ public enum RateLimitPolicy {
     // 정 : 20
     LOGIN_PER_IP(
         "login:ip",
-        5000, 60,
+        20, 60,
         "로그인 동일 IP 1분 20회 (DDoS 1차 방어)"
     ),
 
     // 정 : 1000
     LOGIN_PER_GLOBAL(
         "login:global",
-        5000, 60,
+        1000, 60,
         "로그인 전체 1분 1000회 (서비스 보호 최후 방어선)"
     ),
 

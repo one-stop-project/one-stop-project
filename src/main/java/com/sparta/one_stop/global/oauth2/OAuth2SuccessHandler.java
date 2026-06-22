@@ -146,18 +146,16 @@ public class OAuth2SuccessHandler extends SimpleUrlAuthenticationSuccessHandler 
 
         if (registration.failOpen()) {
             log.warn(
-                "[OAuth2] Redis Fail-Open 상태로 로그인 완료: userId={}, deviceId={}",
-                user.getId(),
-                deviceId
+                "[OAuth2] Redis Fail-Open 상태로 로그인 완료: userId={}",
+                user.getId()
             );
         }
 
         log.info(
-            "[OAuth2] 로그인 성공: userId={}, deviceId={}, newDevice={}, evictedDeviceId={}, exposeCodeInRedirect={}",
+            "[OAuth2] 로그인 성공: userId={}, newDevice={}, deviceEvicted={}, exposeCodeInRedirect={}",
             user.getId(),
-            deviceId,
             registration.isNewDevice(),
-            registration.evictedDeviceId(),
+            registration.evictedDeviceId() != null,
             exposeCodeInRedirect
         );
 
