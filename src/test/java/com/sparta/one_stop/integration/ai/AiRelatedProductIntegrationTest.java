@@ -1,7 +1,5 @@
 package com.sparta.one_stop.integration.ai;
 
-import com.sparta.one_stop.domain.ai.service.AiRelatedProductService;
-import com.sparta.one_stop.domain.product.dto.response.ProductSummaryResponse;
 import com.sparta.one_stop.domain.product.entity.Category;
 import com.sparta.one_stop.domain.product.entity.Product;
 import com.sparta.one_stop.domain.product.entity.ProductCategoryMapping;
@@ -21,16 +19,19 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.test.web.servlet.MockMvc;
 
-import java.util.List;
-
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.*;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @Tag("integration")
+@AutoConfigureMockMvc
 @DisplayName("AI 연관 상품 추천 통합 테스트")
 class AiRelatedProductIntegrationTest extends IntegrationTestSupport {
 
-    @Autowired private AiRelatedProductService aiRelatedProductService;
+    @Autowired private MockMvc mockMvc;
     @Autowired private UserRepository userRepository;
     @Autowired private SellerRepository sellerRepository;
     @Autowired private ProductRepository productRepository;
@@ -64,7 +65,7 @@ class AiRelatedProductIntegrationTest extends IntegrationTestSupport {
 
     @Test
     @DisplayName("동일 카테고리 상품이 추천 목록에 포함된다")
-    void getRelatedProducts_returns_same_category_products() {
+    void getRelatedProducts_returns_same_category_products() throws Exception {
         Product target = approvedProductWithStock("기준상품", 0L);
         Product related1 = approvedProductWithStock("연관상품A", 10L);
         Product related2 = approvedProductWithStock("연관상품B", 5L);
@@ -72,41 +73,42 @@ class AiRelatedProductIntegrationTest extends IntegrationTestSupport {
         mapCategory(related1);
         mapCategory(related2);
 
-        List<ProductSummaryResponse> result = aiRelatedProductService.getRelatedProducts(target.getId());
-
-        List<Long> resultIds = result.stream().map(ProductSummaryResponse::getProductId).toList();
-        assertThat(resultIds).contains(related1.getId(), related2.getId());
+        mockMvc.perform(get("/api/products/{productId}/related", target.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data[*].productId",
+                hasItems(related1.getId().intValue(), related2.getId().intValue())));
     }
 
     @Test
     @DisplayName("자기 자신은 추천 목록에서 제외된다")
-    void getRelatedProducts_excludes_self() {
+    void getRelatedProducts_excludes_self() throws Exception {
         Product target = approvedProductWithStock("기준상품", 5L);
         mapCategory(target);
 
-        List<ProductSummaryResponse> result = aiRelatedProductService.getRelatedProducts(target.getId());
-
-        List<Long> resultIds = result.stream().map(ProductSummaryResponse::getProductId).toList();
-        assertThat(resultIds).doesNotContain(target.getId());
+        mockMvc.perform(get("/api/products/{productId}/related", target.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data[*].productId", not(hasItem(target.getId().intValue()))));
     }
 
     @Test
     @DisplayName("품절 상품은 추천 목록에서 제외된다")
-    void getRelatedProducts_excludes_out_of_stock() {
+    void getRelatedProducts_excludes_out_of_stock() throws Exception {
         Product target = approvedProductWithStock("기준상품", 5L);
         Product outOfStock = approvedProductWithStock("품절상품", 0L);
         mapCategory(target);
         mapCategory(outOfStock);
 
-        List<ProductSummaryResponse> result = aiRelatedProductService.getRelatedProducts(target.getId());
-
-        List<Long> resultIds = result.stream().map(ProductSummaryResponse::getProductId).toList();
-        assertThat(resultIds).doesNotContain(outOfStock.getId());
+        mockMvc.perform(get("/api/products/{productId}/related", target.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data[*].productId", not(hasItem(outOfStock.getId().intValue()))));
     }
 
     @Test
     @DisplayName("판매수 높은 순으로 정렬된다")
-    void getRelatedProducts_sorted_by_sales_count_desc() {
+    void getRelatedProducts_sorted_by_sales_count_desc() throws Exception {
         Product target = approvedProductWithStock("기준상품", 1L);
         Product low = approvedProductWithStock("판매낮음", 1L);
         Product high = approvedProductWithStock("판매높음", 1L);
@@ -116,20 +118,21 @@ class AiRelatedProductIntegrationTest extends IntegrationTestSupport {
         mapCategory(low);
         mapCategory(high);
 
-        List<ProductSummaryResponse> result = aiRelatedProductService.getRelatedProducts(target.getId());
-
-        List<Long> resultIds = result.stream().map(ProductSummaryResponse::getProductId).toList();
-        assertThat(resultIds.indexOf(high.getId())).isLessThan(resultIds.indexOf(low.getId()));
+        mockMvc.perform(get("/api/products/{productId}/related", target.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data[0].productId").value(high.getId().intValue()));
     }
 
     @Test
     @DisplayName("카테고리 없는 상품은 빈 목록을 반환한다")
-    void getRelatedProducts_returns_empty_when_no_category() {
+    void getRelatedProducts_returns_empty_when_no_category() throws Exception {
         Product target = approvedProductWithStock("카테고리없는상품", 5L);
 
-        List<ProductSummaryResponse> result = aiRelatedProductService.getRelatedProducts(target.getId());
-
-        assertThat(result).isEmpty();
+        mockMvc.perform(get("/api/products/{productId}/related", target.getId()))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.success").value(true))
+            .andExpect(jsonPath("$.data", hasSize(0)));
     }
 
     // ─── helpers ────────────────────────────────────────────────────────────────
