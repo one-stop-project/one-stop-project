@@ -1,6 +1,7 @@
 package com.sparta.one_stop.domain.auth.service;
 
 import com.sparta.one_stop.domain.auth.dto.request.SignUpRequest;
+import com.sparta.one_stop.domain.auth.event.AllDevicesLogoutEvent;
 import com.sparta.one_stop.domain.user.entity.Seller;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.SellerRepository;
@@ -11,6 +12,7 @@ import com.sparta.one_stop.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
@@ -38,6 +40,7 @@ public class AuthCommandService {
     private final UserRepository userRepository;
     private final SellerRepository sellerRepository;
     private final PasswordEncoder passwordEncoder;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 회원가입 — User + Seller 함께 저장
@@ -96,6 +99,18 @@ public class AuthCommandService {
 
         log.info("회원가입 완료: userId={}, role={}", savedUser.getId(), savedUser.getRole());
         return savedUser;
+    }
+
+    /**
+     * Refresh Token rotation 불일치를 토큰 패밀리 재사용으로 간주하고 전체 세션을 무효화한다.
+     * DB tokenVersion 커밋 이후 Redis 세션이 제거되도록 이벤트는 트랜잭션 안에서 발행한다.
+     */
+    @Transactional
+    public void invalidateTokensForRefreshReuse(Long userId) {
+        User user = userRepository.findByIdForUpdate(userId)
+            .orElseThrow(() -> new CustomException(ErrorCode.MEMBER_001));
+        user.increaseTokenVersion();
+        eventPublisher.publishEvent(new AllDevicesLogoutEvent(userId, "REFRESH_TOKEN_REUSE"));
     }
 
     private String maskEmail(String email) {

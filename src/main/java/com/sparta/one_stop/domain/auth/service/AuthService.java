@@ -250,15 +250,14 @@ public class AuthService {
         // 3. deviceId 이중 검증 (페이로드 ↔ 쿠키)
         String tokenDeviceId = claims.get("deviceId", String.class);
         if (tokenDeviceId == null || !tokenDeviceId.equals(deviceId)) {
-            log.warn("RT-Cookie deviceId 불일치 (탈취 의심): tokenDeviceId={}, cookieDeviceId={}",
-                tokenDeviceId, deviceId);
+            log.warn("RT-Cookie device binding mismatch");
             securityAuditService.record(SecurityAuditEvent.builder()
                 .eventType(SecurityAuditEventType.TOKEN_DEVICE_MISMATCH)
                 .result("BLOCKED")
-                .errorMessage(String.format(
-                    "deviceId 불일치: token=%s, cookie=%s", tokenDeviceId, deviceId))
+                .errorMessage("Refresh token device binding mismatch")
+                .deviceId(deviceId)
                 .build());
-            throw new CustomException(ErrorCode.AUTH_006);
+            throw new CustomException(ErrorCode.AUTH_020);
         }
 
         // 4. 사용자 조회 + 활성 검증
@@ -267,18 +266,18 @@ public class AuthService {
         // ZSET 미등록 기기 차단: isNewDevice == true 면 "등록 안 된 기기"
         // (refresh는 이미 등록된 기기에서만 정상. 미등록이면 탈취/추방 의심)
         if (deviceLimitService.isNewDevice(userId, deviceId)) {
-            log.warn("refresh 시도된 기기가 ZSET에 없음 (이상 행위): userId={}, deviceId={}",
-                userId, deviceId);
+            log.warn("refresh 시도 기기가 등록되어 있지 않음: userId={}", userId);
 
             securityAuditService.record(SecurityAuditEvent.builder()
                 .eventType(SecurityAuditEventType.SUSPICIOUS_PATTERN_DETECTED)
                 .actorUserId(userId)
                 .result("BLOCKED")
                 .errorMessage("refresh 요청 기기가 등록되지 않음")
-                .metadata(String.format("{\"deviceId\":\"%s\"}", deviceId))
+                .deviceId(deviceId)
                 .build());
 
-            throw new CustomException(ErrorCode.AUTH_006, "등록되지 않은 기기");
+            // 기기 등록 여부를 외부에 구분 노출하지 않고 device binding 실패로 통일한다.
+            throw new CustomException(ErrorCode.AUTH_020);
         }
 
         User user = authQueryService.findActiveUser(userId);
@@ -288,14 +287,14 @@ public class AuthService {
         String newRefreshToken = jwtTokenProvider.createRefreshToken(user.getId(), deviceId);
 
         // 6. Lua Script CAS — 원자적 RTR 갱신
-        boolean rotated = redisTokenService.rotateRefreshTokenCAS(
+        RedisTokenService.RefreshTokenRotationResult rotation =
+            redisTokenService.rotateRefreshToken(
             userId, deviceId, oldRefreshToken, newRefreshToken,
             jwtTokenProvider.getRefreshTokenExpirySeconds()
         );
 
-        if (!rotated) {
-            log.warn("RT 원자적 갱신 실패 (동시성 충돌/탈취 의심): userId={}, deviceId={}",
-                userId, deviceId);
+        if (rotation.status() == RedisTokenService.RefreshTokenRotationStatus.REUSED) {
+            log.warn("RT 원자적 갱신 실패 (재사용 의심): userId={}", userId);
 
             securityAuditService.record(SecurityAuditEvent.builder()
                 .eventType(SecurityAuditEventType.REFRESH_TOKEN_REUSE_DETECTED)
@@ -307,6 +306,11 @@ public class AuthService {
                 .suspicious(true)
                 .build());
 
+            // 토큰 패밀리 재사용 가능성이 있으므로 DB tokenVersion을 올린 뒤,
+            // 커밋 이후 전체 기기 세션을 제거한다. AuthService는 비트랜잭션이므로
+            // AFTER_COMMIT 이벤트를 직접 발행하지 않고 Command Service를 경유한다.
+            authCommandService.invalidateTokensForRefreshReuse(userId);
+
             throw new CustomException(ErrorCode.AUTH_007);
         }
 
@@ -315,8 +319,7 @@ public class AuthService {
             deviceContextService.verifyContext(userId, deviceId, userAgent, clientIp);
         if (ctxResult == DeviceContextService.ContextVerifyResult.MISMATCH) {
             // 환경 변동 — 탈취 의심. 모바일 false positive 고려해 기록+통과 정책.
-            log.warn("[AUTH] 컨텍스트 불일치 (탈취 의심, 통과+기록): userId={}, deviceId={}",
-                userId, deviceId);
+            log.warn("[AUTH] 컨텍스트 불일치 (통과+기록): userId={}", userId);
             securityAuditService.record(SecurityAuditEvent.builder()
                 .eventType(SecurityAuditEventType.SUSPICIOUS_PATTERN_DETECTED)
                 .actorUserId(userId)
@@ -335,7 +338,7 @@ public class AuthService {
             newAccessToken,
             jwtTokenProvider.getAccessTokenExpirySeconds()
         );
-        return new RefreshResult(response, newRefreshToken);
+        return new RefreshResult(response, rotation.refreshToken());
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -396,7 +399,7 @@ public class AuthService {
             }
         }
 
-        log.info("로그아웃 완료: userId={}, deviceId={}", userId, deviceId);
+        log.info("로그아웃 완료: userId={}", userId);
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

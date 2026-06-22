@@ -1,3 +1,5 @@
+-- LEGACY SAMPLE ONLY. Do not apply.
+-- Active schema: V20260621__security_audit_v2.sql and later migrations.
 -- ════════════════════════════════════════════════════════════════
 --  보안 감사 로그 DB 스키마 (MySQL 8.0+)
 --  파일명: V20250602__create_security_audit_log.sql (Flyway 컨벤션)

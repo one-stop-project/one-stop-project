@@ -70,7 +70,7 @@ app:
       enabled: true
       api-key: test-point-api-key
   cors:
-    allowed-origins: "*"
+    allowed-origins: "http://localhost:8080"
   image:
     bucket: test-bucket
     region: ap-northeast-2
@@ -93,6 +93,12 @@ resilience4j:
         failure-rate-threshold: 50
         minimum-number-of-calls: 10
         wait-duration-in-open-state: 30s
+        permitted-number-of-calls-in-half-open-state: 3
+        sliding-window-size: 10
+      ai-related:
+        failure-rate-threshold: 80
+        minimum-number-of-calls: 10
+        wait-duration-in-open-state: 10s
         permitted-number-of-calls-in-half-open-state: 3
         sliding-window-size: 10
   timelimiter:

@@ -158,6 +158,12 @@ resilience4j:
         wait-duration-in-open-state: 60s
         permitted-number-of-calls-in-half-open-state: 2
         sliding-window-size: 10
+      ai-related:
+        failure-rate-threshold: 80
+        minimum-number-of-calls: 10
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        sliding-window-size: 10
   timelimiter:
     instances:
       ai-assistant:

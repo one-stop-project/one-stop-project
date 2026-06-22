@@ -289,16 +289,18 @@ class AuthServiceTest {
             given(jwtTokenProvider.getAccessTokenExpirySeconds()).willReturn(900L);
             given(deviceContextService.verifyContext(USER_ID, DEVICE_ID, USER_AGENT, CLIENT_IP))
                 .willReturn(DeviceContextService.ContextVerifyResult.MATCH);
-            given(redisTokenService.rotateRefreshTokenCAS(
+            given(redisTokenService.rotateRefreshToken(
                 USER_ID, DEVICE_ID, oldRt, NEW_REFRESH_TOKEN, 604_800L
-            )).willReturn(true);
+            )).willReturn(new RedisTokenService.RefreshTokenRotationResult(
+                RedisTokenService.RefreshTokenRotationStatus.ROTATED,
+                NEW_REFRESH_TOKEN));
 
             // when
             RefreshResult result = authService.refresh(request, DEVICE_ID, USER_AGENT, CLIENT_IP);
 
             // then
             assertThat(result.newRefreshToken()).isEqualTo(NEW_REFRESH_TOKEN);
-            verify(redisTokenService).rotateRefreshTokenCAS(
+            verify(redisTokenService).rotateRefreshToken(
                 USER_ID, DEVICE_ID, oldRt, NEW_REFRESH_TOKEN, 604_800L);
             verify(deviceLimitService).touchDevice(USER_ID, DEVICE_ID);
             verify(deviceContextService).bindContext(USER_ID, DEVICE_ID, USER_AGENT, CLIENT_IP);
@@ -317,9 +319,10 @@ class AuthServiceTest {
 
             // when & then
             assertThatThrownBy(() -> authService.refresh(request, DEVICE_ID, USER_AGENT, CLIENT_IP))
-                .isInstanceOf(CustomException.class);
+                .isInstanceOfSatisfying(CustomException.class,
+                    exception -> assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.AUTH_020));
 
-            verify(redisTokenService, never()).rotateRefreshTokenCAS(
+            verify(redisTokenService, never()).rotateRefreshToken(
                 anyLong(), anyString(), anyString(), anyString(), anyLong());
         }
 
@@ -338,10 +341,45 @@ class AuthServiceTest {
 
             // when & then
             assertThatThrownBy(() -> authService.refresh(request, DEVICE_ID, USER_AGENT, CLIENT_IP))
-                .isInstanceOf(CustomException.class);
+                .isInstanceOfSatisfying(CustomException.class,
+                    exception -> assertThat(exception.getErrorCode()).isEqualTo(ErrorCode.AUTH_020));
 
-            verify(redisTokenService, never()).rotateRefreshTokenCAS(
+            verify(redisTokenService, never()).rotateRefreshToken(
                 anyLong(), anyString(), anyString(), anyString(), anyLong());
+        }
+
+        @Test
+        @DisplayName("동시 갱신 재시도는 grace에 저장된 새 RT를 반환하고 전체 로그아웃하지 않는다")
+        void refresh_returns_winning_token_during_grace_period() {
+            String oldRt = "old-rt";
+            String winningRt = "winning-refresh-token";
+            TokenRefreshRequest request = new TokenRefreshRequest(oldRt);
+            Claims claims = mock(Claims.class);
+
+            given(claims.get("deviceId", String.class)).willReturn(DEVICE_ID);
+            given(jwtTokenProvider.parseClaims(oldRt)).willReturn(claims);
+            given(jwtTokenProvider.getUserId(claims)).willReturn(USER_ID);
+            given(deviceLimitService.isNewDevice(USER_ID, DEVICE_ID)).willReturn(false);
+            given(authQueryService.findActiveUser(USER_ID)).willReturn(testUser);
+            given(jwtTokenProvider.createAccessToken(USER_ID, UserRole.BUYER, 0))
+                .willReturn(ACCESS_TOKEN);
+            given(jwtTokenProvider.createRefreshToken(USER_ID, DEVICE_ID))
+                .willReturn(NEW_REFRESH_TOKEN);
+            given(jwtTokenProvider.getRefreshTokenExpirySeconds()).willReturn(604_800L);
+            given(jwtTokenProvider.getAccessTokenExpirySeconds()).willReturn(900L);
+            given(deviceContextService.verifyContext(USER_ID, DEVICE_ID, USER_AGENT, CLIENT_IP))
+                .willReturn(DeviceContextService.ContextVerifyResult.MATCH);
+            given(redisTokenService.rotateRefreshToken(
+                USER_ID, DEVICE_ID, oldRt, NEW_REFRESH_TOKEN, 604_800L
+            )).willReturn(new RedisTokenService.RefreshTokenRotationResult(
+                RedisTokenService.RefreshTokenRotationStatus.GRACE_REPLAY,
+                winningRt));
+
+            RefreshResult result = authService.refresh(
+                request, DEVICE_ID, USER_AGENT, CLIENT_IP);
+
+            assertThat(result.newRefreshToken()).isEqualTo(winningRt);
+            verify(authCommandService, never()).invalidateTokensForRefreshReuse(anyLong());
         }
 
         @Test
@@ -362,13 +400,17 @@ class AuthServiceTest {
             given(jwtTokenProvider.createAccessToken(USER_ID, UserRole.BUYER, 0)).willReturn(ACCESS_TOKEN);
             given(jwtTokenProvider.createRefreshToken(USER_ID, DEVICE_ID)).willReturn(NEW_REFRESH_TOKEN);
             given(jwtTokenProvider.getRefreshTokenExpirySeconds()).willReturn(604_800L);
-            given(redisTokenService.rotateRefreshTokenCAS(
+            given(redisTokenService.rotateRefreshToken(
                 anyLong(), anyString(), anyString(), anyString(), anyLong()
-            )).willReturn(false);
+            )).willReturn(new RedisTokenService.RefreshTokenRotationResult(
+                RedisTokenService.RefreshTokenRotationStatus.REUSED,
+                null));
 
             // when & then
             assertThatThrownBy(() -> authService.refresh(request, DEVICE_ID, USER_AGENT, CLIENT_IP))
                 .isInstanceOf(CustomException.class);
+
+            verify(authCommandService).invalidateTokensForRefreshReuse(USER_ID);
         }
     }
 

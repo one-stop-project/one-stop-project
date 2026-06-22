@@ -1,5 +1,6 @@
 package com.sparta.one_stop.global.oauth2;
 
+import com.sparta.one_stop.domain.admin.security.SuspensionPolicyService;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.UserRepository;
 import com.sparta.one_stop.global.exception.CustomException;
@@ -35,7 +36,8 @@ import java.util.Optional;
 public class OAuth2MemberService {
 
     private final UserRepository userRepository;
-    private final OAuth2NewUserCreator newUserCreator;  // ★ 별도 클래스 주입
+    private final OAuth2NewUserCreator newUserCreator;
+    private final SuspensionPolicyService suspensionPolicyService;
 
     @Transactional
     public User findOrCreateUser(OAuth2UserInfo userInfo) {
@@ -46,6 +48,7 @@ public class OAuth2MemberService {
 
         if (existing.isPresent()) {
             User user = existing.get();
+            suspensionPolicyService.validateOrRelease(user);
             user.verifyActive();
             user.recordLogin();
             log.debug("[OAuth2] 기존 사용자 로그인: userId={}, provider={}",

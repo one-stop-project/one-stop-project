@@ -29,15 +29,19 @@ import static com.sparta.one_stop.global.common.RedisKeyConstants.USER_TOKEN_CUT
 public class RedisTokenService {
 
     /** Lua Script — CAS 기반 RTR 원자적 갱신 */
+    private static final long REFRESH_GRACE_SECONDS = 10;
+    private static final String REFRESH_GRACE_PREFIX = "RT_GRACE:";
     private static final String ROTATE_RT_SCRIPT =
         "if redis.call('GET', KEYS[1]) == ARGV[1] then " +
-            "   redis.call('SET', KEYS[1], ARGV[2], 'EX', ARGV[3]) " +
-            "   return 1 " +
-            "else " +
-            "   return 0 " +
-            "end";
-    private static final RedisScript<Long> ROTATE_RT =
-        new DefaultRedisScript<>(ROTATE_RT_SCRIPT, Long.class);
+            "redis.call('SET', KEYS[1], ARGV[2], 'EX', ARGV[3]) " +
+            "redis.call('SET', KEYS[2], ARGV[4], 'EX', ARGV[5]) " +
+            "return 'ROTATED' " +
+        "end " +
+        "local graceToken = redis.call('GET', KEYS[2]) " +
+        "if graceToken then return 'GRACE:' .. graceToken end " +
+        "return 'REUSED'";
+    private static final RedisScript<String> ROTATE_RT =
+        new DefaultRedisScript<>(ROTATE_RT_SCRIPT, String.class);
     private static final String DELETE_ALL_USER_SESSIONS_SCRIPT =
         "local devices = redis.call('ZRANGE', KEYS[1], 0, -1) " +
             "local deleted = 0 " +
@@ -76,6 +80,10 @@ public class RedisTokenService {
         return REFRESH_TOKEN_PREFIX + userId + ":" + deviceId;
     }
 
+    private String refreshGraceKey(Long userId, String deviceId, String oldTokenHash) {
+        return REFRESH_GRACE_PREFIX + userId + ":" + deviceId + ":" + oldTokenHash;
+    }
+
     private String blKey(String jti) {
         return BLACKLIST_PREFIX + jti;
     }
@@ -91,7 +99,7 @@ public class RedisTokenService {
         try {
             redisTemplate.opsForValue().set(key, hashToken(token), expirySeconds, TimeUnit.SECONDS);
         } catch (RedisConnectionFailureException | RedisSystemException e) {
-            log.error("Redis 통신 장애 (RT 저장 실패) - Key: {}", key, e);
+            log.error("Redis 통신 장애 (RT 저장 실패): userId={}", userId, e);
             throw new CustomException(ErrorCode.COMMON_008);
         }
     }
@@ -104,7 +112,7 @@ public class RedisTokenService {
         try {
             return redisTemplate.opsForValue().get(key);
         } catch (RedisConnectionFailureException | RedisSystemException e) {
-            log.error("Redis 통신 장애 (RT 조회 실패) - Key: {}", key, e);
+            log.error("Redis 통신 장애 (RT 조회 실패): userId={}", userId, e);
             throw new CustomException(ErrorCode.COMMON_008);
         }
     }
@@ -118,21 +126,42 @@ public class RedisTokenService {
      * RT 원자적 갱신 (Compare-And-Swap)
      *
      * 동시성 보장:
-     *   - 같은 deviceId로 동시 refresh 요청 시 1건만 성공
-     *   - 탈취된 RT를 다른 기기에서 사용 시 즉시 실패
+     *   - 같은 old RT의 직전 동시 요청은 짧은 grace 동안 동일한 새 RT를 재전달
+     *   - grace에 없는 이전 세대 RT 재사용은 공격으로 판정
      */
-    public boolean rotateRefreshTokenCAS(Long userId, String deviceId, String oldToken,
-                                         String newToken, long expirySeconds) {
+    public RefreshTokenRotationResult rotateRefreshToken(
+        Long userId,
+        String deviceId,
+        String oldToken,
+        String newToken,
+        long expirySeconds
+    ) {
         String key = rtKey(userId, deviceId);
+        String oldTokenHash = hashToken(oldToken);
+        String graceKey = refreshGraceKey(userId, deviceId, oldTokenHash);
         try {
-            Long result = redisTemplate.execute(
+            String result = redisTemplate.execute(
                 ROTATE_RT,
-                List.of(key),
-                hashToken(oldToken), hashToken(newToken), String.valueOf(expirySeconds)
+                List.of(key, graceKey),
+                oldTokenHash,
+                hashToken(newToken),
+                String.valueOf(expirySeconds),
+                newToken,
+                String.valueOf(REFRESH_GRACE_SECONDS)
             );
-            return result != null && result == 1L;
+            if ("ROTATED".equals(result)) {
+                return new RefreshTokenRotationResult(
+                    RefreshTokenRotationStatus.ROTATED, newToken);
+            }
+            if (result != null && result.startsWith("GRACE:")) {
+                return new RefreshTokenRotationResult(
+                    RefreshTokenRotationStatus.GRACE_REPLAY,
+                    result.substring("GRACE:".length()));
+            }
+            return new RefreshTokenRotationResult(
+                RefreshTokenRotationStatus.REUSED, null);
         } catch (RedisConnectionFailureException | RedisSystemException e) {
-            log.error("Redis 통신 장애 (RTR Lua Script 실패) - Key: {}", key, e);
+            log.error("Redis 통신 장애 (RTR Lua Script 실패): userId={}", userId, e);
             throw new CustomException(ErrorCode.COMMON_008);
         }
     }
@@ -144,7 +173,7 @@ public class RedisTokenService {
         try {
             redisTemplate.delete(rtKey(userId, deviceId));
         } catch (RedisConnectionFailureException | RedisSystemException e) {
-            log.error("로그아웃 부분 실패 - RT 삭제 오류: userId={}, deviceId={}", userId, deviceId, e);
+            log.error("로그아웃 부분 실패 - RT 삭제 오류: userId={}", userId, e);
         }
     }
 
@@ -307,5 +336,16 @@ public class RedisTokenService {
     }
 
     public record OAuth2Handoff(String deviceId, String accessToken) {}
+
+    public enum RefreshTokenRotationStatus {
+        ROTATED,
+        GRACE_REPLAY,
+        REUSED
+    }
+
+    public record RefreshTokenRotationResult(
+        RefreshTokenRotationStatus status,
+        String refreshToken
+    ) {}
 
 }

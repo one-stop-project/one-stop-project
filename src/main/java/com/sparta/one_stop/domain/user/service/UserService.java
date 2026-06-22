@@ -130,9 +130,6 @@ public class UserService {
         User user = findUserById(userId);
         user.suspend();
 
-        // tokenVersion++ (DB 영속 무효화)
-        user.increaseTokenVersion();
-
         // 캐시 무효화 (status) — tokenVersion 캐시는 커밋 후 Listener가 evict
         userStatusCacheService.evict(userId);
 

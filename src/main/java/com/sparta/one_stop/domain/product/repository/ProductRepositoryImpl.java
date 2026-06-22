@@ -12,6 +12,7 @@ import com.sparta.one_stop.domain.product.entity.QProduct;
 import com.sparta.one_stop.domain.product.entity.QProductCategoryMapping;
 import com.sparta.one_stop.domain.product.entity.QProductItem;
 import com.sparta.one_stop.global.enums.product.ProductItemStatus;
+import com.sparta.one_stop.global.enums.user.UserStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -54,6 +55,7 @@ public class ProductRepositoryImpl implements ProductRepositoryCustom {
         BooleanBuilder where = new BooleanBuilder();
         where.and(product.status.eq(cond.productStatus()));
         where.and(product.seller.status.eq(cond.sellerStatus()));
+        where.and(product.seller.user.status.eq(UserStatus.ACTIVE));
 
         // 키워드: name + description FULLTEXT (BOOLEAN MODE), 관련도 > 0 이면 매칭
         if (cond.keyword() != null) {

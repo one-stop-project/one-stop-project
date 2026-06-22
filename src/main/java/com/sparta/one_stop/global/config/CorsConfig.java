@@ -1,18 +1,25 @@
 package com.sparta.one_stop.global.config;
 
+import jakarta.annotation.PostConstruct;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
+import org.springframework.core.env.Profiles;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
+import java.net.URI;
 import java.util.List;
 
 @Configuration
+@RequiredArgsConstructor
 public class CorsConfig {
 
     @Value("${app.cors.allowed-origins}")
     private List<String> allowedOrigins;
+    private final Environment environment;
 
     private static final List<String> ALLOWED_METHODS = List.of(
         "GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"
@@ -39,6 +46,34 @@ public class CorsConfig {
 
     // Preflight 캐싱 시간
     private static final long PREFLIGHT_MAX_AGE = 3600L;
+
+    @PostConstruct
+    void validateAllowedOrigins() {
+        if (allowedOrigins == null || allowedOrigins.isEmpty()) {
+            throw new IllegalStateException("app.cors.allowed-origins must not be empty");
+        }
+        allowedOrigins = allowedOrigins.stream()
+            .map(origin -> origin == null ? "" : origin.trim())
+            .toList();
+        boolean production = environment.acceptsProfiles(Profiles.of("prod"));
+        for (String origin : allowedOrigins) {
+            if (origin.isEmpty() || "*".equals(origin) || origin.contains("*")) {
+                throw new IllegalStateException("CORS wildcard origins are not allowed with credentials");
+            }
+            URI uri;
+            try {
+                uri = URI.create(origin);
+            } catch (IllegalArgumentException e) {
+                throw new IllegalStateException("Invalid CORS origin: " + origin, e);
+            }
+            if (uri.getHost() == null || !("http".equals(uri.getScheme()) || "https".equals(uri.getScheme()))) {
+                throw new IllegalStateException("CORS origin must be an absolute HTTP(S) origin: " + origin);
+            }
+            if (production && !"https".equals(uri.getScheme())) {
+                throw new IllegalStateException("Production CORS origins must use HTTPS: " + origin);
+            }
+        }
+    }
 
     @Bean
     public UrlBasedCorsConfigurationSource corsConfigurationSource() {

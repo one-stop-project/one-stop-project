@@ -34,7 +34,7 @@ public class AiRelatedProductService {
     private final ProductRepository productRepository;
     private final PopularProductService popularProductService;
 
-    @CircuitBreaker(name = "ai-assistant", fallbackMethod = "getRelatedProductsFallback")
+    @CircuitBreaker(name = "ai-related", fallbackMethod = "getRelatedProductsFallback")
     public List<ProductSummaryResponse> getRelatedProducts(Long productId) {
         Product product = productRepository.findById(productId)
             .orElseThrow(() -> new CustomException(ErrorCode.PRODUCT_001));
