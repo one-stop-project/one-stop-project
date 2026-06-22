@@ -187,7 +187,7 @@ public class Product extends BaseEntity {
     public boolean isVisibleOnSale() {
         if (!isApproved()) return false;
         if (this.seller.getStatus() != SellerStatus.APPROVED) return false;
-        if (this.seller.getUser() != null && !this.seller.getUser().isActive()) return false;
+        if (this.seller.getUser() == null || !this.seller.getUser().isActive()) return false;
         return this.productItems.stream().anyMatch(ProductItem::isOnSale);
     }
 

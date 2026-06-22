@@ -33,22 +33,23 @@ public class HttpCookieOAuth2AuthorizationRequestRepository
 
     public static final String COOKIE_NAME = "oauth2_auth_request";
     private static final int MAX_AGE_SECONDS = 180;
-    private static final int MAX_COOKIE_VALUE_LENGTH = 12_000;
+    // 일반 브라우저의 쿠키당 약 4 KiB 제한에서 이름과 속성 공간을 제외한 안전 상한.
+    private static final int MAX_COOKIE_VALUE_LENGTH = 3_800;
     private static final int MIN_SIGNING_KEY_BYTES = 32;
     private static final String HMAC_ALGORITHM = "HmacSHA256";
 
     private final ObjectMapper objectMapper;
     private final byte[] signingKey;
-
-    @Value("${app.oauth2.cookie-secure:false}")
-    private boolean cookieSecure;
+    private final boolean cookieSecure;
 
     public HttpCookieOAuth2AuthorizationRequestRepository(
         ObjectMapper objectMapper,
-        @Value("${app.oauth2.authorization-request-cookie-secret:${jwt.secret.key}}") String signingSecret
+        @Value("${app.oauth2.authorization-request-cookie-secret:${jwt.secret.key}}") String signingSecret,
+        @Value("${app.oauth2.cookie-secure:true}") boolean cookieSecure
     ) {
         this.objectMapper = objectMapper;
         this.signingKey = decodeSecret(signingSecret);
+        this.cookieSecure = cookieSecure;
         if (signingKey.length < MIN_SIGNING_KEY_BYTES) {
             throw new IllegalStateException("OAuth2 authorization request cookie secret must be at least 32 bytes");
         }
@@ -67,8 +68,12 @@ public class HttpCookieOAuth2AuthorizationRequestRepository
             deleteCookie(response);
             return;
         }
+        String serialized = serialize(authorizationRequest);
+        if (serialized.length() > MAX_COOKIE_VALUE_LENGTH) {
+            throw new IllegalStateException("OAuth2 authorization request cookie exceeds browser size limit");
+        }
         response.addHeader(HttpHeaders.SET_COOKIE,
-            buildCookie(serialize(authorizationRequest), MAX_AGE_SECONDS).toString());
+            buildCookie(serialized, MAX_AGE_SECONDS).toString());
     }
 
     @Override

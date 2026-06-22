@@ -11,8 +11,10 @@ import com.sparta.one_stop.domain.product.entity.Product;
 import com.sparta.one_stop.domain.product.entity.ProductItem;
 import com.sparta.one_stop.domain.product.repository.ProductRepository;
 import com.sparta.one_stop.domain.user.entity.Seller;
+import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.global.enums.product.ProductItemStatus;
 import com.sparta.one_stop.global.enums.user.SellerStatus;
+import com.sparta.one_stop.global.enums.user.UserRole;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Set;
@@ -56,7 +58,14 @@ class PopularProductServiceTest {
     // ===== 객체 생성 헬퍼 =====
 
     private Product approvedProduct(Long id) {
-        Seller seller = Seller.builder().shopName("shop").businessNumber("1234567890").build();
+        User user = User.builder()
+            .email("seller" + id + "@test.com")
+            .password("password")
+            .name("seller")
+            .role(UserRole.SELLER)
+            .build();
+        Seller seller = Seller.builder().user(user)
+            .shopName("shop").businessNumber("1234567890").build();
         seller.approve();
         Product product = Product.builder().seller(seller).name("p" + id).thumbnailUrl("url").build();
         product.approve();

@@ -6,6 +6,10 @@ import com.sparta.one_stop.global.audit.SecurityAuditService;
 import org.junit.jupiter.api.Test;
 
 import java.util.Optional;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
@@ -13,6 +17,9 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
 class SuspensionPolicyServiceTest {
+
+    private static final Clock FIXED_CLOCK = Clock.fixed(
+        Instant.parse("2026-06-22T00:00:00Z"), ZoneOffset.UTC);
 
     @Test
     void 만료된_정지는_접근시_자동해제된다() {
@@ -28,8 +35,9 @@ class SuspensionPolicyServiceTest {
         given(actions.findActiveSuspendAction(2L)).willReturn(Optional.of(action));
         given(action.isExpired(any())).willReturn(true);
 
-        new SuspensionPolicyService(actions, audit, users).validateOrRelease(user);
+        new SuspensionPolicyService(actions, audit, users, FIXED_CLOCK).validateOrRelease(user);
 
+        verify(action).isExpired(LocalDateTime.of(2026, 6, 22, 0, 0));
         verify(action).deactivate();
         verify(user).reactivate();
         verify(audit).record(any());

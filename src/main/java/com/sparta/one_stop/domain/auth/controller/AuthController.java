@@ -114,13 +114,19 @@ public class AuthController {
             jwtTokenProvider.getRefreshTokenExpirySeconds(),
             "/"
         );
+        // device_id Path를 /api/auth에서 /로 확장한 마이그레이션 기간에는
+        // 동일 이름의 구형 쿠키가 먼저 선택되지 않도록 로그인 성공 시 즉시 만료한다.
+        String clearLegacyDeviceCookie = cookieUtil.createExpiredCookie(
+            "device_id", "/api/auth"
+        );
 
         // ※ 주의: 프론트엔드 보안 강화를 위해 클라이언트에 내려가는 LoginResponse JSON에서
         // RefreshToken 필드는 null로 비우거나 아예 DTO에서 제거하는 것이 정석
         // 현재는 쿠키를 통해 안전하게 전달
         ResponseEntity.BodyBuilder responseBuilder = ResponseEntity.ok()
             .header(HttpHeaders.SET_COOKIE, rtCookie)
-            .header(HttpHeaders.SET_COOKIE, deviceIdCookie);
+            .header(HttpHeaders.SET_COOKIE, deviceIdCookie)
+            .header(HttpHeaders.SET_COOKIE, clearLegacyDeviceCookie);
 
         // 5. merge 완료 후 비로그인 장바구니 쿠키 삭제
         if (guestCartMerged) {

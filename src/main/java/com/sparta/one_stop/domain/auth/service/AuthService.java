@@ -278,7 +278,8 @@ public class AuthService {
                 .metadata(String.format("{\"deviceId\":\"%s\"}", deviceId))
                 .build());
 
-            throw new CustomException(ErrorCode.AUTH_020, "등록되지 않은 기기입니다. 다시 로그인해주세요.");
+            // 기기 등록 여부를 외부에 구분 노출하지 않고 device binding 실패로 통일한다.
+            throw new CustomException(ErrorCode.AUTH_020);
         }
 
         User user = authQueryService.findActiveUser(userId);

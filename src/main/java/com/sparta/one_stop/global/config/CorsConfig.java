@@ -52,9 +52,11 @@ public class CorsConfig {
         if (allowedOrigins == null || allowedOrigins.isEmpty()) {
             throw new IllegalStateException("app.cors.allowed-origins must not be empty");
         }
+        allowedOrigins = allowedOrigins.stream()
+            .map(origin -> origin == null ? "" : origin.trim())
+            .toList();
         boolean production = environment.acceptsProfiles(Profiles.of("prod"));
-        for (String configuredOrigin : allowedOrigins) {
-            String origin = configuredOrigin == null ? "" : configuredOrigin.trim();
+        for (String origin : allowedOrigins) {
             if (origin.isEmpty() || "*".equals(origin) || origin.contains("*")) {
                 throw new IllegalStateException("CORS wildcard origins are not allowed with credentials");
             }

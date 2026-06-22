@@ -12,6 +12,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.Clock;
 
 @Service
 @RequiredArgsConstructor
@@ -20,7 +21,12 @@ public class SuspensionPolicyService {
     private final UserSecurityActionRepository actions;
     private final SecurityAuditService audit;
     private final UserRepository users;
+    private final Clock clock;
 
+    /**
+     * 전달된 User는 빠른 ACTIVE 판정에만 사용한다. 정지 상태라면 관리자 조치와 동일한
+     * User 행을 PESSIMISTIC_WRITE로 다시 조회하여 재정지와 자동 해제의 순서를 직렬화한다.
+     */
     @Transactional
     public void validateOrRelease(User user) {
         if (!user.isSuspended()) return;
@@ -31,7 +37,7 @@ public class SuspensionPolicyService {
 
         var activeSuspension = actions.findActiveSuspendAction(lockedUser.getId());
         if (activeSuspension.isPresent()
-            && activeSuspension.get().isExpired(LocalDateTime.now())) {
+            && activeSuspension.get().isExpired(LocalDateTime.now(clock))) {
             activeSuspension.get().deactivate();
             lockedUser.reactivate();
             audit.record(SecurityAuditEvent.builder()

@@ -12,6 +12,7 @@ import java.util.Set;
 import java.util.Base64;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class HttpCookieOAuth2AuthorizationRequestRepositoryTest {
 
@@ -21,12 +22,18 @@ class HttpCookieOAuth2AuthorizationRequestRepositoryTest {
     @Test
     void signedJsonCookieRoundTripsAuthorizationRequest() {
         var repository = new HttpCookieOAuth2AuthorizationRequestRepository(
-            new ObjectMapper(), SIGNING_SECRET);
+            new ObjectMapper(), SIGNING_SECRET, true);
         var authorizationRequest = request();
         var response = new MockHttpServletResponse();
 
         repository.saveAuthorizationRequest(
             authorizationRequest, new MockHttpServletRequest(), response);
+
+        assertThat(response.getHeader("Set-Cookie"))
+            .contains("HttpOnly")
+            .contains("Secure")
+            .contains("SameSite=Lax")
+            .contains("Max-Age=180");
 
         var callback = new MockHttpServletRequest();
         callback.setCookies(new Cookie(
@@ -43,7 +50,7 @@ class HttpCookieOAuth2AuthorizationRequestRepositoryTest {
     @Test
     void tamperedCookieIsRejected() {
         var repository = new HttpCookieOAuth2AuthorizationRequestRepository(
-            new ObjectMapper(), SIGNING_SECRET);
+            new ObjectMapper(), SIGNING_SECRET, true);
         var response = new MockHttpServletResponse();
         repository.saveAuthorizationRequest(request(), new MockHttpServletRequest(), response);
         String value = cookieValue(response.getHeader("Set-Cookie"));
@@ -54,6 +61,40 @@ class HttpCookieOAuth2AuthorizationRequestRepositoryTest {
             value.substring(0, value.length() - 1) + (value.endsWith("A") ? "B" : "A")));
 
         assertThat(repository.loadAuthorizationRequest(callback)).isNull();
+    }
+
+    @Test
+    void oversizedAuthorizationRequestIsRejectedBeforeCookieIsWritten() {
+        var repository = new HttpCookieOAuth2AuthorizationRequestRepository(
+            new ObjectMapper(), SIGNING_SECRET, true);
+        var oversized = OAuth2AuthorizationRequest.authorizationCode()
+            .authorizationUri("https://kauth.kakao.com/oauth/authorize")
+            .clientId("client-id")
+            .redirectUri("https://example.com/login/oauth2/code/kakao")
+            .state("x".repeat(4_000))
+            .build();
+        var response = new MockHttpServletResponse();
+
+        assertThatThrownBy(() -> repository.saveAuthorizationRequest(
+            oversized, new MockHttpServletRequest(), response))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("browser size limit");
+        assertThat(response.getHeader("Set-Cookie")).isNull();
+    }
+
+    @Test
+    void nullAuthorizationRequestExpiresCookieWithSecurityAttributes() {
+        var repository = new HttpCookieOAuth2AuthorizationRequestRepository(
+            new ObjectMapper(), SIGNING_SECRET, true);
+        var response = new MockHttpServletResponse();
+
+        repository.saveAuthorizationRequest(null, new MockHttpServletRequest(), response);
+
+        assertThat(response.getHeader("Set-Cookie"))
+            .contains("Max-Age=0")
+            .contains("HttpOnly")
+            .contains("Secure")
+            .contains("SameSite=Lax");
     }
 
     private OAuth2AuthorizationRequest request() {
