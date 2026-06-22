@@ -5,6 +5,7 @@ import com.sparta.one_stop.domain.ai.entity.ProductReviewSummary;
 import com.sparta.one_stop.domain.ai.repository.ProductReviewSummaryRepository;
 import com.sparta.one_stop.domain.product.repository.ProductRepository;
 import com.sparta.one_stop.domain.review.repository.ReviewRepository;
+import com.sparta.one_stop.global.enums.review.ReviewStatus;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -14,7 +15,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.transaction.PlatformTransactionManager;
-import org.springframework.transaction.TransactionStatus;
 
 import java.util.Optional;
 
@@ -69,11 +69,11 @@ class AiReviewSummaryServiceTest {
         }
 
         @Test
-        @DisplayName("요약 없음 + 리뷰 수 < 5 → INSUFFICIENT 반환")
+        @DisplayName("요약 없음 + ACTIVE 리뷰 수 < 5 → INSUFFICIENT 반환")
         void getSummary_returns_insufficient_when_review_count_below_threshold() {
             given(summaryRepository.findByProduct_Id(PRODUCT_ID)).willReturn(Optional.empty());
-            given(reviewRepository.countByProduct_Id(PRODUCT_ID)).willReturn(3L);
-            given(reviewRepository.findAverageRatingByProductId(PRODUCT_ID)).willReturn(null);
+            given(reviewRepository.countByProduct_IdAndStatus(PRODUCT_ID, ReviewStatus.ACTIVE)).willReturn(3L);
+            given(reviewRepository.findAverageRatingByProductIdAndStatus(PRODUCT_ID, ReviewStatus.ACTIVE)).willReturn(null);
 
             AiReviewSummaryResponse result = service.getSummary(PRODUCT_ID);
 
@@ -83,11 +83,11 @@ class AiReviewSummaryServiceTest {
         }
 
         @Test
-        @DisplayName("요약 없음 + 리뷰 수 >= 5 → PENDING 반환")
+        @DisplayName("요약 없음 + ACTIVE 리뷰 수 >= 5 → PENDING 반환")
         void getSummary_returns_pending_when_review_count_sufficient_but_no_summary() {
             given(summaryRepository.findByProduct_Id(PRODUCT_ID)).willReturn(Optional.empty());
-            given(reviewRepository.countByProduct_Id(PRODUCT_ID)).willReturn(8L);
-            given(reviewRepository.findAverageRatingByProductId(PRODUCT_ID)).willReturn(4.2);
+            given(reviewRepository.countByProduct_IdAndStatus(PRODUCT_ID, ReviewStatus.ACTIVE)).willReturn(8L);
+            given(reviewRepository.findAverageRatingByProductIdAndStatus(PRODUCT_ID, ReviewStatus.ACTIVE)).willReturn(4.2);
 
             AiReviewSummaryResponse result = service.getSummary(PRODUCT_ID);
 

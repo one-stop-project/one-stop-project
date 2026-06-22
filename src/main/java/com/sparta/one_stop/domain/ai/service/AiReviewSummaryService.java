@@ -12,6 +12,7 @@ import com.sparta.one_stop.domain.product.entity.Product;
 import com.sparta.one_stop.domain.product.repository.ProductRepository;
 import com.sparta.one_stop.domain.review.entity.Review;
 import com.sparta.one_stop.domain.review.repository.ReviewRepository;
+import com.sparta.one_stop.global.enums.review.ReviewStatus;
 import com.sparta.one_stop.global.exception.CustomException;
 import com.sparta.one_stop.global.exception.ErrorCode;
 import jakarta.annotation.PostConstruct;
@@ -50,6 +51,9 @@ import java.util.stream.Collectors;
  * [커넥션 풀 보호] AI HTTP 호출(2~10초) 중 DB 커넥션을 점유하지 않도록
  *   비동기 메서드는 NOT_SUPPORTED로 TX를 배제하고, TransactionTemplate으로
  *   DB 읽기/쓰기 구간만 짧게 TX를 엽니다.
+ *
+ * [soft delete 대응] 모든 리뷰 조회·집계 쿼리에서 ACTIVE 상태만 필터
+ *   - 삭제된(DELETED) 리뷰는 요약·카운트·평균 별점에서 제외
  */
 @Slf4j
 @Service
@@ -87,7 +91,7 @@ public class AiReviewSummaryService {
         return summaryRepository.findByProduct_Id(productId)
             .map(e -> AiReviewSummaryResponse.ready(e.getReviewCount(), e.getAverageRating(), toReviewSummary(e)))
             .orElseGet(() -> {
-                long reviewCount = reviewRepository.countByProduct_Id(productId);
+                long reviewCount = reviewRepository.countByProduct_IdAndStatus(productId, ReviewStatus.ACTIVE);
                 double averageRating = getAverageRating(productId);
                 if (reviewCount < MIN_REVIEW_COUNT) {
                     return AiReviewSummaryResponse.insufficient(reviewCount, averageRating);
@@ -106,7 +110,7 @@ public class AiReviewSummaryService {
         readTx.executeWithoutResult(status -> {
             productRepository.findById(productId)
                 .orElseThrow(() -> new CustomException(ErrorCode.PRODUCT_001));
-            counts[0] = reviewRepository.countByProduct_Id(productId);
+            counts[0] = reviewRepository.countByProduct_IdAndStatus(productId, ReviewStatus.ACTIVE);
         });
 
         if (counts[0] < MIN_REVIEW_COUNT) {
@@ -169,7 +173,7 @@ public class AiReviewSummaryService {
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public void refreshSummaryAsync(Long productId) {
         boolean hasEnough = Boolean.TRUE.equals(
-            readTx.execute(status -> reviewRepository.countByProduct_Id(productId) >= MIN_REVIEW_COUNT)
+            readTx.execute(status -> reviewRepository.countByProduct_IdAndStatus(productId, ReviewStatus.ACTIVE) >= MIN_REVIEW_COUNT)
         );
 
         if (!hasEnough) {
@@ -218,14 +222,14 @@ public class AiReviewSummaryService {
     }
 
     private IncrementalPayload loadIncrementalPayload(Long productId, Long newReviewId) {
-        long reviewCount = reviewRepository.countByProduct_Id(productId);
+        long reviewCount = reviewRepository.countByProduct_IdAndStatus(productId, ReviewStatus.ACTIVE);
         if (reviewCount < MIN_REVIEW_COUNT) return null;
 
         ProductReviewSummary current = summaryRepository.findByProduct_Id(productId).orElse(null);
         if (current == null) return IncrementalPayload.fullSummary(reviewCount, getAverageRating(productId));
 
         long afterId = current.getLastIncludedReviewId() != null ? current.getLastIncludedReviewId() : 0L;
-        List<Review> newReviews = reviewRepository.findNewReviewsBetween(productId, afterId, newReviewId);
+        List<Review> newReviews = reviewRepository.findNewReviewsBetween(productId, afterId, newReviewId, ReviewStatus.ACTIVE);
         if (newReviews.isEmpty()) return null;
 
         if (newReviews.size() < MIN_REVIEWS_FOR_INCREMENTAL) {
@@ -254,11 +258,11 @@ public class AiReviewSummaryService {
         Product product = productRepository.findById(productId).orElse(null);
         if (product == null) return null;
 
-        long reviewCount = reviewRepository.countByProduct_Id(productId);
+        long reviewCount = reviewRepository.countByProduct_IdAndStatus(productId, ReviewStatus.ACTIVE);
         double averageRating = getAverageRating(productId);
 
-        List<Review> reviews = reviewRepository.findAllByProduct_IdOrderByCreatedAtDesc(
-            productId, PageRequest.of(0, MAX_REVIEW_FOR_FULL));
+        List<Review> reviews = reviewRepository.findAllByProduct_IdAndStatusOrderByCreatedAtDesc(
+            productId, ReviewStatus.ACTIVE, PageRequest.of(0, MAX_REVIEW_FOR_FULL));
 
         String reviewsText = reviews.stream()
             .map(r -> r.getContent() != null ? r.getContent() : "")
@@ -311,14 +315,14 @@ public class AiReviewSummaryService {
     }
 
     private double getAverageRating(Long productId) {
-        Double avg = reviewRepository.findAverageRatingByProductId(productId);
+        Double avg = reviewRepository.findAverageRatingByProductIdAndStatus(productId, ReviewStatus.ACTIVE);
         return avg == null ? 0.0 : Math.round(avg * 10.0) / 10.0;
     }
 
     // TX 없이 직접 호출용 (NOT_SUPPORTED 컨텍스트에서 단순 조회)
     private double getAverageRatingDirect(Long productId) {
         return readTx.execute(status -> {
-            Double avg = reviewRepository.findAverageRatingByProductId(productId);
+            Double avg = reviewRepository.findAverageRatingByProductIdAndStatus(productId, ReviewStatus.ACTIVE);
             return avg == null ? 0.0 : Math.round(avg * 10.0) / 10.0;
         });
     }
