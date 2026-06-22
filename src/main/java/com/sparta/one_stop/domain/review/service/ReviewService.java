@@ -280,8 +280,8 @@ public class ReviewService {
             .map(i -> new ReviewableOrderItemResponse(
                 i.getId(),
                 i.getProductItem().getProduct().getId(),
-                i.getProductItem().getOptionSummary(),
                 i.getItemName(),
+                i.getProductItem().getOptionSummary(),
                 i.getUpdatedAt()
             ))
             .toList();
