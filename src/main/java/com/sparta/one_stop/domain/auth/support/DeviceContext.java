@@ -23,16 +23,6 @@ import java.util.HexFormat;
  *     - 브라우저 종류    (CHROME / SAFARI / FIREFOX / EDGE …) — 버전 제외
  *     - IP 대역         (IPv4 /24, IPv6 /48) — 호스트 비트 제거
  *
- * 리팩터링 노트 (v2)
- *
- *   순수 함수 유틸 — 상태/부수효과 없음, 스레드 안전<
- *   MessageDigest는 호출 시마다 새 인스턴스 생성 (MessageDigest 자체가 thread-unsafe).
- *       단, getInstance 비용은 무시 가능 수준이며 공유 인스턴스는 동시성 버그를 유발하므로
- *       의도적으로 매 호출 생성한다.
- *   HexFormat 사용으로 hex 변환 단순화 (Java 17+)
- *   IPv6 /48 프리픽스 지원 추가
- *
- *
  * 불일치는 즉시 차단이 아니라 보안 이벤트 + 알림 트리거로 사용 권장.
  * (차단은 RT-deviceId 불일치 같은 더 강한 신호에서만)
  */

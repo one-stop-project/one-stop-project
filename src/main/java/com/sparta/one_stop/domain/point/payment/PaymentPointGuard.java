@@ -13,8 +13,8 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * 결제 시 포인트 검증 가드
  *
- * <p><b>다중 방어선</b>
- * <pre>
+ * 다중 방어선
+ *
  *   [Guard 1] 요청 자체 유효성
  *     - 음수/null 금액 거부
  *     - 정수 단위 (1원 단위) 검증
@@ -30,13 +30,8 @@ import org.springframework.transaction.annotation.Transactional;
  *   [Guard 4] 결제 흐름 사전 검증
  *     - 주문 생성 시점 ≠ 결제 승인 시점 사이 시간 차
  *     - 결제 직전 다시 한 번 검증
- * </pre>
  *
- * <p><b>왜 별도 컴포넌트인가</b>
- * <ul>
- *   <li>PointService(일반 사용자 흐름)와 PaymentService(결제 흐름) 양쪽에서 호출</li>
- *   <li>검증 로직 중복 방지 + 정책 변경 시 단일 변경 지점</li>
- * </ul>
+ *
  */
 @Slf4j
 @Component
@@ -48,7 +43,7 @@ public class PaymentPointGuard {
     /**
      * 주문 생성 시점 검증 — 가벼운 검증 (DB 락 없이)
      *
-     * <p>실제 차감은 결제 승인 시 별도로.
+     * 실제 차감은 결제 승인 시 별도로.
      */
     @Transactional(readOnly = true)
     public void validateOnOrderCreation(Long userId, Integer requestedPoint) {
@@ -76,10 +71,10 @@ public class PaymentPointGuard {
     /**
      * 결제 승인 직전 재검증 — 별도 트랜잭션에서 최신 잔액 재조회
      *
-     * <p><b>주문 생성과 결제 사이에 다른 트랜잭션이 차감했을 수 있음</b>
-     * <br>예: 다른 탭에서 동시 결제, 만료 배치 실행 등
+     * 주문 생성과 결제 사이에 다른 트랜잭션이 차감했을 수 있음
+     * 예: 다른 탭에서 동시 결제, 만료 배치 실행 등
      *
-     * <p>{@code REQUIRES_NEW}로 별도 트랜잭션에서 최신 상태를 다시 조회한다.
+     * {@code REQUIRES_NEW}로 별도 트랜잭션에서 최신 상태를 다시 조회한다.
      * 이 메서드 자체는 비관적 락을 획득하지 않으며, 실제 차감 시 낙관적 락으로 충돌을 감지한다.
      */
     @Transactional(propagation = Propagation.REQUIRES_NEW, readOnly = true)

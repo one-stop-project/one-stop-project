@@ -34,7 +34,7 @@ public interface AdminAuditLogRepository extends JpaRepository<AdminAuditLog, Lo
     /**
      * 특정 기간 + 액션 필터 — 운영 리포트용
      *
-     * <p>예: "지난주 POINT_USE 이벤트 전체"
+     * 예: "지난주 POINT_USE 이벤트 전체"
      */
     @Query("""
             SELECT aal FROM AdminAuditLog aal
@@ -51,7 +51,7 @@ public interface AdminAuditLogRepository extends JpaRepository<AdminAuditLog, Lo
     /**
      * 짧은 시간 내 다발 실패 — 비정상 패턴 감지용
      *
-     * <p>예: "최근 5분간 POINT_USE 실패가 10회 이상이면 의심"
+     * 예: "최근 5분간 POINT_USE 실패가 10회 이상이면 의심"
      *
      * @param action 액션 코드
      * @param since  기준 시간 (예: NOW - 5분)
@@ -100,7 +100,7 @@ public interface AdminAuditLogRepository extends JpaRepository<AdminAuditLog, Lo
     /**
      * 액션별 카운트 (지난 N일) — 대시보드 차트용
      *
-     * <p>반환: Object[] = { action(String), count(Long) }
+     * 반환: Object[] = { action(String), count(Long) }
      */
     @Query("""
             SELECT aal.action, COUNT(aal)
@@ -116,7 +116,7 @@ public interface AdminAuditLogRepository extends JpaRepository<AdminAuditLog, Lo
     /**
      * 성공/실패 비율 (지난 N일) — 운영 헬스 체크
      *
-     * <p>반환: Object[] = { result(String), count(Long) }
+     * 반환: Object[] = { result(String), count(Long) }
      */
     @Query("""
             SELECT aal.result, COUNT(aal)

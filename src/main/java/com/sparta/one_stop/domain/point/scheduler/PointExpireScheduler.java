@@ -27,14 +27,12 @@ public class PointExpireScheduler {
     private static final String LOCK_KEY = "point-expire-batch-lock";
     private static final long LOCK_WAIT_SECONDS = 0L;
     private static final long LOCK_LEASE_HOURS = 1L;
-
-    @Value("${app.scheduler.enabled:false}")
-    private boolean schedulerEnabled;
-
     private final JobLauncher jobLauncher;
     private final Job pointExpireJob;
     private final JobExplorer jobExplorer;
     private final RedissonClient redissonClient;
+    @Value("${app.scheduler.enabled:false}")
+    private boolean schedulerEnabled;
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     //  주기 실행 — 매일 새벽 3시 (KST)
@@ -99,7 +97,7 @@ public class PointExpireScheduler {
     /**
      * 수동 실행 — Admin이 특정 날짜로 만료 처리
      *
-     * <p>주의: 자동 스케줄과 동일한 락 사용 → 동시 실행 방지
+     * 주의: 자동 스케줄과 동일한 락 사용 → 동시 실행 방지
      *
      * @return 실행 결과 요약
      * @throws IllegalStateException 다른 실행이 진행 중일 때

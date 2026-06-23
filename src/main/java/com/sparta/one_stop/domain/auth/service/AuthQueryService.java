@@ -1,7 +1,7 @@
 package com.sparta.one_stop.domain.auth.service;
 
-import com.sparta.one_stop.domain.auth.dto.request.LoginRequest;
 import com.sparta.one_stop.domain.admin.security.SuspensionPolicyService;
+import com.sparta.one_stop.domain.auth.dto.request.LoginRequest;
 import com.sparta.one_stop.domain.user.entity.User;
 import com.sparta.one_stop.domain.user.repository.UserRepository;
 import com.sparta.one_stop.domain.user.service.UserStatusCacheService;
@@ -86,8 +86,6 @@ public class AuthQueryService {
     /**
      * Refresh 시 사용자 조회 + 활성 검증 + Role 반환
      *
-     * v1 대비 개선:
-     *   - findById 2회 호출 → 1회로 통합 (refresh 시 DB 부하 50% 감소)
      */
     @Transactional
     public User findActiveUser(Long userId) {
