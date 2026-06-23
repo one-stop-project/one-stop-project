@@ -65,7 +65,7 @@
 
 | 이름  | 역할                       | 담당 도메인 및 핵심 기술                                            |
 | --- | ------------------------ | --------------------------------------------------------- |
-| 정은지 | 팀장 / Infra / AI          | 관리자 기능, CI/CD, 모니터링, Spring AI Tool Calling, Resilience4j |
+| 정은지 | 팀장 / Infra / AI          | 관리자 기능, CI/CD, 모니터링, Spring AI Tool Calling   |
 | 임호진 | Auth / Seller / Member   | JWT 인증/인가, 회원/판매자 라이프사이클, Kafka Outbox                    |
 | 정지훈 | Order / Pay / Coupon     | 주문, 장바구니, TossPayments, 쿠폰/포인트 동시성 제어                     |
 | 이중현 | Product / Search         | 상품 카테고리, QueryDSL 검색 최적화, Redis 캐싱                        |
@@ -205,7 +205,7 @@ ORDERS 1:1 PAYMENT
 ### 🔐 JWT 기반 무상태 인증 구조
 
 * Access Token: 15분
-* Refresh Token: 14일
+* Refresh Token: 7일
 * Redis 기반 RT 저장 및 블랙리스트 관리
 * 강제 로그아웃 지원
 
