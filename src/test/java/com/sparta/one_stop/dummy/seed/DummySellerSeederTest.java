@@ -11,24 +11,28 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-@SpringBootTest
+@SpringBootTest(properties = "dummy.seller.password=TEST_ONLY_DUMMY_SELLER_PASSWORD")
 @ActiveProfiles("test")
 @Transactional
 @DisplayName("DummySellerSeeder")
 class DummySellerSeederTest {
 
     private static final String EMAIL = "ai-shop@dummy.local";
+    // @SpringBootTest properties로 주입한 값과 동일 — 기본값(CHANGE_ME) fallback이 아닌 실제 주입을 검증
+    private static final String DUMMY_PASSWORD = "TEST_ONLY_DUMMY_SELLER_PASSWORD";
 
     @Autowired private DummySellerSeeder dummySellerSeeder;
     @Autowired private SellerRepository sellerRepository;
     @Autowired private UserRepository userRepository;
     @PersistenceContext private EntityManager em;
+    @Autowired private PasswordEncoder passwordEncoder;
 
     @Test
     @DisplayName("seed: AI상점 SELLER 생성 (APPROVED, role=SELLER)")
@@ -39,6 +43,14 @@ class DummySellerSeederTest {
         assertThat(seller.isApproved()).isTrue();
         assertThat(seller.getUser().getEmail()).isEqualTo(EMAIL);
         assertThat(seller.getUser().getRole()).isEqualTo(UserRole.SELLER);
+    }
+
+    @Test
+    @DisplayName("seed: 외부화한 설정 비밀번호(dummy.seller.password)로 인코딩되어 저장된다")
+    void seed_encodesConfiguredPassword() {
+        Seller seller = dummySellerSeeder.seed();
+
+        assertThat(passwordEncoder.matches(DUMMY_PASSWORD, seller.getUser().getPassword())).isTrue();
     }
 
     @Test

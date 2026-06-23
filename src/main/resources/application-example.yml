@@ -143,6 +143,12 @@ resilience4j:
         wait-duration-in-open-state: 60s
         permitted-number-of-calls-in-half-open-state: 2
         sliding-window-size: 10
+      ai-related:
+        failure-rate-threshold: 80
+        minimum-number-of-calls: 10
+        wait-duration-in-open-state: 10s
+        permitted-number-of-calls-in-half-open-state: 3
+        sliding-window-size: 10
   timelimiter:
     instances:
       ai-assistant:
@@ -185,6 +191,8 @@ dummy:
     display: ${DUMMY_SEED_DISPLAY:100}            # 키워드당 네이버 검색 건수 (1~100)
     throttle-ms: ${DUMMY_SEED_THROTTLE_MS:4000}   # 카테고리 사이 대기(ms) — LLM 분당 한도(RPM) 보호
     default-image-url: ${DUMMY_SEED_DEFAULT_IMAGE_URL:https://d34xrn1duxtwu5.cloudfront.net/default-product.png}
+  seller:
+    password: ${DUMMY_SELLER_PASSWORD:CHANGE_ME}  # 더미 판매자 비번 — 소스 평문 X, env 외부화 (미설정 시 placeholder)
 
 # ── Slack 운영 알림 설정 ──
 # OutboxEvent DEAD 전이 등 운영자가 확인해야 하는 이벤트를 Slack 채널로 알림

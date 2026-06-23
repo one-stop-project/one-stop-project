@@ -65,9 +65,9 @@
 
 | 이름  | 역할                       | 담당 도메인 및 핵심 기술                                            |
 | --- | ------------------------ | --------------------------------------------------------- |
-| 정은지 | 팀장 / Infra / AI          | 관리자 기능, CI/CD, 모니터링, Spring AI Tool Calling, Resilience4j |
+| 정은지 | 팀장 / Infra / AI          | 관리자 기능, CI/CD, 모니터링, Spring AI Tool Calling   |
 | 임호진 | Auth / Seller / Member   | JWT 인증/인가, 회원/판매자 라이프사이클, Kafka Outbox                    |
-| 정지훈 | Order / Pay / Coupon     | 주문, 장바구니, TossPayments, 쿠폰/포인트 동시성 제어                     |
+| 정지훈 | Order / Pay / Coupon     | 장바구니, 주문, 결제, 쿠폰/포인트, 동시성 제어, Kafka Outbox, Redis Hash + ZSet, SSE + Redis PubSub|
 | 이중현 | Product / Search         | 상품 카테고리, QueryDSL 검색 최적화, Redis 캐싱                        |
 | 김예은 | Delivery / Review / Subs | 배송 상태 머신, 리뷰 정합성, 정기결제 자동화                                |
 
@@ -77,7 +77,7 @@
 
 ## Backend
 
-* Java 21
+* Java 17
 * Spring Boot 3
 * Spring Security
 * Spring Data JPA
@@ -92,7 +92,7 @@
 
 ## Infrastructure
 
-* AWS ECS Fargate
+* AWS EC2
 * AWS S3
 * AWS ALB
 * Docker
@@ -108,6 +108,7 @@
 
 * Toss Payments
 * Anthropic Claude API
+*  Google Gemini
 
 ---
 
@@ -137,8 +138,8 @@ graph TD
     end
 
     subgraph DB [Database Layer]
-        MySQLM[(MySQL Master)]:::db
-        MySQLR[(MySQL Replica)]:::db
+        MySQLM[(단일 MySQL)]:::db
+        MySQLR[(단일 MySQL)]:::db
         Outbox[(Outbox Table)]:::db
     end
 
@@ -147,7 +148,6 @@ graph TD
     end
 
     subgraph External [External Service]
-        Toss[Toss Payments]:::ext
         Claude[Claude API]:::ext
         S3[AWS S3]:::ext
     end
@@ -168,7 +168,6 @@ graph TD
 
     Broker --> SpringApp
 
-    SpringApp --> Toss
     SpringAI --> Claude
     SpringApp --> S3
 ```
@@ -205,7 +204,7 @@ ORDERS 1:1 PAYMENT
 ### 🔐 JWT 기반 무상태 인증 구조
 
 * Access Token: 15분
-* Refresh Token: 14일
+* Refresh Token: 7일
 * Redis 기반 RT 저장 및 블랙리스트 관리
 * 강제 로그아웃 지원
 
@@ -261,14 +260,9 @@ PENDING -> APPROVED -> SUSPENDED
 
 ### 🛒 Redis Hash 기반 장바구니
 
-* TTL 30일
+* TTL 7일
 * 고빈도 읽기/수정 최적화
 * 배치 동기화 기반 최종 정합성 유지
-
-### 💳 TossPayments 연동
-
-* 보상 트랜잭션 설계 적용
-* 결제 실패 시 포인트/쿠폰 롤백
 
 ### 🎟️ 선착순 쿠폰 동시성 제어
 
@@ -300,7 +294,6 @@ ACCEPT
 ### 🔁 정기 구독 결제
 
 * Spring Scheduler 기반 자동 결제
-* Toss BillingKey 활용
 
 ---
 
@@ -452,7 +445,6 @@ K6 부하 테스트 및 인덱스 분석 보고서
 `Resilience4j`
 `Spring AI`
 `AWS ECS`
-`TossPayments`
 `K6`
 `DDD`
 `Modular Monolith`
