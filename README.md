@@ -65,7 +65,7 @@
 
 | 이름 | 역할 | 핵심 기술 |
 | --- | ------------------------ |------------------------------------------------------------------------------------------------------------------------|
-| 정은지 | 팀장 / Infra / AI | 관리자 기능, GitHub Actions 기반 CI/CD, Prometheus·Grafana 모니터링, Spring AI(Gemini) Tool Calling, AI 연관상품 추천·리뷰 요약 |
+| 정은지 | 팀장 / Infra / AI | 관리자 기능, GitHub Actions 기반 CI/CD, Prometheus·Grafana 모니터링, Spring AI(Gemini) Tool Calling, 연관상품 추천(카테고리·판매량 기반)·리뷰 요약 |
 | 임호진 | Auth / Seller / Member | 인증·인가·보안 아키텍처, JWT + Refresh Token Rotation(RTR), OAuth2(Kakao), Redis Fixed Window Rate Limit, 보안 감사 로그, 회원·판매자 라이프사이클 |
 | 정지훈 | Cart / Order / Payment / Coupon / Notification | 장바구니 → 주문 → 결제 구매 플로우, 비회원 장바구니 Redis Hash + ZSet, 쿠폰(Lua·DECR·Redisson Lock)·포인트(낙관적 락·재시도) 정합성, Outbox-Kafka 이벤트 처리, Redis Pub/Sub + SSE 실시간 알림 |
 | 이중현 | Product / Search | 상품·카테고리, QueryDSL 기반 상품 검색, Redis 캐싱, 인기 랭킹·검색어·조회수 집계, MySQL FULLTEXT 인덱스, AI 기반 더미 데이터 |
@@ -262,12 +262,6 @@ PENDING -> APPROVED -> SUSPENDED
 * 승인된 판매자만 상품 등록 가능
 * 판매자 정지 시 연관 상품 자동 비활성화
 
-### 📦 Transactional Outbox
-
-* 이벤트 종류: `PAYMENT_APPROVED`, `DELIVERY_COMPLETED`
-* 비즈니스 트랜잭션과 동일 트랜잭션 내 Outbox Table에 저장
-* 스케줄러가 Kafka 토픽으로 비동기 발행하여 이벤트 유실 방지 및 원자성 보장
-
 ---
 
 ## 6.2 상품 / 검색 도메인
@@ -378,6 +372,14 @@ ACCEPT
 * Circuit Breaker
 * Fallback 전략
 * 외부 장애 격리
+
+---
+
+## 6.6 Transactional Outbox
+
+* 이벤트 종류: `PAYMENT_APPROVED` (결제 완료), `DELIVERY_COMPLETED` (배송 완료)
+* 비즈니스 트랜잭션과 동일 트랜잭션 내 Outbox Table에 저장
+* 스케줄러가 Kafka 토픽으로 비동기 발행하여 이벤트 유실 방지 및 원자성 보장
 
 ---
 
