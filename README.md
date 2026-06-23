@@ -63,13 +63,13 @@
 
 > "단 한 번의 중단도 허용하지 않는 최고의 커머스 플랫폼"
 
-| 이름  | 역할                       | 담당 도메인 및 핵심 기술                                            |
-| --- | ------------------------ | --------------------------------------------------------- |
-| 정은지 | 팀장 / Infra / AI          | 관리자 기능, CI/CD, 모니터링, Spring AI Tool Calling   |
-| 임호진 | Auth / Seller / Member   | JWT 인증/인가, 회원/판매자 라이프사이클, Kafka Outbox                    |
-| 정지훈 | Order / Pay / Coupon     | 장바구니, 주문, 결제, 쿠폰/포인트, 동시성 제어, Kafka Outbox, Redis Hash + ZSet, SSE + Redis PubSub|
-| 이중현 | Product / Search         | 상품 카테고리, QueryDSL 검색 최적화, Redis 캐싱                        |
-| 김예은 | Delivery / Review / Subs | 배송 상태 머신, 리뷰 정합성, 정기결제 자동화                                |
+| 이름 | 역할 | 핵심 기술 |
+| --- | ------------------------ |------------------------------------------------------------------------------------------------------------------------|
+| 정은지 | 팀장 / Infra / AI | 관리자 기능, GitHub Actions 기반 CI/CD, Prometheus·Grafana 모니터링, Spring AI(Gemini) Tool Calling, AI 연관상품 추천·리뷰 요약 |
+| 임호진 | Auth / Seller / Member | 인증·인가·보안 아키텍처, JWT + Refresh Token Rotation(RTR), OAuth2(Kakao), Redis Fixed Window Rate Limit, 보안 감사 로그, 회원·판매자 라이프사이클 |
+| 정지훈 | Cart / Order / Payment / Coupon / Notification | 장바구니 → 주문 → 결제 구매 플로우, 비회원 장바구니 Redis Hash + ZSet, 쿠폰(Lua·DECR·Redisson Lock)·포인트(낙관적 락·재시도) 정합성, Outbox-Kafka 이벤트 처리, Redis Pub/Sub + SSE 실시간 알림 |
+| 이중현 | Product / Search | 상품·카테고리, QueryDSL 기반 상품 검색, Redis 캐싱, 인기 랭킹·검색어·조회수 집계, MySQL FULLTEXT 인덱스, AI 기반 더미 데이터 |
+| 김예은 | Delivery / Review / Subscription | 배송 상태 관리, 리뷰 정합성, 정기결제 자동화, Outbox-Kafka 이벤트 처리(배송 완료 → 포인트 적립) |
 
 ---
 
@@ -100,7 +100,7 @@
 
 * AWS EC2
 * AWS S3
-* AWS ALB
+* Nginx (리버스 프록시, upstream 2서버)
 * Docker
 * GitHub Actions
 
@@ -113,6 +113,8 @@
 ## External API
 
 * Google Gemini (OpenAI 호환 엔드포인트)
+* Naver Shopping API (AI 더미 상품 데이터 시드)
+* Kakao OAuth2 (소셜 로그인)
 
 ---
 
@@ -127,7 +129,7 @@ graph TD
     classDef ext fill:#FFEBEE,stroke:#D32F2F,stroke-width:2px;
 
     Client((Client / Front)):::client
-    ALB[AWS Application Load Balancer]:::infra
+    Nginx[Nginx Reverse Proxy]:::infra
 
     subgraph EC2 [AWS EC2]
         SpringApp[Spring Boot App]:::app
@@ -155,8 +157,8 @@ graph TD
         S3[AWS S3]:::ext
     end
 
-    Client --> ALB
-    ALB --> Security
+    Client --> Nginx
+    Nginx --> Security
     Security --> SpringApp
 
     SpringApp --> RedisCart
@@ -192,7 +194,7 @@ graph TD
 
 ┌─ 상품 ──────────────────────────────────────────────────────┐
 │ SELLER 1:N PRODUCT                                        │
-│ PRODUCT N:M CATEGORY  (via PRODUCT_CATEGORY_MAPPING)      │
+│ PRODUCT 1:N PRODUCT_CATEGORY_MAPPING N:1 CATEGORY         │
 │ PRODUCT 1:N PRODUCT_ITEM                                  │
 │ PRODUCT 1:N PRODUCT_IMAGE                                 │
 └────────────────────────────────────────────────────────────┘
@@ -239,7 +241,7 @@ graph TD
 ### 🔐 JWT 기반 무상태 인증 구조
 
 * Access Token: 15분
-* Refresh Token: 14일 (운영 기준)
+* Refresh Token: 14일 (운영·로컬) / 7일 (테스트 환경)
 * Redis 기반 RT 저장 및 블랙리스트 관리
 * 강제 로그아웃 지원
 
@@ -254,6 +256,7 @@ graph TD
 
 ```text
 PENDING -> APPROVED -> SUSPENDED
+       \-> REJECTED
 ```
 
 * 승인된 판매자만 상품 등록 가능
@@ -261,9 +264,9 @@ PENDING -> APPROVED -> SUSPENDED
 
 ### 📦 Transactional Outbox
 
-* 판매자 승인 이벤트를 Outbox Table에 저장
-* 스케줄러가 Kafka 토픽으로 비동기 발행
-* 이벤트 유실 방지 및 원자성 보장
+* 이벤트 종류: `PAYMENT_APPROVED`, `DELIVERY_COMPLETED`
+* 비즈니스 트랜잭션과 동일 트랜잭션 내 Outbox Table에 저장
+* 스케줄러가 Kafka 토픽으로 비동기 발행하여 이벤트 유실 방지 및 원자성 보장
 
 ---
 
@@ -271,23 +274,31 @@ PENDING -> APPROVED -> SUSPENDED
 
 ### 📦 SKU(ProductItem) 표준화
 
-* 무옵션 상품도 내부적으로 기본 SKU 생성
-* 모든 재고 및 가격 처리를 SKU 단위로 통일
+* 단일 옵션 상품도 ProductItem 1개로 모델링하여 모든 재고·가격 처리를 SKU 단위로 통일
+* `items` 필드는 필수 입력(`@NotEmpty`) — 자동 생성 아님
 
-### 🔍 실시간 인기 검색어
+### 🔍 실시간 인기 검색어 · 랭킹
 
-* Redis ZSET + ZINCRBY 사용
-* 시간 가중치 기반 랭킹 관리
+* 인기 검색어: Redis ZSET + ZINCRBY, 시간 가중치 기반 랭킹 스케줄러로 주기적 갱신
+* 인기 상품 랭킹: 조회수 배치 집계 + Redis 캐싱
+* 검색 기록(SearchHistory) 기반 통계 활용
 
-### ⚡ QueryDSL 성능 최적화
+### ⚡ QueryDSL + 인덱스 성능 최적화
 
-복합 인덱스:
+Product 테이블 실제 인덱스:
 
 ```sql
-(category_id, status, created_at)
+(status, created_at)
+(status, sales_count)
+(seller_id, status)
+FULLTEXT (name, description)
 ```
 
-적용으로 검색 성능 개선
+ProductCategoryMapping 테이블:
+
+```sql
+(category_id, product_id)
+```
 
 ---
 
@@ -304,8 +315,8 @@ PENDING -> APPROVED -> SUSPENDED
 ### 💳 Mock 결제 처리
 
 * 실제 PG 연동 없이 내부 Mock 결제 승인 처리
-* 보상 트랜잭션 설계 적용 (포인트·쿠폰 선차감 후 결제 실패 시 롤백)
-* PESSIMISTIC_WRITE 락으로 중복 결제 승인 방지
+* 포인트 차감·쿠폰 적용·결제·배송 생성을 단일 `@Transactional`로 원자 처리 (실패 시 DB 롤백)
+* PESSIMISTIC_WRITE 락으로 동일 주문 중복 결제 승인 방지
 
 ### 🎟️ 선착순 쿠폰 동시성 제어
 
@@ -337,15 +348,16 @@ ACCEPT
  -> INSTRUCT
  -> DEPARTURE
  -> DELIVERING
- -> FINAL_DELIVERY
+ -> FINAL_DELIVERY (정상 종료)
+ -> ORDER_CANCELLED (취소 종료)
 ```
 
 * 역방향 상태 전이 차단
 
 ### ✍️ 리뷰 정합성
 
-* 1주문 1리뷰 보장
-* FINAL_DELIVERY 상태에서만 작성 가능
+* 주문 아이템당 1리뷰 보장 (`order_item_id` UK)
+* `OrderItemStatus.DELIVERED` 상태에서만 작성 가능
 
 ### 🔁 정기 구독 결제
 
@@ -357,9 +369,9 @@ ACCEPT
 
 ### 🤖 Spring AI Tool Calling (Google Gemini)
 
-* 자연어 기반 상품 검색
+* 자연어 기반 상품 검색 (ShoppingAssistant — 평문 응답)
 * 재고 조회 API 자동 호출
-* Structured JSON Output 적용
+* 리뷰 요약 서비스에 Structured JSON Output 적용 (`BeanOutputConverter`)
 
 ### 🛡️ Resilience4j
 
@@ -371,11 +383,11 @@ ACCEPT
 
 # 📊 7. 기술적 선택 및 트레이드오프
 
-| 적용 대상  | 선택 기술         | 선정 이유                 |
-| ------ | ------------- | --------------------- |
-| 상품 재고  | 비관적 락         | 높은 충돌 상황에서 강력한 정합성 보장 |
-| 포인트    | 낙관적 락 + Retry | 충돌 가능성이 낮아 처리량 우선     |
-| 선착순 쿠폰 | Redis 분산락     | DB 커넥션 보호 및 초고속 처리    |
+| 적용 대상  | 선택 기술                      | 선정 이유                               |
+| ------ | -------------------------- | ----------------------------------- |
+| 상품 재고  | 비관적 락                      | 높은 충돌 상황에서 강력한 정합성 보장               |
+| 포인트    | 낙관적 락 + Spring Retry       | 충돌 가능성이 낮아 처리량 우선                    |
+| 선착순 쿠폰 | Redis DECR + Lua Script    | DB 커넥션 보호 및 원자적 재고 차감 (기본 `decr` 전략) |
 
 ---
 
@@ -387,7 +399,7 @@ ACCEPT
 
 * Stateless 인증
 * JWT Payload 최소화
-* userId + role + JTI만 포함
+* `userId` + `role` + `jti` + `ver`(tokenVersion) 포함
 
 ### Refresh Token
 
@@ -422,7 +434,7 @@ end
 com.sparta.one_stop/
 ├── domain/
 │   ├── auth/
-│   ├── user/
+│   ├── user/           ← Seller 엔티티도 여기 위치
 │   ├── seller/
 │   ├── admin/
 │   ├── product/
