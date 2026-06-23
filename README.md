@@ -67,7 +67,7 @@
 | --- | ------------------------ | --------------------------------------------------------- |
 | 정은지 | 팀장 / Infra / AI          | 관리자 기능, CI/CD, 모니터링, Spring AI Tool Calling   |
 | 임호진 | Auth / Seller / Member   | JWT 인증/인가, 회원/판매자 라이프사이클, Kafka Outbox                    |
-| 정지훈 | Order / Pay / Coupon     | 주문, 장바구니, TossPayments, 쿠폰/포인트 동시성 제어                     |
+| 정지훈 | Order / Pay / Coupon     | 장바구니, 주문, 결제, 쿠폰/포인트, 동시성 제어, Kafka Outbox, Redis Hash + ZSet, SSE + Redis PubSub|
 | 이중현 | Product / Search         | 상품 카테고리, QueryDSL 검색 최적화, Redis 캐싱                        |
 | 김예은 | Delivery / Review / Subs | 배송 상태 머신, 리뷰 정합성, 정기결제 자동화                                |
 
