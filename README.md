@@ -138,8 +138,8 @@ graph TD
     end
 
     subgraph DB [Database Layer]
-        MySQLM[(MySQL Master)]:::db
-        MySQLR[(MySQL Replica)]:::db
+        MySQLM[(단일 MySQL)]:::db
+        MySQLR[(단일 MySQL)]:::db
         Outbox[(Outbox Table)]:::db
     end
 
@@ -262,7 +262,7 @@ PENDING -> APPROVED -> SUSPENDED
 
 ### 🛒 Redis Hash 기반 장바구니
 
-* TTL 30일
+* TTL 7일
 * 고빈도 읽기/수정 최적화
 * 배치 동기화 기반 최종 정합성 유지
 
