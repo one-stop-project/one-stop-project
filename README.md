@@ -77,7 +77,7 @@
 
 ## Backend
 
-* Java 21
+* Java 17
 * Spring Boot 3
 * Spring Security
 * Spring Data JPA
@@ -92,7 +92,7 @@
 
 ## Infrastructure
 
-* AWS ECS Fargate
+* AWS EC2
 * AWS S3
 * AWS ALB
 * Docker
@@ -108,6 +108,7 @@
 
 * Toss Payments
 * Anthropic Claude API
+*  Google Gemini
 
 ---
 
