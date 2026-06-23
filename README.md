@@ -82,7 +82,13 @@
 * Spring Security
 * Spring Data JPA
 * QueryDSL
-* Spring AI
+* Spring AI (Google Gemini OpenAI 호환)
+* Spring Batch
+* Spring Retry
+* Redisson (Redis 분산락)
+* Caffeine (로컬 캐시)
+* OAuth2 Client (Kakao 소셜 로그인)
+* Swagger / SpringDoc
 
 ## Database & Messaging
 
@@ -106,9 +112,7 @@
 
 ## External API
 
-* Toss Payments
-* Anthropic Claude API
-*  Google Gemini
+* Google Gemini (OpenAI 호환 엔드포인트)
 
 ---
 
@@ -125,7 +129,7 @@ graph TD
     Client((Client / Front)):::client
     ALB[AWS Application Load Balancer]:::infra
 
-    subgraph ECS [AWS ECS Fargate Cluster]
+    subgraph EC2 [AWS EC2]
         SpringApp[Spring Boot App]:::app
         Security[Spring Security / JWT]:::app
         SpringAI[Spring AI Engine]:::app
@@ -138,8 +142,7 @@ graph TD
     end
 
     subgraph DB [Database Layer]
-        MySQLM[(단일 MySQL)]:::db
-        MySQLR[(단일 MySQL)]:::db
+        MySQL[(MySQL)]:::db
         Outbox[(Outbox Table)]:::db
     end
 
@@ -148,7 +151,7 @@ graph TD
     end
 
     subgraph External [External Service]
-        Claude[Claude API]:::ext
+        Gemini[Google Gemini API]:::ext
         S3[AWS S3]:::ext
     end
 
@@ -160,15 +163,14 @@ graph TD
     SpringApp --> RedisLock
     SpringApp --> RedisCache
 
-    SpringApp --> MySQLM
-    SpringApp --> MySQLR
+    SpringApp --> MySQL
 
-    MySQLM --> Outbox
+    MySQL --> Outbox
     Outbox --> Broker
 
     Broker --> SpringApp
 
-    SpringAI --> Claude
+    SpringAI --> Gemini
     SpringApp --> S3
 ```
 
@@ -177,20 +179,53 @@ graph TD
 # 🗄️ 5. ERD
 
 ```text
-USER 1:1 SELLER
-USER 1:N ORDERS
-USER 1:1 CART
+┌─ 회원 / 판매자 ─────────────────────────────────────────────┐
+│ USER 1:1 SELLER                                           │
+│ USER 1:1 CART                                             │
+│ USER 1:1 POINT                                            │
+│ USER 1:N ORDER                                            │
+│ USER 1:N USER_COUPON                                      │
+│ USER 1:N SUBSCRIPTION                                     │
+│ USER 1:N REVIEW                                           │
+│ USER 1:N NOTIFICATION  (user_id 컬럼, JPA FK 없음)        │
+└────────────────────────────────────────────────────────────┘
 
-SELLER 1:N PRODUCT
-PRODUCT 1:N PRODUCT_ITEM
+┌─ 상품 ──────────────────────────────────────────────────────┐
+│ SELLER 1:N PRODUCT                                        │
+│ PRODUCT N:M CATEGORY  (via PRODUCT_CATEGORY_MAPPING)      │
+│ PRODUCT 1:N PRODUCT_ITEM                                  │
+│ PRODUCT 1:N PRODUCT_IMAGE                                 │
+└────────────────────────────────────────────────────────────┘
 
-CART 1:N CART_ITEM
-PRODUCT_ITEM 1:N CART_ITEM
+┌─ 장바구니 (회원) ────────────────────────────────────────────┐
+│ CART 1:N CART_ITEM                                        │
+│ CART_ITEM N:1 PRODUCT_ITEM                                │
+└────────────────────────────────────────────────────────────┘
 
-ORDERS 1:N ORDER_ITEM
-ORDER_ITEM 1:1 DELIVERY
+┌─ 주문 / 결제 ───────────────────────────────────────────────┐
+│ ORDER 1:N ORDER_ITEM                                      │
+│ ORDER 1:1 PAYMENT                                         │
+│ ORDER N:1 USER_COUPON  (선택)                              │
+│ ORDER N:1 SUBSCRIPTION (구독 주문 시)                       │
+│                                                           │
+│ ORDER_ITEM N:1 SELLER                                     │
+│ ORDER_ITEM N:1 PRODUCT_ITEM                               │
+│ ORDER_ITEM 1:1 DELIVERY                                   │
+│ ORDER_ITEM 1:1 REVIEW                                     │
+└────────────────────────────────────────────────────────────┘
 
-ORDERS 1:1 PAYMENT
+┌─ 쿠폰 / 포인트 ─────────────────────────────────────────────┐
+│ COUPON 1:N USER_COUPON                                    │
+│ USER_COUPON 0..1:1 ORDER  (used_order_id, 사용된 주문)     │
+│                                                           │
+│ POINT 1:N POINT_HISTORY                                   │
+│ POINT_HISTORY N:1 ORDER   (선택)                          │
+└────────────────────────────────────────────────────────────┘
+
+┌─ 배송 / 리뷰 ───────────────────────────────────────────────┐
+│ DELIVERY 1:N DELIVERY_HISTORY                             │
+│ REVIEW 1:N REVIEW_IMAGE                                   │
+└────────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -204,7 +239,7 @@ ORDERS 1:1 PAYMENT
 ### 🔐 JWT 기반 무상태 인증 구조
 
 * Access Token: 15분
-* Refresh Token: 7일
+* Refresh Token: 14일 (운영 기준)
 * Redis 기반 RT 저장 및 블랙리스트 관리
 * 강제 로그아웃 지원
 
@@ -258,17 +293,38 @@ PENDING -> APPROVED -> SUSPENDED
 
 ## 6.3 주문 / 결제 / 쿠폰 / 포인트
 
-### 🛒 Redis Hash 기반 장바구니
+### 🛒 하이브리드 장바구니
 
-* TTL 7일
-* 고빈도 읽기/수정 최적화
-* 배치 동기화 기반 최종 정합성 유지
+* **비회원**: Redis Hash + ZSet 기반, TTL 7일
+  * Hash: `itemId → quantity` (수량 저장)
+  * ZSet: `itemId → 최초 담기 timestamp` (담기 순서 유지, 재담기 시 score 불변)
+* **회원**: DB(MySQL) 기반 CartItem 엔티티로 영속 관리
+* 로그인 시 `CartMergeExecutor`가 Redis 비회원 장바구니 → DB 회원 장바구니로 즉시 병합
+
+### 💳 Mock 결제 처리
+
+* 실제 PG 연동 없이 내부 Mock 결제 승인 처리
+* 보상 트랜잭션 설계 적용 (포인트·쿠폰 선차감 후 결제 실패 시 롤백)
+* PESSIMISTIC_WRITE 락으로 중복 결제 승인 방지
 
 ### 🎟️ 선착순 쿠폰 동시성 제어
 
-* Redis SETNX 기반 분산락
-* SISMEMBER 중복 발급 검사
-* DECR 기반 원자적 재고 차감
+전략 패턴으로 3가지 구현체를 제공하며 `coupon.issue.strategy` 설정으로 선택한다 (기본값: `decr`).
+
+| 전략 | 방식 |
+|---|---|
+| `decr` (기본) | Redis DECR 원자 차감 + SISMEMBER 중복 발급 방어, Lua Script로 stock key 안전성 보장 |
+| `lua` | 단일 Lua Script로 중복 체크·재고 차감을 하나의 원자 연산으로 처리 |
+| `lock` | Redisson tryLock 기반 분산락으로 DB 직접 차감 |
+
+---
+
+### 🔔 실시간 알림 (SSE + Redis PubSub)
+
+* Kafka Consumer(`PaymentApprovedConsumer`)가 결제 완료 이벤트를 수신 → Redis PubSub으로 발행
+* `NotificationRedisSubscriber`가 메시지를 수신 → `SseConnectionManager`로 해당 유저에게 SSE 전송
+* 멀티 인스턴스 환경에서도 Redis PubSub이 SSE 연결이 있는 서버로 이벤트를 브로드캐스트
+* Notification 엔티티에 이벤트 이력 영속 저장 (중복 발송 방지를 위한 UK: `event_id`)
 
 ---
 
@@ -299,7 +355,7 @@ ACCEPT
 
 ## 6.5 AI 및 장애 격리
 
-### 🤖 Spring AI Tool Calling
+### 🤖 Spring AI Tool Calling (Google Gemini)
 
 * 자연어 기반 상품 검색
 * 재고 조회 API 자동 호출
@@ -366,30 +422,36 @@ end
 com.sparta.one_stop/
 ├── domain/
 │   ├── auth/
-│   │   ├── controller/
-│   │   ├── dto/
-│   │   ├── repository/
-│   │   └── service/
-│   │
+│   ├── user/
 │   ├── seller/
-│   │   ├── entity/
-│   │   └── service/
-│   │
+│   ├── admin/
 │   ├── product/
-│   │   ├── entity/
-│   │   └── repository/
-│   │
+│   ├── cart/
 │   ├── order/
 │   ├── payment/
 │   ├── coupon/
+│   ├── point/
 │   ├── delivery/
+│   ├── review/
+│   ├── subscription/
+│   ├── notification/
 │   └── ai/
 │
 ├── global/
 │   ├── config/
+│   ├── security/
+│   ├── oauth2/
+│   ├── outbox/
+│   ├── sse/
+│   ├── ratelimit/
+│   ├── alert/
 │   ├── exception/
 │   ├── response/
-│   └── security/
+│   └── enums/
+│
+├── infra/
+│   ├── scheduler/
+│   └── monitoring/
 │
 └── OneStopApplication.java
 ```
@@ -444,7 +506,8 @@ K6 부하 테스트 및 인덱스 분석 보고서
 `Distributed Lock`
 `Resilience4j`
 `Spring AI`
-`AWS ECS`
+`AWS EC2`
+`Google Gemini`
 `K6`
 `DDD`
 `Modular Monolith`
