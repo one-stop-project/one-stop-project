@@ -148,7 +148,6 @@ graph TD
     end
 
     subgraph External [External Service]
-        Toss[Toss Payments]:::ext
         Claude[Claude API]:::ext
         S3[AWS S3]:::ext
     end
@@ -169,7 +168,6 @@ graph TD
 
     Broker --> SpringApp
 
-    SpringApp --> Toss
     SpringAI --> Claude
     SpringApp --> S3
 ```
@@ -266,11 +264,6 @@ PENDING -> APPROVED -> SUSPENDED
 * 고빈도 읽기/수정 최적화
 * 배치 동기화 기반 최종 정합성 유지
 
-### 💳 TossPayments 연동
-
-* 보상 트랜잭션 설계 적용
-* 결제 실패 시 포인트/쿠폰 롤백
-
 ### 🎟️ 선착순 쿠폰 동시성 제어
 
 * Redis SETNX 기반 분산락
@@ -301,7 +294,6 @@ ACCEPT
 ### 🔁 정기 구독 결제
 
 * Spring Scheduler 기반 자동 결제
-* Toss BillingKey 활용
 
 ---
 
@@ -453,7 +445,6 @@ K6 부하 테스트 및 인덱스 분석 보고서
 `Resilience4j`
 `Spring AI`
 `AWS ECS`
-`TossPayments`
 `K6`
 `DDD`
 `Modular Monolith`
