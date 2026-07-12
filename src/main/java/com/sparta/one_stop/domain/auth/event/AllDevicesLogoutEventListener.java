@@ -12,15 +12,15 @@ import org.springframework.transaction.event.TransactionalEventListener;
 /**
  * 사용자의 모든 인증 세션을 무효화하는 보안 이벤트 Listener.
  *
- * <p>{@code AFTER_COMMIT}에서 동기 실행한다.</p>
- * <ul>
- *   <li>DB tokenVersion 증가가 커밋된 뒤 캐시를 제거한다.</li>
- *   <li>비동기 실행 지연 동안 이전 tokenVersion 캐시가 사용되는 race를 차단한다.</li>
- *   <li>기존 Access Token cutoff와 모든 Refresh Token 제거도 응답 전에 완료한다.</li>
- * </ul>
+ * {@code AFTER_COMMIT}에서 동기 실행한다.
  *
- * <p>비밀번호 변경, 회원 탈퇴, 정지, 침해 대응은 빈도가 낮고 보안 우선 작업이므로
- * 짧은 응답 시간보다 즉시 무효화 보장을 우선한다.</p>
+ *   DB tokenVersion 증가가 커밋된 뒤 캐시를 제거한다.
+ *   비동기 실행 지연 동안 이전 tokenVersion 캐시가 사용되는 race를 차단한다.
+ *   기존 Access Token cutoff와 모든 Refresh Token 제거도 응답 전에 완료한다.
+ *
+ *
+ * 비밀번호 변경, 회원 탈퇴, 정지, 침해 대응은 빈도가 낮고 보안 우선 작업이므로
+ * 짧은 응답 시간보다 즉시 무효화 보장을 우선한다.
  */
 @Slf4j
 @Component

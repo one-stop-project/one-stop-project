@@ -18,8 +18,8 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 로컬/테스트/개발 환경에서만 등록되는 테스트용 포인트 충전 API.
  *
- * <p>{@link Profile}을 컨트롤러 Bean에 적용하므로 prod 프로파일에서는
- * 해당 엔드포인트 자체가 Spring MVC에 등록되지 않는다.</p>
+ * {@link Profile}을 컨트롤러 Bean에 적용하므로 prod 프로파일에서는
+ * 해당 엔드포인트 자체가 Spring MVC에 등록되지 않는다.
  */
 @Profile({"local", "test", "dev"})
 @RestController

@@ -231,7 +231,7 @@ public class RedisTokenService {
     /**
      * 사용자의 모든 기존 AT 무효화 — cutoff 시각을 현재로 기록
      *
-     * <p>AT 수명(15분)만큼만 TTL 부여. 그보다 오래된 AT는 어차피 만료되므로
+     * AT 수명(15분)만큼만 TTL 부여. 그보다 오래된 AT는 어차피 만료되므로
      * cutoff도 만료시켜 Redis 용량을 자동 회수한다.
      *
      * @param accessTokenTtlSeconds AT 만료 시간(초) — JwtTokenProvider에서 전달
@@ -314,11 +314,11 @@ public class RedisTokenService {
     /**
      * RT를 SHA-256으로 단방향 해싱 (Hex 문자열)
      *
-     * <p>RT는 이미 HMAC 서명된 고엔트로피 JWT라 무차별 대입/레인보우 테이블
+     * RT는 이미 HMAC 서명된 고엔트로피 JWT라 무차별 대입/레인보우 테이블
      * 위험이 없다. 따라서 비밀번호용 bcrypt(느린 해시)가 아니라 빠른 SHA-256으로
      * 충분하다 — 매 refresh마다 호출되므로 성능도 중요.
      *
-     * <p>목적: Redis가 유출돼도 저장된 해시값으로는 재발급(refresh)이 불가능.
+     * 목적: Redis가 유출돼도 저장된 해시값으로는 재발급(refresh)이 불가능.
      * (JWT 서명 검증과는 별개의 방어선 — 서명은 "우리가 발급했나",
      *  해시 저장은 "저장소 유출 시 재사용 차단")
      */
@@ -335,13 +335,13 @@ public class RedisTokenService {
         }
     }
 
-    public record OAuth2Handoff(String deviceId, String accessToken) {}
-
     public enum RefreshTokenRotationStatus {
         ROTATED,
         GRACE_REPLAY,
         REUSED
     }
+
+    public record OAuth2Handoff(String deviceId, String accessToken) {}
 
     public record RefreshTokenRotationResult(
         RefreshTokenRotationStatus status,

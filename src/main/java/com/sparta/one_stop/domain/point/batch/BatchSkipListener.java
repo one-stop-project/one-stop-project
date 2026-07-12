@@ -7,8 +7,8 @@ import org.springframework.batch.core.SkipListener;
 /**
  * 배치 처리 중 스킵된 항목 추적
  *
- * <p>{@code faultTolerant + skipLimit} 설정 시 호출됨.
- * <br>운영에서는 이 로그를 Slack/Sentry로 보내 즉시 알림.
+ * {@code faultTolerant + skipLimit} 설정 시 호출됨.
+ * 운영에서는 이 로그를 Slack/Sentry로 보내 즉시 알림.
  */
 @Slf4j
 public class BatchSkipListener implements SkipListener<PointHistory, Object> {

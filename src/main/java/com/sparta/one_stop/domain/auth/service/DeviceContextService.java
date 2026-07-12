@@ -63,9 +63,6 @@ public class DeviceContextService {
      *   {@code UNKNOWN} — 저장된 컨텍스트 없음(만료/최초) 또는 Redis 장애
      *                         → 차단 신호로 쓰기엔 약함. 호출자가 정책 결정
      *
-     *
-     * 이전 버전과 달리 storedHash == null일 때 SET하지 않는다(부수효과 제거).
-     * 최초 등록은 login의 bindContext가 담당하므로, refresh에서 각인하지 않는다.
      */
     public ContextVerifyResult verifyContext(
         Long userId, String deviceId, String userAgent, String clientIp
